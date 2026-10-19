@@ -1,0 +1,27 @@
+Module: Web App
+Process and techniques
+
+The web app only displays results. It must not calculate risk or change alert levels.
+
+UI architecture
+- Server components for static layout; client components for the map and live data.
+- One API client module with typed responses checked by Zod.
+- Poll or use server-sent events for alert updates; slow down when the tab is hidden.
+- Cache area summaries and show when each value was last updated.
+
+Map techniques
+- One layer per hazard, each with a legend and an on/off toggle.
+- Use the same four alert colors everywhere: green, yellow, orange, red.
+- Never rely on color alone. Add level text and icons for color-blind users.
+- Simplify polygons on the server for faster rendering at low zoom levels.
+
+Safety and trust
+- Always show the source and data freshness next to each risk value.
+- Show official warnings above model results and label them as official.
+- Show "no data" instead of "normal" when data is missing.
+- Show emergency numbers on every page: 1784 (DDPM), 1669 (medical), 199 (fire).
+
+Accessibility and UX
+- Thai is the default language; every hazard term has a Thai and an English label.
+- Mobile-first layout, because most users will open alerts on a phone.
+- WCAG AA contrast, keyboard navigation, and screen-reader labels on map controls.

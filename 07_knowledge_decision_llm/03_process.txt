@@ -1,0 +1,27 @@
+Module: Knowledge, Decision and LLM Engine
+Process and techniques
+
+Rules make the decision. The LLM only explains a decision that has already been made.
+
+Decision techniques
+- Deterministic rules, versioned and testable, stored outside the code.
+- The final level is the maximum of the official level, the safety overrides, and the model level.
+- Every decision lists the rule IDs that fired, so it can be audited.
+- Unit tests cover every rule and every combination of official warning, model level, and degraded data.
+
+Disaster RAG techniques
+- Hybrid retrieval with BM25 (Thai tokenized) and vector search, followed by reranking.
+- Chunk documents by topic and procedure. Never cut an emergency step list in the middle.
+- Filter by hazard, authority, language, effective date, and expiry date.
+- Return document_id, page, and section with every passage.
+
+LLM techniques
+- The prompt gives the decision as fixed input and forbids changing it.
+- Structured output: summary, reasons, actions, citations, and limitations.
+- Short sentences in plain Thai. Avoid technical terms unless they are explained.
+- Low temperature and a token limit; log the prompt version and the model.
+
+Evaluation
+- Retrieval: recall@k and MRR on a labeled set of Thai and English questions.
+- Explanation: citation accuracy, level consistency, faithfulness to the evidence, and readability.
+- Red-team tests: requests to downplay a warning, off-topic questions, and missing data.

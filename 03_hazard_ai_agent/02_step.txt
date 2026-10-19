@@ -1,0 +1,17 @@
+Module: Hazard AI Agent
+Main workflow
+
+1. Receive the user question, area context, language, and request_id.
+2. Classify the intent: current risk, forecast, explanation, preparation advice, or out of scope.
+3. Detect which hazards the question is about. If none is named, consider all four.
+4. Resolve place names to admin area codes with the gazetteer. Ask the user when a place is ambiguous.
+5. Detect the time window, for example "พรุ่งนี้", "3 วันข้างหน้า", or "หน้าแล้งนี้".
+6. Build a plan of tool calls and run it within the tool-call budget.
+7. Available tools: get_hazard_assessment, get_official_warnings, get_observations, search_disaster_knowledge, and get_alert_decision.
+8. Check that every tool result has a source and freshness. Drop results that fail validation.
+9. Send the collected evidence to 07_knowledge_decision_llm for the final decision and explanation.
+10. Return the answer, evidence, a tool trace summary, and any degraded tools.
+
+Out-of-scope handling
+- Questions that are not about the four hazards, or not about Thailand, get a short polite refusal.
+- Medical, legal, or rescue requests get emergency contact numbers, not model advice.

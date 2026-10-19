@@ -1,0 +1,16 @@
+Module: Geo Data Integration
+Main workflow
+
+1. Receive SourceRecords from 04_external_data_services.
+2. Convert units to one standard: mm for rain, m MSL for water level, °C, %, km/h.
+3. Convert all timestamps to UTC for storage, and keep Asia/Bangkok for display.
+4. Map each record to admin areas:
+   - station points: nearest area or the area that contains the station
+   - grids and rasters: zonal statistics per area (mean, max, percentile)
+   - hotspots and warning polygons: spatial join and count or overlap per area
+5. Remove duplicates and resolve conflicts between sources using source priority and freshness.
+6. Run data quality checks: range, missing values, sudden jumps, and stale stations.
+7. Build features per area and time step for each hazard (see 03_process.txt).
+8. Save the features to the feature store with FEATURE_SCHEMA_VERSION and source lineage.
+9. Build the IntegratedHazardContext for an area and time window when 06 or 03 requests it.
+10. Mark features with low coverage or stale inputs, so models can lower confidence or fall back to rules.

@@ -1,0 +1,24 @@
+Module: API Backend
+Main workflow
+
+1. Receive the request from the web app or the LINE webhook.
+2. Validate the token, request schema, and rate limit, then create a request_id.
+3. Resolve the area code or coordinates to a valid admin area.
+4. For a dashboard request, return the cached HazardSummary for the area if it is still fresh.
+5. If the cache is missing or stale, call 06_hazard_risk_models and 07_knowledge_decision_llm.
+6. For a question, send the user text, area, and language to 03_hazard_ai_agent.
+7. Collect partial results with timeouts, and mark any failed service as degraded.
+8. Return one response with alert levels, explanation, sources, freshness, and degraded services.
+9. Save the request, a response summary, and all versions for audit and evaluation.
+10. Forward subscriptions, ground reports, and feedback to 08_alert_feedback_monitoring.
+
+Main endpoints (v1)
+- GET  /v1/areas/search?q=
+- GET  /v1/areas/{code}/hazards
+- GET  /v1/areas/{code}/hazards/{hazard}/timeline
+- GET  /v1/map/layers/{hazard}
+- POST /v1/ask
+- POST /v1/subscriptions and GET /v1/subscriptions
+- POST /v1/reports
+- POST /v1/feedback
+- GET  /health, GET /ready, and GET /metrics

@@ -1,0 +1,79 @@
+# ThanPhai — Docker Compose skeleton.
+# Services marked "planned" are commented out until their module has code.
+
+name: thanphai
+
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: thanphai
+      POSTGRES_USER: ${POSTGRES_USER:-thanphai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-thanphai} -d thanphai"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+
+  external-data:            # module 04 as its own service
+    # Not started by default: api-backend uses the module 04 adapters as a library, and this service
+    # calls the providers on every request with no cache. Start it with: docker compose --profile standalone up
+    profiles: ["standalone"]
+    build:
+      context: .
+      dockerfile: 04_external_data_services/Dockerfile
+    env_file: .env
+    ports:
+      - "127.0.0.1:8004:8004"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  api-backend:              # module 02 — also runs 03 (agent), 05 (geo), 07 (rules) in-process for now
+    build:
+      context: .
+      dockerfile: 02_api_backend/Dockerfile
+    env_file: .env
+    environment:
+      DATA_DIR: /data/processed
+      CORS_ORIGINS: http://localhost:3000
+    volumes:
+      # Built by scripts/build_admin_areas.py from the HDX download.
+      - ./data/processed:/data/processed:ro
+    ports:
+      - "127.0.0.1:8002:8002"
+
+  web:                      # module 01
+    build:
+      context: 01_web_app/web
+      args:
+        API_URL: http://api-backend:8002
+    ports:
+      # Open on the LAN on purpose, so the map can be tried on a phone. Everything else is 127.0.0.1 only;
+      # the web container reaches the API over the Docker network. Use "127.0.0.1:3000:3000" to close it.
+      - "3000:3000"
+    depends_on:
+      - api-backend
+
+  # hazard-agent:           # module 03 (library inside api-backend for now) — port 8003
+  # geo-integration:        # module 05 (library inside api-backend; PostGIS load script exists) — port 8005
+  # risk-models:            # module 06 (SPI library) — port 8006
+  # decision-llm:           # module 07 (rules library inside api-backend) — port 8007
+  # alert-feedback:         # module 08 (alert policy library; needs LINE channel to deliver) — port 8008
+  # keycloak:               # identity provider (planned) — port 8080
+
+volumes:
+  pgdata:

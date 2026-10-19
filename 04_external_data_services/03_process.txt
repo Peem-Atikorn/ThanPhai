@@ -1,0 +1,25 @@
+Module: External Data Services
+Process and techniques
+
+Each adapter fetches and parses one source. Adapters do not join sources or calculate risk.
+
+Adapter techniques
+- One adapter class per source with the same interface: fetch(), parse(), health().
+- Keep every raw snapshot so parsing bugs can be fixed and data can be replayed.
+- Make every job idempotent. Re-running a job must not create duplicate records.
+- Separate observed values (observed_at) from forecasts (issued_at and valid_time).
+
+Reliability
+- Per-source timeout, retry budget, and circuit breaker.
+- Fallback order per variable, for example TMD forecast first, then Open-Meteo.
+- Record degraded status instead of returning empty data as if it were normal.
+
+Licensing and ethics
+- Check the license and terms of use of every source before using it.
+- Store and display the attribution text required by each provider.
+- Do not scrape websites that forbid it. Prefer official APIs and open data portals.
+
+Testing
+- Record real responses once (VCR cassettes) and test the parsers offline.
+- Add tests for missing fields, unit changes, empty results, and provider errors.
+- Add a daily health check that reports which sources are fresh, stale, or failing.

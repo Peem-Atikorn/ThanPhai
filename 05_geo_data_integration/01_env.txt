@@ -1,0 +1,27 @@
+Module: Geo Data Integration
+
+Data environment
+- Python 3.12 or newer
+- PostgreSQL 16 with PostGIS (and TimescaleDB if time-series volume becomes large)
+- geopandas, shapely, and pyproj for vector processing
+- rasterio, xarray, and rasterstats (or exactextract) for zonal statistics on gridded data
+- pandas or Polars for tabular feature building
+- Pandera or Great Expectations for data quality checks
+- SQLAlchemy and GeoAlchemy2 for database access
+
+Reference data
+- Thai administrative boundaries: province, district (amphoe), subdistrict (tambon) with official codes
+- Elevation model (SRTM or Copernicus DEM) for flood features
+- River network and watershed boundaries
+- Land cover / forest areas for fire and drought features
+- Historical flood extent and burned area layers, where available
+
+Required configuration
+- DATABASE_URL
+- ADMIN_BOUNDARY_VERSION and CRS (EPSG:4326 for storage, EPSG:32647 / 32648 for distance and area)
+- FEATURE_SCHEMA_VERSION
+- AGGREGATION_LEVEL (tambon or amphoe) and TIME_STEP (hourly, daily)
+
+Example installation
+- pip install geopandas shapely pyproj rasterio xarray rasterstats
+- pip install pandas polars pandera sqlalchemy geoalchemy2 "psycopg[binary]"

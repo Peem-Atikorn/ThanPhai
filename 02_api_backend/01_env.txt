@@ -1,0 +1,29 @@
+Module: API Backend
+
+Backend environment
+- Python 3.12 or newer
+- FastAPI with Pydantic v2
+- Uvicorn, or Gunicorn with Uvicorn workers
+- SQLAlchemy 2 and Alembic for database models and migrations
+- PostgreSQL with PostGIS (shared with 05_geo_data_integration)
+- Redis for cache, rate limiting, and background job queues
+- httpx for calls to internal services
+- structlog or loguru for structured JSON logs
+- OpenTelemetry and the Prometheus client for traces and metrics
+
+Security
+- OIDC / JWT validation against the shared identity provider (Keycloak or approved alternative)
+- Rate limiting per user and per IP
+- CORS limited to the web app origin
+
+Required configuration
+- DATABASE_URL and REDIS_URL
+- OIDC_ISSUER and OIDC_AUDIENCE
+- AGENT_SERVICE_URL, RISK_SERVICE_URL, DECISION_SERVICE_URL, and ALERT_SERVICE_URL
+- CORS_ORIGINS and RATE_LIMIT_PER_MINUTE
+- REQUEST_TIMEOUT_SECONDS and CACHE_TTL_SECONDS
+
+Example installation
+- pip install fastapi "uvicorn[standard]" pydantic sqlalchemy alembic "psycopg[binary]" geoalchemy2
+- pip install redis httpx structlog prometheus-client python-jose
+- Test tools: pip install pytest pytest-asyncio respx

@@ -1,0 +1,33 @@
+Module: External Data Services
+
+Adapter environment
+- Python 3.12 or newer
+- httpx (async) with tenacity for retries and backoff
+- Pydantic for raw and parsed payload schemas
+- APScheduler, Celery beat, or Prefect for scheduled pulls
+- Redis for short-term cache and per-source rate limits
+- Object storage (MinIO or local volume) for raw snapshots
+- rasterio and xarray for gridded and satellite data (rainfall grids, NDVI, soil moisture)
+- geopandas for vector data (hotspots, warning polygons)
+
+Data sources (see docs/DATA_SOURCES.md for details and license checks)
+- Thai Meteorological Department (TMD): forecasts, observations, weather warnings
+- ThaiWater / HII: rainfall stations, water level stations, reservoir levels
+- Royal Irrigation Department (RID): reservoir and river data
+- GISTDA: fire hotspots and satellite flood extent
+- NASA FIRMS: VIIRS and MODIS active fire hotspots
+- DDPM: official disaster announcements and declared disaster areas
+- Open-Meteo / ERA5-Land: fallback forecast and historical reanalysis for training
+- CHIRPS: historical rainfall for drought indices
+- MODIS / Sentinel-2: NDVI vegetation index
+
+Required configuration
+- TMD_API_TOKEN, FIRMS_MAP_KEY, and other provider keys
+- <SOURCE>_BASE_URL, <SOURCE>_POLL_INTERVAL, and <SOURCE>_TIMEOUT for each source
+- RAW_STORAGE_PATH and RAW_RETENTION_DAYS
+- SOURCE_ENABLED_<SOURCE> flags to switch adapters on and off
+
+Example installation
+- pip install httpx tenacity pydantic apscheduler redis
+- pip install geopandas rasterio xarray netCDF4
+- Test tools: pip install pytest respx vcrpy

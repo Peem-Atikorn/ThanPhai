@@ -1,0 +1,22 @@
+[project]
+name = "thanphai-risk-models"
+version = "0.1.0"
+requires-python = ">=3.12"
+# scikit-learn is pinned: the saved fire model (joblib) must be loaded by the same version that trained it.
+dependencies = ["thanphai-shared", "numpy>=1.26", "scipy>=1.11", "httpx>=0.27", "pandas>=2.2", "scikit-learn==1.9.1", "joblib>=1.4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+# Only for scripts/build_ndvi_vci.py (reads MODIS HDF4); the API reads the JSON it writes.
+ndvi = ["pyhdf>=0.11", "rasterio>=1.4", "geopandas>=1.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["risk_models*"]
+
+[tool.pytest.ini_options]
+# The shared %TEMP%\pytest-of-<user> folder is not writable on the dev machine; keep tmp_path local.
+addopts = "--basetemp=.pytest_tmp"

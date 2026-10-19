@@ -1,0 +1,21 @@
+Module: Alert, Feedback and Monitoring
+Main workflow
+
+Alert delivery
+1. Receive new AlertDecisions from module 07 after each batch scoring run.
+2. Compare them with the last sent level for each area, hazard, and subscriber.
+3. Send an alert only when the level goes up, or when it goes down after a WARNING or CRITICAL.
+4. Apply the cooldown and quiet hours, except for CRITICAL alerts and official warnings.
+5. Build a short message: hazard, area, level, time window, top reason, one action, and a link.
+6. Deliver through the user's channels with retries, and record delivery status.
+
+Ground reports and feedback
+7. Receive ground reports (hazard, location, time, description, optional photo) and alert ratings.
+8. Validate and moderate the reports: remove personal data, check location and time, flag spam.
+9. Link each report to the matching AlertDecision and area.
+10. Use confirmed reports as extra labels for module 06 evaluation and retraining.
+
+Monitoring
+11. Track source freshness, service health, latency, queue size, and delivery success.
+12. Track model quality: drift, false negatives against reports and later observations, and alert volume per area.
+13. Publish a weekly evaluation report per hazard and send operations alerts when thresholds are crossed.

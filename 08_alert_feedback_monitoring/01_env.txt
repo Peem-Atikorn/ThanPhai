@@ -1,0 +1,31 @@
+Module: Alert, Feedback and Monitoring
+
+Service environment
+- Python 3.12 or newer
+- FastAPI for subscription, report, and feedback endpoints
+- Celery or RQ with Redis for alert delivery jobs
+- PostgreSQL with PostGIS for subscriptions, alert history, and ground reports
+- Object storage (MinIO or local volume) for report photos
+
+Notification channels
+- LINE Messaging API (main channel for Thai users)
+- Web Push (VAPID)
+- Email (SMTP) as a backup channel
+
+Monitoring environment
+- Prometheus and Grafana for service and business metrics
+- Evidently for model drift reports
+- Loki or another log store for structured logs
+- Alertmanager for operations alerts (source down, model stale, queue backlog)
+
+Required configuration
+- LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET
+- VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY
+- SMTP_HOST, SMTP_USER, and SMTP_PASSWORD
+- ALERT_COOLDOWN_MINUTES and QUIET_HOURS
+- REPORT_MAX_PHOTO_MB and REPORT_RETENTION_DAYS
+
+Example installation
+- pip install fastapi celery redis "psycopg[binary]" geoalchemy2
+- pip install line-bot-sdk pywebpush evidently prometheus-client
+- Monitoring stack: Prometheus, Grafana, and Loki containers in docker-compose

@@ -1,0 +1,32 @@
+Module: Hazard Risk Models
+
+Model environment
+- Python 3.12 or newer
+- NumPy, pandas, and scikit-learn for baselines and pipelines
+- LightGBM or XGBoost for tabular risk models
+- climate-indices (or a custom implementation) for SPI and other drought indices
+- SHAP for model explanations and reason codes
+- MLflow for experiments and the model registry
+- Evidently for data drift and prediction monitoring
+- FastAPI for model serving (ONNX Runtime optional)
+- tqdm for training and backfill progress
+
+Four model tracks
+- rain_storm: heavy rain / storm risk, 0–72 hours
+- flood: flood risk, 0–72 hours
+- drought: drought risk, 1–3 months
+- fire: wildfire / grass fire risk, 0–7 days
+
+Required configuration
+- MODEL_URI_<HAZARD> and MODEL_VERSION_<HAZARD>
+- FEATURE_SCHEMA_VERSION
+- RISK_THRESHOLDS_<HAZARD> (versioned)
+- MIN_FEATURE_COVERAGE (below this, use the rule-based fallback)
+- MLFLOW_TRACKING_URI
+
+Example installation
+- pip install numpy pandas scikit-learn lightgbm xgboost shap
+- pip install mlflow evidently climate-indices tqdm
+- Model service: pip install fastapi "uvicorn[standard]" pydantic
+
+Start each hazard with a rule-based baseline and a simple scikit-learn model. Add LightGBM or XGBoost only when the evaluation shows a clear gain over the baseline.

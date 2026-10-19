@@ -1,0 +1,121 @@
+{
+ "WeatherForecasts": [
+  {
+   "location": {
+    "province": "พระนครศรีอยุธยา",
+    "areatype": "province",
+    "name": "พระนครศรีอยุธยา",
+    "tambon": null,
+    "region": "C",
+    "geocode": "14",
+    "amphoe": null,
+    "lat": 14.334025,
+    "lon": 100.611121
+   },
+   "forecasts": [
+    {
+     "time": "2026-10-19T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 0.3,
+      "ws10m": 6.33
+     }
+    },
+    {
+     "time": "2026-10-20T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 0.2,
+      "ws10m": 7.36
+     }
+    },
+    {
+     "time": "2026-10-21T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 0,
+      "ws10m": 8.43
+     }
+    }
+   ]
+  },
+  {
+   "location": {
+    "province": "พระนครศรีอยุธยา",
+    "areatype": "amphoe",
+    "name": "พระนครศรีอยุธยา",
+    "tambon": null,
+    "region": "C",
+    "geocode": "1401",
+    "amphoe": "พระนครศรีอยุธยา",
+    "lat": 14.352182,
+    "lon": 100.576603
+   },
+   "forecasts": [
+    {
+     "time": "2026-10-19T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 0.1,
+      "ws10m": 5.89
+     }
+    },
+    {
+     "time": "2026-10-20T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 0.7,
+      "ws10m": 5.02
+     }
+    },
+    {
+     "time": "2026-10-21T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 2.9,
+      "ws10m": 8.37
+     }
+    }
+   ]
+  },
+  {
+   "location": {
+    "province": "พระนครศรีอยุธยา",
+    "areatype": "amphoe",
+    "name": "ท่าเรือ",
+    "tambon": null,
+    "region": "C",
+    "geocode": "1402",
+    "amphoe": "ท่าเรือ",
+    "lat": 14.551652,
+    "lon": 100.727249
+   },
+   "forecasts": [
+    {
+     "time": "2026-10-19T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 4.8,
+      "ws10m": 5.99
+     }
+    },
+    {
+     "time": "2026-10-20T00:00:00+07:00",
+     "data": {
+      "cond": 3,
+      "rain": 28,
+      "ws10m": 4.97
+     }
+    },
+    {
+     "time": "2026-10-21T00:00:00+07:00",
+     "data": {
+      "cond": 4,
+      "rain": 14.3,
+      "ws10m": 6.04
+     }
+    }
+   ]
+  }
+ ]
+}

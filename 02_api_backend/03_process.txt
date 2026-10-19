@@ -1,0 +1,25 @@
+Module: API Backend
+Process and techniques
+
+The API backend is the only public entry point. Internal services are not exposed to the internet.
+
+Contract techniques
+- Define shared Pydantic schemas: Area, HazardType, AlertLevel, HazardAssessment, Evidence, and Source.
+- Version the API under /v1 and publish the OpenAPI docs.
+- Every response includes request_id, generated_at, and degraded_services.
+
+Reliability
+- Set a timeout and a retry budget for each internal call.
+- Use a circuit breaker so one slow service does not block the whole response.
+- Cache area summaries in Redis with a TTL that matches the data update interval.
+- When a service is down, return the last known good result with its age.
+
+Security
+- Validate all input. Area codes and coordinates must be inside Thailand.
+- Keep API keys only in environment variables or a secret store.
+- Log the request_id and a hash of the user_id, not personal data or exact home locations.
+- Store subscription locations at area level, not raw GPS points, unless the user agrees.
+
+Testing
+- Unit tests for schemas and services; integration tests with mocked internal services.
+- Contract tests to check that every service follows the shared schemas.

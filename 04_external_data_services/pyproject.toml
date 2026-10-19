@@ -1,0 +1,26 @@
+[project]
+name = "thanphai-external-data"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "thanphai-shared",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["external_data*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["live: calls the real provider APIs (run with -m live)"]
+addopts = "-m 'not live'"

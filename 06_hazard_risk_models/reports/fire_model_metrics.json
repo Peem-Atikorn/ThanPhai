@@ -1,0 +1,61 @@
+{
+  "rows": {
+    "train": 989248,
+    "val": 339648,
+    "test": 332224
+  },
+  "positive_rate": {
+    "train": 0.116,
+    "val": 0.1468,
+    "test": 0.1147
+  },
+  "thresholds": {
+    "watch": 0.1909,
+    "warning": 0.3961
+  },
+  "test": {
+    "model (gradient boosting)": {
+      "roc_auc": 0.9469,
+      "pr_auc": 0.7287,
+      "brier": 0.0528,
+      "recall": 0.8457,
+      "precision": 0.5268,
+      "alerts_per_1000_rows": 184.11
+    },
+    "rule: >=3 hotspots today (current WATCH rule)": {
+      "roc_auc": 0.6922,
+      "pr_auc": 0.3911,
+      "brier": 0.0954,
+      "recall": 0.189,
+      "precision": 0.8507,
+      "alerts_per_1000_rows": 25.48
+    },
+    "rule: >=3 hotspots in last 7 days": {
+      "roc_auc": 0.8774,
+      "pr_auc": 0.6218,
+      "brier": 0.1499,
+      "recall": 0.6311,
+      "precision": 0.6252,
+      "alerts_per_1000_rows": 115.77
+    },
+    "seasonal climatology": {
+      "roc_auc": 0.9346,
+      "pr_auc": 0.6265,
+      "brier": 0.0696,
+      "recall": 0.8625,
+      "precision": 0.4618,
+      "alerts_per_1000_rows": 214.2
+    }
+  },
+  "feature_importance": {
+    "clim": 0.5293,
+    "doy_cos": 0.034,
+    "c30": 0.0282,
+    "c1": 0.0187,
+    "doy_sin": 0.018,
+    "c7": 0.0174,
+    "prov7": 0.0141,
+    "c3": 0.0009,
+    "frp7": -0.0039
+  }
+}

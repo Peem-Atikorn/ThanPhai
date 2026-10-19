@@ -1,0 +1,22 @@
+Module: Knowledge, Decision and LLM Engine
+Main workflow
+
+1. Receive the HazardAssessments from module 06, official warnings, and the user context (area, language, question).
+2. Apply the decision rules in this order:
+   a. An active official warning sets the minimum alert level.
+   b. Safety overrides from observations (for example water above bank level).
+   c. The model risk level and confidence.
+   d. Degraded or stale data never lowers the level; it lowers confidence and adds a notice.
+3. Produce the final AlertDecision per hazard: NORMAL, WATCH, WARNING, or CRITICAL, with the rule IDs that fired.
+4. Build a RAG query from hazard, alert level, area type, and language.
+5. Retrieve only current approved documents with hybrid search (BM25 + vector) and reranking.
+6. If the retrieval score is below MIN_RETRIEVAL_SCORE, return "no guidance found" for that part.
+7. Send the decision, reasons, evidence, and retrieved passages to the LLM with a strict prompt.
+8. The LLM writes a short explanation and preparation steps in Thai or English, citing every source.
+9. Check the output: the alert level must match the decision, every claim must have a citation, and no unsupported numbers are allowed.
+10. If the LLM fails or the check fails, use a template explanation built from the rules and passages.
+11. Return the AlertDecision, explanation, citations, freshness, and versions.
+
+Offline lifecycle
+- Document review -> parsing -> chunking by procedure -> embedding -> indexing -> retrieval evaluation -> collection release
+- Rule change -> review -> test cases -> version bump -> release

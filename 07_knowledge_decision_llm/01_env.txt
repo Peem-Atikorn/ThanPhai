@@ -1,0 +1,32 @@
+Module: Knowledge, Decision and LLM Engine
+
+RAG environment
+- Python 3.12 or newer
+- PostgreSQL with pgvector, or FAISS for a local prototype
+- sentence-transformers with a multilingual embedding model for Thai and English (for example BGE-M3 or multilingual-e5)
+- rank-bm25 with PyThaiNLP tokenization for Thai keyword search
+- A cross-encoder reranker that supports Thai
+- pypdf or unstructured for parsing PDF guides
+
+Decision and LLM environment
+- Rules defined in versioned YAML files and evaluated in Python
+- Google Gemini through the google-genai SDK (model gemini-3.5-flash-lite, thinking level LOW)
+- Jinja2 templates for prompts and fallback text
+- Pydantic for the output schema
+
+Knowledge base (approved documents only)
+- DDPM disaster preparedness and evacuation guides
+- TMD warning level definitions and safety advice
+- Ministry of Public Health guidance for PM2.5 / smoke and flood-related illness
+- Royal Forest Department and DNP guidance for forest fire
+
+Required configuration
+- EMBEDDING_MODEL, COLLECTION_VERSION, TOP_K, and RERANK_TOP_N
+- DECISION_RULES_VERSION
+- LLM_PROVIDER (gemini), LLM_MODEL, LLM_THINKING_LEVEL, and GEMINI_API_KEY
+- MIN_RETRIEVAL_SCORE (below this, report that no evidence was found)
+
+Example installation
+- pip install sentence-transformers faiss-cpu rank-bm25 pythainlp pypdf
+- pip install pgvector "psycopg[binary]" pyyaml jinja2 pydantic
+- LLM SDK: pip install google-genai

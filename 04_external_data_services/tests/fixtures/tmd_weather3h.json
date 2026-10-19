@@ -1,0 +1,106 @@
+{
+ "@attributes": {
+  "Version": "2.0"
+ },
+ "Header": {
+  "Title": "Weather3Hours",
+  "Description": "Weather Observation for every 3 hour (1:00, 4:00, 7:00, 10:00, 13:00, 16:00, 19:00, 22:00) ",
+  "Uri": "http://data.tmd.go.th/api/Weather3Hours/V2/index.php",
+  "LastBuildDate": "2026-10-19 01:37:12",
+  "CopyRight": "Thai Meteorological Department:2016",
+  "Generator": "TMDData_API Services",
+  "status": "200 OK"
+ },
+ "Stations": {
+  "Station": [
+   {
+    "WmoStationNumber": "48330",
+    "StationNameThai": "แพร่",
+    "StationNameEnglish": "PHRAE",
+    "Province": "แพร่",
+    "Latitude": "18.16667",
+    "Longitude": "100.16667",
+    "Observation": {
+     "DateTime": "10/19/2026 01:00:00",
+     "StationPressure": "993.74",
+     "MeanSeaLevelPressure": "1012.47",
+     "AirTemperature": "24.5",
+     "DewPoint": "23.5",
+     "RelativeHumidity": "94",
+     "VaporPressure": "28.89",
+     "LandVisibility": "7.00",
+     "WindDirection": "000",
+     "WindSpeed": "0.0",
+     "Rainfall": "0.00",
+     "Rainfall24Hr": "0.00"
+    }
+   },
+   {
+    "WmoStationNumber": "48357",
+    "StationNameThai": "นครพนม",
+    "StationNameEnglish": "NAKHON PHANOM",
+    "Province": "นครพนม",
+    "Latitude": "17.41083",
+    "Longitude": "104.78250",
+    "Observation": {
+     "DateTime": "10/19/2026 01:00:00",
+     "StationPressure": "996.03",
+     "MeanSeaLevelPressure": "1012.91",
+     "AirTemperature": "26.3",
+     "DewPoint": "24.0",
+     "RelativeHumidity": "87",
+     "VaporPressure": "29.78",
+     "LandVisibility": "12.00",
+     "WindDirection": "000",
+     "WindSpeed": "0.0",
+     "Rainfall": "0.00",
+     "Rainfall24Hr": "0.00"
+    }
+   },
+   {
+    "WmoStationNumber": "48379",
+    "StationNameThai": "เพชรบูรณ์",
+    "StationNameEnglish": "PHETCHABUN",
+    "Province": "เพชรบูรณ์",
+    "Latitude": "16.43333",
+    "Longitude": "101.15000",
+    "Observation": {
+     "DateTime": "10/19/2026 01:00:00",
+     "StationPressure": "996.92",
+     "MeanSeaLevelPressure": "1010.17",
+     "AirTemperature": "26.6",
+     "DewPoint": "25.0",
+     "RelativeHumidity": "91",
+     "VaporPressure": "31.71",
+     "LandVisibility": "10.00",
+     "WindDirection": "000",
+     "WindSpeed": "0.0",
+     "Rainfall": "0.00",
+     "Rainfall24Hr": "0.00"
+    }
+   },
+   {
+    "WmoStationNumber": "48402",
+    "StationNameThai": "ชัยนาท สกษ.",
+    "StationNameEnglish": "CHAINAT AGROMET.",
+    "Province": "ชัยนาท",
+    "Latitude": "15.15000",
+    "Longitude": "100.18333",
+    "Observation": {
+     "DateTime": "10/19/2026 01:00:00",
+     "StationPressure": "1009.42",
+     "MeanSeaLevelPressure": "1011.36",
+     "AirTemperature": "27.2",
+     "DewPoint": "25.9",
+     "RelativeHumidity": "93",
+     "VaporPressure": "33.46",
+     "LandVisibility": "9.00",
+     "WindDirection": "000",
+     "WindSpeed": "0.0",
+     "Rainfall": "0.00",
+     "Rainfall24Hr": "0.00"
+    }
+   }
+  ]
+ }
+}

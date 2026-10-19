@@ -1,0 +1,423 @@
+{
+ "waterlevel_data": {
+  "data": [
+   {
+    "id": 1327497014,
+    "waterlevel_datetime": "2026-10-19 17:00",
+    "waterlevel_m": null,
+    "waterlevel_msl": "5.67",
+    "waterlevel_msl_previous": "5.68",
+    "flow_rate": null,
+    "discharge": "663.00",
+    "storage_percent": "113.37",
+    "sort_order": null,
+    "station_type": "tele_waterlevel",
+    "situation_level": 5,
+    "agency": {
+     "id": 12,
+     "agency_name": {
+      "th": "กรมชลประทาน ",
+      "en": "Royal Irrigation Department",
+      "jp": ""
+     },
+     "agency_shortname": {
+      "th": "ชป.",
+      "en": "RID",
+      "jp": ""
+     }
+    },
+    "basin": {
+     "id": 10,
+     "basin_code": 10,
+     "basin_name": {
+      "th": "ลุ่มน้ำเจ้าพระยา",
+      "en": "Chao Phraya Basin"
+     }
+    },
+    "station": {
+     "id": 2611,
+     "tele_station_name": {
+      "th": "บ้านบางหลวงโดด"
+     },
+     "tele_station_lat": 14.41588,
+     "tele_station_long": 100.440804,
+     "tele_station_oldcode": "C.36",
+     "tele_station_type": "tele_waterlevel",
+     "left_bank": 7.434,
+     "right_bank": 7.787,
+     "min_bank": 4.3,
+     "ground_level": -5.95,
+     "offset": null,
+     "sub_basin_id": 240,
+     "agency_id": 12,
+     "geocode_id": 478,
+     "hydro_id": 5,
+     "qmax": 441,
+     "is_key_station": true,
+     "warning_level_m": null,
+     "critical_level_m": null,
+     "critical_level_msl": null
+    },
+    "geocode": {
+     "area_code": "2",
+     "area_name": {
+      "th": "ภาคกลาง",
+      "en": "Central"
+     },
+     "amphoe_code": "05",
+     "amphoe_name": {
+      "th": "บางบาล",
+      "en": "Bang Ban District"
+     },
+     "tumbon_code": "13",
+     "tumbon_name": {
+      "th": "บางหลวงโดด",
+      "en": "Bang Luang Dot"
+     },
+     "province_code": "14",
+     "province_name": {
+      "th": "พระนครศรีอยุธยา",
+      "en": "Phra Nakhon Si Ayutthaya"
+     }
+    },
+    "diff_wl_bank": "1.37",
+    "diff_wl_bank_text": "ล้นตลิ่ง (ม.)",
+    "river_gid": 182183,
+    "river_name": "แม่น้ำน้อย"
+   },
+   {
+    "id": 1327512102,
+    "waterlevel_datetime": "2026-10-19 17:00",
+    "waterlevel_m": null,
+    "waterlevel_msl": "2.17",
+    "waterlevel_msl_previous": "2.16",
+    "flow_rate": "954.00",
+    "discharge": null,
+    "storage_percent": "100.91",
+    "sort_order": null,
+    "station_type": "tele_waterlevel",
+    "situation_level": 5,
+    "agency": {
+     "id": 12,
+     "agency_name": {
+      "th": "กรมชลประทาน ",
+      "en": "Royal Irrigation Department",
+      "jp": ""
+     },
+     "agency_shortname": {
+      "th": "ชป.",
+      "en": "RID",
+      "jp": ""
+     }
+    },
+    "basin": {
+     "id": 10,
+     "basin_code": 10,
+     "basin_name": {
+      "th": "ลุ่มน้ำเจ้าพระยา",
+      "en": "Chao Phraya Basin"
+     }
+    },
+    "station": {
+     "id": 11688988,
+     "tele_station_name": {
+      "th": "วัดกร่าง"
+     },
+     "tele_station_lat": 14.11658,
+     "tele_station_long": 100.53743,
+     "tele_station_oldcode": "ridhydro_C.29B",
+     "tele_station_type": "tele_waterlevel",
+     "left_bank": 2.06,
+     "right_bank": 3.07,
+     "min_bank": 2.06,
+     "ground_level": -10,
+     "offset": null,
+     "sub_basin_id": 240,
+     "sponsor_by": "ฝ่ายอุทกวิทยากับฝ่ายติดตามและพยากรณ์สถานการณ์น้ำ",
+     "agency_id": 12,
+     "geocode_id": 393,
+     "hydro_id": null,
+     "qmax": 3600,
+     "is_key_station": false,
+     "warning_level_m": null,
+     "critical_level_m": null,
+     "critical_level_msl": 3
+    },
+    "geocode": {
+     "area_code": "2",
+     "area_name": {
+      "th": "ภาคกลาง",
+      "en": "Central"
+     },
+     "amphoe_code": "07",
+     "amphoe_name": {
+      "th": "สามโคก",
+      "en": "Sam Khok District"
+     },
+     "tumbon_code": "11",
+     "tumbon_name": {
+      "th": "ท้ายเกาะ",
+      "en": "Thai Ko"
+     },
+     "province_code": "13",
+     "province_name": {
+      "th": "ปทุมธานี",
+      "en": "Pathum Thani"
+     }
+    },
+    "diff_wl_bank": "0.11",
+    "diff_wl_bank_text": "ล้นตลิ่ง (ม.)"
+   },
+   {
+    "id": 1327512105,
+    "waterlevel_datetime": "2026-10-19 17:00",
+    "waterlevel_m": null,
+    "waterlevel_msl": "5.67",
+    "waterlevel_msl_previous": "5.68",
+    "flow_rate": "663.00",
+    "discharge": null,
+    "storage_percent": "86.65",
+    "sort_order": null,
+    "station_type": "tele_waterlevel",
+    "situation_level": 4,
+    "agency": {
+     "id": 12,
+     "agency_name": {
+      "th": "กรมชลประทาน ",
+      "en": "Royal Irrigation Department",
+      "jp": ""
+     },
+     "agency_shortname": {
+      "th": "ชป.",
+      "en": "RID",
+      "jp": ""
+     }
+    },
+    "basin": {
+     "id": 10,
+     "basin_code": 10,
+     "basin_name": {
+      "th": "ลุ่มน้ำเจ้าพระยา",
+      "en": "Chao Phraya Basin"
+     }
+    },
+    "station": {
+     "id": 11688991,
+     "tele_station_name": {
+      "th": "บ้านบางหลวงโดด"
+     },
+     "tele_station_lat": 14.41588,
+     "tele_station_long": 100.440804,
+     "tele_station_oldcode": "ridhydro_C.36",
+     "tele_station_type": "tele_waterlevel",
+     "left_bank": 7.44,
+     "right_bank": 7.75,
+     "min_bank": 7.44,
+     "ground_level": -5.82,
+     "offset": null,
+     "sub_basin_id": 240,
+     "sponsor_by": "ฝ่ายอุทกวิทยากับฝ่ายติดตามและพยากรณ์สถานการณ์น้ำ",
+     "agency_id": 12,
+     "geocode_id": 478,
+     "hydro_id": null,
+     "qmax": 441,
+     "is_key_station": false,
+     "warning_level_m": null,
+     "critical_level_m": null,
+     "critical_level_msl": 4.3
+    },
+    "geocode": {
+     "area_code": "2",
+     "area_name": {
+      "th": "ภาคกลาง",
+      "en": "Central"
+     },
+     "amphoe_code": "05",
+     "amphoe_name": {
+      "th": "บางบาล",
+      "en": "Bang Ban District"
+     },
+     "tumbon_code": "13",
+     "tumbon_name": {
+      "th": "บางหลวงโดด",
+      "en": "Bang Luang Dot"
+     },
+     "province_code": "14",
+     "province_name": {
+      "th": "พระนครศรีอยุธยา",
+      "en": "Phra Nakhon Si Ayutthaya"
+     }
+    },
+    "diff_wl_bank": "1.77",
+    "diff_wl_bank_text": "ต่ำกว่าตลิ่ง (ม.)"
+   },
+   {
+    "id": 1327497010,
+    "waterlevel_datetime": "2026-10-19 17:00",
+    "waterlevel_m": null,
+    "waterlevel_msl": "14.05",
+    "waterlevel_msl_previous": "14.05",
+    "flow_rate": null,
+    "discharge": "1800.00",
+    "storage_percent": "83.94",
+    "sort_order": null,
+    "station_type": "tele_waterlevel",
+    "situation_level": 4,
+    "agency": {
+     "id": 12,
+     "agency_name": {
+      "th": "กรมชลประทาน ",
+      "en": "Royal Irrigation Department",
+      "jp": ""
+     },
+     "agency_shortname": {
+      "th": "ชป.",
+      "en": "RID",
+      "jp": ""
+     }
+    },
+    "basin": {
+     "id": 10,
+     "basin_code": 10,
+     "basin_name": {
+      "th": "ลุ่มน้ำเจ้าพระยา",
+      "en": "Chao Phraya Basin"
+     }
+    },
+    "station": {
+     "id": 2744,
+     "tele_station_name": {
+      "th": "ท้ายเขื่อนเจ้าพระยา"
+     },
+     "tele_station_lat": 15.16384,
+     "tele_station_long": 100.18792,
+     "tele_station_oldcode": "C.13",
+     "tele_station_type": "tele_waterlevel",
+     "left_bank": 17.524,
+     "right_bank": 18.2,
+     "min_bank": 16.34,
+     "ground_level": 2.08,
+     "offset": null,
+     "sub_basin_id": 240,
+     "agency_id": 12,
+     "geocode_id": 920,
+     "hydro_id": 5,
+     "qmax": 2720,
+     "is_key_station": true,
+     "warning_level_m": null,
+     "critical_level_m": 16.34,
+     "critical_level_msl": 16.34
+    },
+    "geocode": {
+     "area_code": "2",
+     "area_name": {
+      "th": "ภาคกลาง",
+      "en": "Central"
+     },
+     "amphoe_code": "04",
+     "amphoe_name": {
+      "th": "สรรพยา",
+      "en": "Sapphaya District"
+     },
+     "tumbon_code": "06",
+     "tumbon_name": {
+      "th": "บางหลวง",
+      "en": "Bang Luang"
+     },
+     "province_code": "18",
+     "province_name": {
+      "th": "ชัยนาท",
+      "en": "Chai Nat"
+     }
+    },
+    "diff_wl_bank": "2.29",
+    "diff_wl_bank_text": "ต่ำกว่าตลิ่ง (ม.)",
+    "river_gid": 175661,
+    "river_name": "แม่น้ำเจ้าพระยา"
+   },
+   {
+    "id": 1327512099,
+    "waterlevel_datetime": "2026-10-19 17:00",
+    "waterlevel_m": null,
+    "waterlevel_msl": "14.05",
+    "waterlevel_msl_previous": "14.05",
+    "flow_rate": "1800.00",
+    "discharge": null,
+    "storage_percent": "78.83",
+    "sort_order": null,
+    "station_type": "tele_waterlevel",
+    "situation_level": 4,
+    "agency": {
+     "id": 12,
+     "agency_name": {
+      "th": "กรมชลประทาน ",
+      "en": "Royal Irrigation Department",
+      "jp": ""
+     },
+     "agency_shortname": {
+      "th": "ชป.",
+      "en": "RID",
+      "jp": ""
+     }
+    },
+    "basin": {
+     "id": 10,
+     "basin_code": 10,
+     "basin_name": {
+      "th": "ลุ่มน้ำเจ้าพระยา",
+      "en": "Chao Phraya Basin"
+     }
+    },
+    "station": {
+     "id": 11688985,
+     "tele_station_name": {
+      "th": "ท้ายเขื่อนเจ้าพระยา"
+     },
+     "tele_station_lat": 15.16384,
+     "tele_station_long": 100.18792,
+     "tele_station_oldcode": "ridhydro_C.13",
+     "tele_station_type": "tele_waterlevel",
+     "left_bank": 17.48,
+     "right_bank": 18.14,
+     "min_bank": 17.48,
+     "ground_level": 1.28,
+     "offset": null,
+     "sub_basin_id": 240,
+     "sponsor_by": "ฝ่ายอุทกวิทยากับฝ่ายติดตามและพยากรณ์สถานการณ์น้ำ",
+     "agency_id": 12,
+     "geocode_id": 920,
+     "hydro_id": null,
+     "qmax": 2720,
+     "is_key_station": false,
+     "warning_level_m": null,
+     "critical_level_m": null,
+     "critical_level_msl": 16.34
+    },
+    "geocode": {
+     "area_code": "2",
+     "area_name": {
+      "th": "ภาคกลาง",
+      "en": "Central"
+     },
+     "amphoe_code": "04",
+     "amphoe_name": {
+      "th": "สรรพยา",
+      "en": "Sapphaya District"
+     },
+     "tumbon_code": "06",
+     "tumbon_name": {
+      "th": "บางหลวง",
+      "en": "Bang Luang"
+     },
+     "province_code": "18",
+     "province_name": {
+      "th": "ชัยนาท",
+      "en": "Chai Nat"
+     }
+    },
+    "diff_wl_bank": "3.43",
+    "diff_wl_bank_text": "ต่ำกว่าตลิ่ง (ม.)"
+   }
+  ]
+ }
+}

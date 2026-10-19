@@ -1,0 +1,321 @@
+{
+ "dam": {
+  "data": {
+   "result": "OK",
+   "data": [
+    {
+     "id": 2903237,
+     "dam_date": "2026-10-19",
+     "dam_storage": 184.04,
+     "dam_storage_percent": 112.39,
+     "dam_inflow": 3.2,
+     "dam_inflow_acc_percent": 85.55,
+     "dam_inflow_avg": 215.33,
+     "dam_inflow_acc": 184.22,
+     "dam_uses_water": 170.54,
+     "dam_uses_water_percent": 104.15,
+     "dam_actual_uses_water_percent": null,
+     "dam_uses_water_percent_calc": 113.5,
+     "dam_level": 0,
+     "dam_released": 3.68,
+     "dam_released_acc": 195.02,
+     "dam_spilled": 0,
+     "dam_losses": 0,
+     "dam_evap": 0,
+     "station_type": "dam_daily",
+     "dam": {
+      "id": 24,
+      "dam_oldcode": "30",
+      "dam_name": {
+       "en": "Nong Pla Lai",
+       "jp": "ノンプラライ",
+       "th": "หนองปลาไหล"
+      },
+      "dam_lat": 12.934647,
+      "dam_long": 101.297011,
+      "max_storage": 205.85,
+      "normal_storage": 164,
+      "uses_water": 150.25,
+      "sub_basin_id": 291
+     },
+     "agency": {
+      "id": 12,
+      "agency_name": {
+       "th": "กรมชลประทาน ",
+       "en": "Royal Irrigation Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "ชป.",
+       "en": "RID",
+       "jp": ""
+      }
+     },
+     "basin": {
+      "id": 18,
+      "basin_code": 17,
+      "basin_name": {
+       "th": "ลุ่มน้ำชายฝั่งทะเลตะวันออก",
+       "en": "East Coast Gulf Basin"
+      }
+     },
+     "geocode": {
+      "id": 1230,
+      "geocode": "210602",
+      "area_code": "5",
+      "area_name": {
+       "th": "ภาคตะวันออก"
+      },
+      "province_code": "21",
+      "province_name": {
+       "th": "ระยอง",
+       "en": "Rayong"
+      },
+      "amphoe_name": {
+       "th": "ปลวกแดง",
+       "en": "Pluak Daeng District"
+      },
+      "tumbon_name": {
+       "th": "ตาสิทธิ์",
+       "en": "Ta Sit"
+      }
+     },
+     "cctv": {
+      "id": 0,
+      "url": ""
+     }
+    },
+    {
+     "id": 2903240,
+     "dam_date": "2026-10-19",
+     "dam_storage": 717.26,
+     "dam_storage_percent": 101.02,
+     "dam_inflow": 7.12,
+     "dam_inflow_acc_percent": 125.46,
+     "dam_inflow_avg": 904.57,
+     "dam_inflow_acc": 1134.88,
+     "dam_uses_water": 652.26,
+     "dam_uses_water_percent": 91.87,
+     "dam_actual_uses_water_percent": null,
+     "dam_uses_water_percent_calc": 101.12,
+     "dam_level": 0,
+     "dam_released": 9.12,
+     "dam_released_acc": 904.53,
+     "dam_spilled": 0,
+     "dam_losses": 0,
+     "dam_evap": 0,
+     "station_type": "dam_daily",
+     "dam": {
+      "id": 13,
+      "dam_oldcode": "20",
+      "dam_name": {
+       "en": "Kaeng Kachan",
+       "jp": "ケーンクラチャン",
+       "th": "แก่งกระจาน"
+      },
+      "dam_lat": 12.917017,
+      "dam_long": 99.629886,
+      "max_storage": 900,
+      "normal_storage": 710,
+      "uses_water": 645,
+      "sub_basin_id": 300
+     },
+     "agency": {
+      "id": 12,
+      "agency_name": {
+       "th": "กรมชลประทาน ",
+       "en": "Royal Irrigation Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "ชป.",
+       "en": "RID",
+       "jp": ""
+      }
+     },
+     "basin": {
+      "id": 20,
+      "basin_code": 18,
+      "basin_name": {
+       "th": "ลุ่มน้ำเพชรบุรี-ประจวบคีรีขันธ์",
+       "en": "Phetchaburi - Prachuap Khiri Khan Basin"
+      }
+     },
+     "geocode": {
+      "id": 7112,
+      "geocode": "760805",
+      "area_code": "6",
+      "area_name": {
+       "th": "ภาคใต้"
+      },
+      "province_code": "76",
+      "province_name": {
+       "th": "เพชรบุรี",
+       "en": "Phetchaburi"
+      },
+      "amphoe_name": {
+       "th": "แก่งกระจาน",
+       "en": "Kaeng Krachan District"
+      },
+      "tumbon_name": {
+       "th": "พุสวรรค์",
+       "en": "Phu Sawan"
+      }
+     },
+     "cctv": {
+      "id": 0,
+      "url": ""
+     }
+    },
+    {
+     "id": 2903227,
+     "dam_date": "2026-10-19",
+     "dam_storage": 62.07,
+     "dam_storage_percent": 51.13,
+     "dam_inflow": 0.21,
+     "dam_inflow_acc_percent": 83.39,
+     "dam_inflow_avg": 51.73,
+     "dam_inflow_acc": 43.13,
+     "dam_uses_water": 58.62,
+     "dam_uses_water_percent": 48.28,
+     "dam_actual_uses_water_percent": null,
+     "dam_uses_water_percent_calc": 49.68,
+     "dam_level": 0,
+     "dam_released": 0.05,
+     "dam_released_acc": 18.68,
+     "dam_spilled": 0,
+     "dam_losses": 0,
+     "dam_evap": 0,
+     "station_type": "dam_daily",
+     "dam": {
+      "id": 6,
+      "dam_oldcode": "14",
+      "dam_name": {
+       "en": "Lam Nang Rong",
+       "jp": "ラムナンロン",
+       "th": "ลำนางรอง"
+      },
+      "dam_lat": 14.299444,
+      "dam_long": 102.759722,
+      "max_storage": 196.67,
+      "normal_storage": 121.41,
+      "uses_water": 118,
+      "sub_basin_id": 113
+     },
+     "agency": {
+      "id": 12,
+      "agency_name": {
+       "th": "กรมชลประทาน ",
+       "en": "Royal Irrigation Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "ชป.",
+       "en": "RID",
+       "jp": ""
+      }
+     },
+     "basin": {
+      "id": 5,
+      "basin_code": 5,
+      "basin_name": {
+       "th": "ลุ่มน้ำมูล",
+       "en": "Mun Basin"
+      }
+     },
+     "geocode": {
+      "id": 2187,
+      "geocode": "312001",
+      "area_code": "2",
+      "area_name": {
+       "th": "ภาคตะวันออกเฉียงเหนือ"
+      },
+      "province_code": "31",
+      "province_name": {
+       "th": "บุรีรัมย์",
+       "en": "Buri Ram"
+      },
+      "amphoe_name": {
+       "th": "โนนดินแดง",
+       "en": "Non Din Daeng District"
+      },
+      "tumbon_name": {
+       "th": "โนนดินแดง",
+       "en": "Non Din Daeng"
+      }
+     },
+     "cctv": {
+      "id": 0,
+      "url": ""
+     }
+    }
+   ]
+  },
+  "setting": {
+   "scale": [
+    {
+     "operator": ">",
+     "term": "100",
+     "color": "#C70000",
+     "colorname": "min",
+     "text": ">100",
+     "level": "5"
+    },
+    {
+     "operator": ">",
+     "term": "80",
+     "color": "#FF0000",
+     "colorname": "red",
+     "text": "81-100",
+     "level": "4"
+    },
+    {
+     "operator": ">",
+     "term": "50",
+     "color": "#003CFA",
+     "colorname": "blue",
+     "text": "51-80",
+     "level": "3"
+    },
+    {
+     "operator": ">",
+     "term": "30",
+     "color": "#00B050",
+     "colorname": "green",
+     "text": "31-50",
+     "level": "2"
+    },
+    {
+     "operator": "<=",
+     "term": "30",
+     "color": "#FFC000",
+     "colorname": "yellow",
+     "text": "<=30",
+     "level": "1"
+    }
+   ],
+   "low": {
+    "color": "#FFC000",
+    "trans": "dam_low_text",
+    "text": "<font color='#FFC000'>น้ำน้อยวิกฤต(%ใช้การฯ)</font>"
+   },
+   "high": {
+    "color": "#FF0000",
+    "trans": "dam_high_text",
+    "text": "<font color='#FF0000'>น้ำมาก(%รนก.)</font>"
+   },
+   "rule_web": [
+    {
+     "operator": ">",
+     "dam_storage_percent": "80",
+     "level": 4
+    },
+    {
+     "operator": "<=",
+     "dam_uses_water_percent": "30",
+     "level": 3
+    }
+   ]
+  }
+ }
+}

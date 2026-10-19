@@ -1,0 +1,304 @@
+{
+ "result": "OK",
+ "data": [
+  {
+   "id": 315176038,
+   "rain_24h": 133.5,
+   "rain_1h": 0,
+   "rainfall_datetime": "2026-10-19 00:00",
+   "station_type": "rainfall_24h",
+   "agency": {
+    "agency_name": {
+     "th": "กรมทรัพยากรน้ำ",
+     "en": "Department of Water Resources",
+     "jp": ""
+    },
+    "agency_shortname": {
+     "th": "ทน.",
+     "en": "DWR",
+     "jp": ""
+    }
+   },
+   "geocode": {
+    "warning_zone": "09",
+    "area_code": "5",
+    "area_name": {
+     "th": "ภาคใต้",
+     "en": "South"
+    },
+    "amphoe_name": {
+     "th": "ควนกาหลง",
+     "en": "Khuan Kalong District"
+    },
+    "tumbon_name": {
+     "th": "ควนกาหลง",
+     "en": "Khuan Kalong"
+    },
+    "province_code": "91",
+    "province_name": {
+     "th": "สตูล",
+     "en": "Satun"
+    }
+   },
+   "station": {
+    "id": 1123755,
+    "tele_station_name": {
+     "th": "บ้านเหนือคลอง"
+    },
+    "tele_station_lat": 6.982381,
+    "tele_station_long": 100.019556,
+    "tele_station_oldcode": "STN1917",
+    "tele_station_type": "rainfall_24h",
+    "sub_basin_id": "2211"
+   },
+   "basin": {
+    "id": 27,
+    "basin_code": 22,
+    "basin_name": {
+     "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันตก",
+     "en": "Peninsula - West Coast Basin"
+    }
+   }
+  },
+  {
+   "id": 315174902,
+   "rain_24h": 126.8,
+   "rain_1h": 0,
+   "rainfall_datetime": "2026-10-19 01:00",
+   "station_type": "rainfall_24h",
+   "agency": {
+    "agency_name": {
+     "th": "สถาบันสารสนเทศทรัพยากรน้ำ (องค์การมหาชน)",
+     "en": "Hydro – Informatics Institute (Public Organization)",
+     "jp": ""
+    },
+    "agency_shortname": {
+     "th": "สสน.",
+     "en": "HII",
+     "jp": ""
+    }
+   },
+   "geocode": {
+    "warning_zone": "09",
+    "area_code": "5",
+    "area_name": {
+     "th": "ภาคใต้",
+     "en": "South"
+    },
+    "amphoe_name": {
+     "th": "เมืองนครศรีธรรมราช",
+     "en": "Mueang Nakhon Si Thammarat District"
+    },
+    "tumbon_name": {
+     "th": "ท่าไร่",
+     "en": "Tha Rai"
+    },
+    "province_code": "80",
+    "province_name": {
+     "th": "นครศรีธรรมราช",
+     "en": "Nakhon Si Thammarat"
+    }
+   },
+   "station": {
+    "id": 1373691,
+    "tele_station_name": {
+     "en": "Nang Phraya Bridge-Bang Luang Pak Nakhon Community",
+     "th": "สะพานนางพระยา-บางหลวง ชุมชนปากนคร"
+    },
+    "tele_station_lat": 8.438141,
+    "tele_station_long": 100.0304,
+    "tele_station_oldcode": "PTTEP3",
+    "tele_station_type": "rainfall_24h",
+    "sub_basin_id": "1919",
+    "sponsor_by": "บริษัท ปตท.สำรวจและผลิตปิโตรเลียม จำกัด (มหาชน)"
+   },
+   "basin": {
+    "id": 22,
+    "basin_code": 19,
+    "basin_name": {
+     "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนบน",
+     "en": "Peninsula - Upper East Coast Basin"
+    }
+   }
+  },
+  {
+   "id": 315175923,
+   "rain_24h": 111.5,
+   "rain_1h": 0,
+   "rainfall_datetime": "2026-10-19 00:00",
+   "station_type": "rainfall_24h",
+   "agency": {
+    "agency_name": {
+     "th": "กรมทรัพยากรน้ำ",
+     "en": "Department of Water Resources",
+     "jp": ""
+    },
+    "agency_shortname": {
+     "th": "ทน.",
+     "en": "DWR",
+     "jp": ""
+    }
+   },
+   "geocode": {
+    "warning_zone": "09",
+    "area_code": "5",
+    "area_name": {
+     "th": "ภาคใต้",
+     "en": "South"
+    },
+    "amphoe_name": {
+     "th": "เมืองกระบี่",
+     "en": "Mueang Krabi District"
+    },
+    "tumbon_name": {
+     "th": "เทศบาลเมืองกระบี่",
+     "en": "Krabi Town Municipallity"
+    },
+    "province_code": "81",
+    "province_name": {
+     "th": "กระบี่",
+     "en": "Krabi"
+    }
+   },
+   "station": {
+    "id": 1081072,
+    "tele_station_name": {
+     "th": "บ้านท่าคลอง"
+    },
+    "tele_station_lat": 8.1105,
+    "tele_station_long": 98.908151,
+    "tele_station_oldcode": "STN1783",
+    "tele_station_type": "rainfall_24h",
+    "sub_basin_id": "2205"
+   },
+   "basin": {
+    "id": 27,
+    "basin_code": 22,
+    "basin_name": {
+     "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันตก",
+     "en": "Peninsula - West Coast Basin"
+    }
+   }
+  },
+  {
+   "id": 315176245,
+   "rain_24h": 102.5,
+   "rain_1h": 0,
+   "rainfall_datetime": "2026-10-19 00:00",
+   "station_type": "rainfall_24h",
+   "agency": {
+    "agency_name": {
+     "th": "กรมทรัพยากรน้ำ",
+     "en": "Department of Water Resources",
+     "jp": ""
+    },
+    "agency_shortname": {
+     "th": "ทน.",
+     "en": "DWR",
+     "jp": ""
+    }
+   },
+   "geocode": {
+    "warning_zone": "09",
+    "area_code": "5",
+    "area_name": {
+     "th": "ภาคใต้",
+     "en": "South"
+    },
+    "amphoe_name": {
+     "th": "ธารโต",
+     "en": "Than To District"
+    },
+    "tumbon_name": {
+     "th": "แม่หวาด",
+     "en": "Mae Wat"
+    },
+    "province_code": "95",
+    "province_name": {
+     "th": "ยะลา",
+     "en": "Yala"
+    }
+   },
+   "station": {
+    "id": 1123997,
+    "tele_station_name": {
+     "th": "บ้านคอกช้าง"
+    },
+    "tele_station_lat": 6.044381,
+    "tele_station_long": 101.166291,
+    "tele_station_oldcode": "STN2160",
+    "tele_station_type": "rainfall_24h",
+    "sub_basin_id": "2102"
+   },
+   "basin": {
+    "id": 26,
+    "basin_code": 21,
+    "basin_name": {
+     "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนล่าง",
+     "en": "Peninsula - Lower East Coast Basin"
+    }
+   }
+  },
+  {
+   "id": 315172249,
+   "rain_24h": 99.8,
+   "rain_1h": 0,
+   "rainfall_datetime": "2026-10-19 01:00",
+   "station_type": "rainfall_24h",
+   "agency": {
+    "agency_name": {
+     "th": "มูลนิธิอาสาเพื่อนพึ่ง (ภาฯ) ยามยาก สภากาชาดไทย",
+     "en": "Friend in Need (of “Pa”) Volunteers Foundation",
+     "jp": ""
+    },
+    "agency_shortname": {
+     "th": "พพภ",
+     "en": "FOP",
+     "jp": ""
+    }
+   },
+   "geocode": {
+    "warning_zone": "09",
+    "area_code": "5",
+    "area_name": {
+     "th": "ภาคใต้",
+     "en": "South"
+    },
+    "amphoe_name": {
+     "th": "ป่าพะยอม",
+     "en": "Pa Phayom District"
+    },
+    "tumbon_name": {
+     "th": "เกาะเต่า",
+     "en": "Ko Tao"
+    },
+    "province_code": "93",
+    "province_name": {
+     "th": "พัทลุง",
+     "en": "Phatthalung"
+    }
+   },
+   "station": {
+    "id": 855523,
+    "tele_station_name": {
+     "en": "Forest Fire Control Unit of Phatthalung",
+     "th": "สถานีควบคุมไฟป่าพัทลุง"
+    },
+    "tele_station_lat": 7.758506,
+    "tele_station_long": 99.817474,
+    "tele_station_oldcode": "MOU133",
+    "tele_station_type": "rainfall_24h",
+    "sub_basin_id": "2001",
+    "sponsor_by": "บริษัท ทรู คอร์ปอเรชั่น จำกัด (มหาชน)"
+   },
+   "basin": {
+    "id": 24,
+    "basin_code": 20,
+    "basin_name": {
+     "th": "ลุ่มน้ำทะเลสาบสงขลา",
+     "en": "Thale Sap Songkhla Basin"
+    }
+   }
+  }
+ ]
+}

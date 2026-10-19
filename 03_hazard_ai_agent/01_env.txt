@@ -1,0 +1,28 @@
+Module: Hazard AI Agent
+
+Agent environment
+- Python 3.12 or newer
+- FastAPI service for the agent endpoint
+- Google Gemini through the google-genai SDK (model gemini-3.5-flash-lite, thinking level LOW)
+- LangGraph, LlamaIndex agents, or a small custom tool-calling loop
+- Pydantic for tool input and output schemas
+- httpx for tool calls to internal services
+- Langfuse or OpenTelemetry for prompt and tool-call tracing
+
+Thai language tools
+- PyThaiNLP for Thai tokenization and place-name normalization
+- Gazetteer of Thai admin area names (province, district, subdistrict) with aliases and transliterations
+
+Required configuration
+- LLM_PROVIDER (gemini), LLM_MODEL, LLM_THINKING_LEVEL, and GEMINI_API_KEY
+- MAX_TOOL_CALLS and AGENT_TIMEOUT_SECONDS
+- RISK_SERVICE_URL, DATA_SERVICE_URL, and DECISION_SERVICE_URL
+- DEFAULT_LANGUAGE (th) and TIMEZONE (Asia/Bangkok)
+
+Example installation
+- pip install fastapi pydantic httpx pythainlp
+- Optional graph framework: pip install langgraph
+- LLM SDK: pip install google-genai
+- Test tools: pip install pytest respx
+
+Start with a simple tool-calling loop. Add a graph framework only when the plan needs branching or retries that the loop cannot handle cleanly.

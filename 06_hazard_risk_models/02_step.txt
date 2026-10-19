@@ -1,0 +1,20 @@
+Module: Hazard Risk Models
+Main workflow
+
+1. Receive an IntegratedHazardContext for an area, hazard, and time window, and check FEATURE_SCHEMA_VERSION.
+2. Check feature coverage. If it is below MIN_FEATURE_COVERAGE, use the rule-based fallback and mark the result degraded.
+3. Run the model for the hazard and return a probability or index value.
+4. Calibrate the score and add an uncertainty range.
+5. Convert the score to a model risk level with versioned thresholds.
+6. Create reason codes from SHAP values or rule hits, for example RAIN_72H_HIGH or WATER_LEVEL_NEAR_BANK.
+7. Return a HazardAssessment: hazard, area, time window, score, model level, confidence, reasons, model version, and inputs used.
+8. Run batch scoring on a schedule for all areas so the dashboard and alerts use fresh results.
+
+Offline lifecycle (per hazard)
+- Collect history -> build labels -> time/location split -> baseline -> model training -> calibration -> safety evaluation -> approval -> model registry -> shadow run -> release -> monitoring and rollback
+
+Labels per hazard (candidate sources, check availability first)
+- Rain / storm: observed rain at stations using TMD criteria (heavy 35.1–90 mm/day, very heavy > 90 mm/day)
+- Flood: GISTDA flood extent and DDPM declared flood areas
+- Drought: DDPM declared drought areas, or SPI ≤ -1.0 as a proxy label
+- Fire: FIRMS / GISTDA hotspots and burned area

@@ -1,0 +1,337 @@
+{
+ "radar": {
+  "data": {
+   "result": "OK",
+   "data": [
+    {
+     "radar_type": "phb240",
+     "radar_name": "เรดาร์เพชรบูรณ์ รัศมี 240 กม.",
+     "agency": "tmd",
+     "timezone": "UTC",
+     "media_datetime": "2017-04-02 19:45",
+     "file_path": "product/image/radar/phb/tmd/media/2017/04/02",
+     "filename": "phb240_201704021945.gif",
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJHsgkwaxkFV8wK-JlYlJ0eL-kl3I2rGbGMBguxCqR7Lp2gyLzmAAZdbOEmVTHvRGLZMVrBonY",
+     "filename_thumb": "phb240_error.jpg",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l0Vg-_1TJBMA29wuxlNjZm6PMvHfrvInO5KGl12FhLu0PZaCJ-pE=",
+     "file_path_animation": null,
+     "filename_animation": null,
+     "media_path_animation": null,
+     "agency_id": "13",
+     "media_type_id": "30"
+    },
+    {
+     "radar_type": "ubn120",
+     "radar_name": "เรดาร์อุบลราชธานี รัศมี 120 กม.",
+     "agency": "tmd",
+     "timezone": "UTC",
+     "media_datetime": "2026-10-19 11:10",
+     "file_path": "product/radar/history/tmd/ubn/2026/10/19",
+     "filename": "ubn120_202610191110.jpg",
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l0Vg-_1TJBMA29wuxlNjZm6PMuX3nvMuWbSnihXgxNyxYdav673Tpb1dDEP3j5df_hD0Od3gPqnw=",
+     "filename_thumb": "thumb-ubn120_202610191110.jpg",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l0Vg-_1TJBMA29wuxlNjZm6PMuX3nvMuWbSnihXgxNyxYdKHhsyT0RR2i84icxETSCy-gSLe_F5EPny-7k14=",
+     "file_path_animation": null,
+     "filename_animation": null,
+     "media_path_animation": null,
+     "agency_id": "13",
+     "media_type_id": "30"
+    },
+    {
+     "radar_type": "njk",
+     "radar_name": "เรดาร์หนองจอก รัศมี 120 กม.",
+     "agency": "bma",
+     "timezone": "TST",
+     "media_datetime": "2026-10-19 10:55",
+     "file_path": "product/radar/history/bma/njk/2026/10/19",
+     "filename": "NJ_202610191055.jpg",
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l0Vg-_1TJBMA29wuxlNjPm6bMonXivMuWsdRp1MT9nZecWMOc71bWIcndqNAjGxLqE_8zOA==",
+     "filename_thumb": "thumb-NJ_202610191055.jpg",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l0Vg-_1TJBMA29wuxlNjPm6bMonXivMuWsdRp1MT9nZecYuG2sATJWYiGe3uKYrku_fjtJLzkqcYE2g==",
+     "file_path_animation": null,
+     "filename_animation": null,
+     "media_path_animation": null,
+     "agency_id": "10",
+     "media_type_id": "30"
+    },
+    {
+     "radar_type": "takhli",
+     "radar_name": "เรดาร์ตาคลี รัศมี 240 กม.",
+     "agency": "drraa",
+     "timezone": "UTC",
+     "media_datetime": "2026-10-19 11:00",
+     "file_path": "product/radar/history/drraa/cappi/takhli/2026/10/19",
+     "filename": "2026101911000400dBZ.cappi.png",
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l0Vg-_1TJBMA29wuxlNjJhLWCrTDq8onW6vOpYefDHQnsCs8MIta_nPEGCLinGfzue7eB2CGAoBbjnRCwg8YAaYPA4MWUV2uYhg==",
+     "filename_thumb": "thumb-2026101911000400dBZ.cappi.png",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l0Vg-_1TJBMA29wuxlNjJhLWCrTDq8onW6vOpYefDHQnsCs8MIta_nPEGCLjhQbu1KKqC0SKHoRZdbQJDcZ0D-acxgFqoeKrv2aJZswnr7g==",
+     "file_path_animation": null,
+     "filename_animation": null,
+     "media_path_animation": null,
+     "agency_id": "19",
+     "media_type_id": "30"
+    }
+   ]
+  }
+ },
+ "pre_rain": {
+  "data": {
+   "result": "OK",
+   "data": [
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wOcp7-aUuLdWN050DeakpkhzQma1fIGW_MQgIjamwFchbEN",
+     "filename": "d03_day01.jpg",
+     "file_path": "product/precipitation/thailand/latest/haii",
+     "media_datetime": "2026-10-19 19:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wOcp7-aUuLdWN050DeakpkhzQma1fIWA7UihoiTHRti1M1lOxsoQwf2",
+     "filename_thumb": "thumb-d03_day01.jpg",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/token/model/wrfroms/latest;2026-10-18;19:00"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wOcp7-aUuLdWN050DeakpkhzQma1fIGW_MQgIjamwJchbEN",
+     "filename": "d03_day02.jpg",
+     "file_path": "product/precipitation/thailand/latest/haii",
+     "media_datetime": "2026-10-20 19:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wOcp7-aUuLdWN050DeakpkhzQma1fIWA7UihoiTHRti1M1lOxgoQwf2",
+     "filename_thumb": "thumb-d03_day02.jpg",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/token/model/wrfroms/latest;2026-10-18;19:00"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wOcp7-aUuLdWN050DeakpkhzQma1fIGW_MQgIjamwNchbEN",
+     "filename": "d03_day03.jpg",
+     "file_path": "product/precipitation/thailand/latest/haii",
+     "media_datetime": "2026-10-21 19:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wOcp7-aUuLdWN050DeakpkhzQma1fIWA7UihoiTHRti1M1lOxkoQwf2",
+     "filename_thumb": "thumb-d03_day03.jpg",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/token/model/wrfroms/latest;2026-10-18;19:00"
+    }
+   ]
+  }
+ },
+ "wave": {
+  "data": {
+   "result": "OK",
+   "data": [
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCEmSpglaJfOqnI387zW1A==",
+     "filename": "wave_hr012.png",
+     "file_path": "product/image/swan/latest/haii",
+     "media_datetime": "2026-10-19 07:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCElYOMwYHA7JNMHcNOgiBQ6kHOjKw==",
+     "filename_thumb": "thumb-wave_hr012.png",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/MBtOTp6IUXbjaCxhQoFQNrFgZUCzNgbo/model/swan/images_lastest"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCEmSpglaJfOqnAz87zW1A==",
+     "filename": "wave_hr036.png",
+     "file_path": "product/image/swan/latest/haii",
+     "media_datetime": "2026-10-20 07:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCElYOMwYHA7JNMHcNOgiBY-kDEUWQ==",
+     "filename_thumb": "thumb-wave_hr036.png",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/MBtOTp6IUXbjaCxhQoFQNrFgZUCzNgbo/model/swan/images_lastest"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCEmSpglaJfOqnU187zW1A==",
+     "filename": "wave_hr060.png",
+     "file_path": "product/image/swan/latest/haii",
+     "media_datetime": "2026-10-21 07:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCElYOMwYHA7JNMHcNOgiBM4kE-5jw==",
+     "filename_thumb": "thumb-wave_hr060.png",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/MBtOTp6IUXbjaCxhQoFQNrFgZUCzNgbo/model/swan/images_lastest"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCEmSpglaJfOqnsx87zW1A==",
+     "filename": "wave_hr084.png",
+     "file_path": "product/image/swan/latest/haii",
+     "media_datetime": "2026-10-22 07:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCElYOMwYHA7JNMHcNOgiB08kH3AKQ==",
+     "filename_thumb": "thumb-wave_hr084.png",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/MBtOTp6IUXbjaCxhQoFQNrFgZUCzNgbo/model/swan/images_lastest"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCEmSpglaJfOq3M987zW1A==",
+     "filename": "wave_hr108.png",
+     "file_path": "product/image/swan/latest/haii",
+     "media_datetime": "2026-10-23 07:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCElYOMwYHA7JNMHcNOgiRUwkIQhhA==",
+     "filename_thumb": "thumb-wave_hr108.png",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/MBtOTp6IUXbjaCxhQoFQNrFgZUCzNgbo/model/swan/images_lastest"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCEmSpglaJfOq3A387zW1A==",
+     "filename": "wave_hr132.png",
+     "file_path": "product/image/swan/latest/haii",
+     "media_datetime": "2026-10-24 07:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCElYOMwYHA7JNMHcNOgiRY6kPVwMw==",
+     "filename_thumb": "thumb-wave_hr132.png",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/MBtOTp6IUXbjaCxhQoFQNrFgZUCzNgbo/model/swan/images_lastest"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCEmSpglaJfOq3Yz87zW1A==",
+     "filename": "wave_hr156.png",
+     "file_path": "product/image/swan/latest/haii",
+     "media_datetime": "2026-10-25 07:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH96ww2dizhvnn2G1DlIrhCElYOMwYHA7JNMHcNOgiRA-kFSKJw==",
+     "filename_thumb": "thumb-wave_hr156.png",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/MBtOTp6IUXbjaCxhQoFQNrFgZUCzNgbo/model/swan/images_lastest"
+    }
+   ]
+  }
+ },
+ "storm": {
+  "data": {
+   "result": "OK",
+   "data": {
+    "college": [
+     {
+      "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH92K2RGFR_Qk7s7SzdWePNk75UQ33K_OgfjqbiJh1KWKWirTqIlYD9r-s6Qp",
+      "filename": "I.png",
+      "file_path": "product/image/strom_map/thailand/ucl/media/2026/10/19",
+      "media_datetime": "2026-10-19 16:00",
+      "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH92K2RGFR_Qk7s7SzdWePNk75UQ33K_OgfjqbiJh1KWKWirTqIlYD-e4tqcsABci_PFZ",
+      "filename_thumb": "thumb-I.png",
+      "refer_source": "http://www.tropicalstormrisk.com/tracker/dynamic/images"
+     },
+     {
+      "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH92K2RGFR_Qk7s7SzdWePNk75UQ33K_OgfjqbiJh1KWKWirTqIlYD8T-s6Qp",
+      "filename": "W.png",
+      "file_path": "product/image/strom_map/thailand/ucl/media/2026/10/19",
+      "media_datetime": "2026-10-19 17:31",
+      "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJH92K2RGFR_Qk7s7SzdWePNk75UQ33K_OgfjqbiJh1KWKWirTqIlYD-e4tqcsAAki_PGZ",
+      "filename_thumb": "thumb-W.png",
+      "refer_source": "http://www.tropicalstormrisk.com/tracker/dynamic/images"
+     }
+    ],
+    "kochi": null,
+    "typhoon": [
+     {
+      "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJBMDrGmg4sd2EqTlJHo0axfnUaOrbnGWQJn202nOWzRyrkIvBPqvg5aZsmtPpHX9O0AjBSnUv3c_Z-GDX6g6qvkLR0MvjHN1A",
+      "filename": "HMW926101909.jpg",
+      "file_path": "product/image/himawari-8/thailand/digital_typhoon/media/2026/10/19/16",
+      "media_datetime": "2026-10-19 16:03",
+      "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJBMDrGmg4sd2EqTlJHo0axfnUaOrbnGWQJn202nOWzRyrkIvBPqvg5aZsmtPpHX9O0AjBSnUv3c_l3UKDuhXTwyTR1QlN9SI2fcLD0Xvh",
+      "filename_thumb": "thumb-HMW926101909.jpg",
+      "refer_source": "agora.ex.nii.ac.jp/digital-typhoon/region/SEasia/2/images/640x480/latest.jpg"
+     }
+    ],
+    "us": [
+     {
+      "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJBMDrGmg4sd2EqTlJHo0axfnUaOrKhl2XM2q56SiC2BCtnt9dpxYGIMA6TTZQKaVoVH-WnRIFY2ZKs07oxZ95aaVK-ghiVtVBdAnp3BkdsorOpcUPxF3JsR_EpizgoEAL0PSvL5_ZxU0sotMdiIVyBNB0Rw==",
+      "filename": "20201222.1430.himawari_8.visir.bckgrlowcldngt.7SEAS_Exp_Overview.NGT.jpg",
+      "file_path": "product/image/himawari-8/thailand/us_naval/media/2020/12",
+      "media_datetime": "2020-12-22 14:30",
+      "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7lylQ7-UPJBMDrGmg4sd2EqTlJHo0axfnUaOrKhl2XM2q56SiC2BCtnt9dpxYGIMA6TXAIbvg7S3_BLsK7sL3Qo1lCKkDIxGNejJKUbGPuXH4QXxBXcJT0FzbUwgwxL5p0fYnM6_wQBlQQ77oAdq4Ns8lnSqVUz7ayLc7NV-LUig==",
+      "filename_thumb": "thumb-20201222.1430.himawari_8.visir.bckgrlowcldngt.7SEAS_Exp_Overview.NGT.jpg",
+      "refer_source": "https://www.nrlmry.navy.mil/nexdat/CONUS/focus_regions/7SEAS_Exp/Overview/vis_ir_background/gms_6_lowcloud/"
+     }
+    ]
+   }
+  },
+  "setting": [
+   {
+    "operator": ">",
+    "term": "135",
+    "color": "#CC00CC",
+    "knots_text": ">135",
+    "mph_text": ">155",
+    "kmh_text": ">250",
+    "category": "Cat 5",
+    "strength": "Typhoon Cat 5",
+    "scale_text": "รุนแรงมาก",
+    "level": 7
+   },
+   {
+    "operator": ">=",
+    "term": "114",
+    "color": "#FF0000",
+    "knots_text": "114-135",
+    "mph_text": "131-155",
+    "kmh_text": "211-250",
+    "category": "Cat 4",
+    "strength": "Typhoon Cat 4",
+    "level": 6
+   },
+   {
+    "operator": ">=",
+    "term": "96",
+    "color": "#FF6600",
+    "knots_text": "96-113",
+    "mph_text": "111-130",
+    "kmh_text": "178-210",
+    "category": "Cat 3",
+    "strength": "Typhoon Cat 3",
+    "level": 5
+   },
+   {
+    "operator": ">=",
+    "term": "83",
+    "color": "#FFCC00",
+    "knots_text": "83-95",
+    "mph_text": "96-110",
+    "kmh_text": "154-177",
+    "category": "Cat 2",
+    "strength": "Typhoon Cat 2",
+    "level": 4
+   },
+   {
+    "operator": ">=",
+    "term": "64",
+    "color": "#FFFF00",
+    "knots_text": "64-82",
+    "mph_text": "74-95",
+    "kmh_text": "119-153",
+    "category": "Cat 1",
+    "strength": "Typhoon Cat 1",
+    "level": 3
+   },
+   {
+    "operator": ">=",
+    "term": "34",
+    "color": "#00FF00",
+    "knots_text": "34-63",
+    "mph_text": "39-73",
+    "kmh_text": "63-118",
+    "category": "TS",
+    "strength": "Tropical Storm",
+    "level": 2
+   },
+   {
+    "operator": "<",
+    "term": "34",
+    "color": "#00CCFF",
+    "knots_text": "<34",
+    "mph_text": "<39",
+    "kmh_text": "<63",
+    "category": "TD",
+    "strength": "Tropical Depression",
+    "scale_text": "รุนแรงน้อย",
+    "level": 1
+   }
+  ]
+ },
+ "pre_rain_sea": {
+  "data": {
+   "result": "OK",
+   "data": [
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wObrq2aX6zfXYYwzWYkvq99_ypB5R-Ia5K5FhkubWo2",
+     "filename": "d02_day01.jpg",
+     "file_path": "product/precipitation/sasia/latest/haii",
+     "media_datetime": "2026-10-19 19:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wObrq2aX6zfXYYwzWYkvq99_ypRvVi6bd6kFiYiboLWK88aH0h2",
+     "filename_thumb": "thumb-d02_day01.jpg",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/token/model/wrfroms/latest;2026-10-18;19:00"
+    },
+    {
+     "media_path": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wObrq2aX6zfXYYwzWYkvq99_ypB5R-Ia5K5FhoubWo2",
+     "filename": "d02_day02.jpg",
+     "file_path": "product/precipitation/sasia/latest/haii",
+     "media_datetime": "2026-10-20 19:00",
+     "media_path_thumb": "AAECAwQFBgcICQoLDA0ODz2sq-vcpj7l00s__U-WBd0SNWAl6wObrq2aX6zfXYYwzWYkvq99_ypRvVi6bd6kFiYiboLWK8waH0h2",
+     "filename_thumb": "thumb-d02_day02.jpg",
+     "refer_source": "https://api_thaiwater30.haii.or.th/tiservice/v1/ws/token/model/wrfroms/latest;2026-10-18;19:00"
+    }
+   ]
+  }
+ }
+}

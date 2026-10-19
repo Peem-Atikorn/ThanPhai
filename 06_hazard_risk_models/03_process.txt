@@ -1,0 +1,30 @@
+Module: Hazard Risk Models
+Process and techniques
+
+This module produces risk evidence for four hazards. The LLM must not guess these results.
+
+Scope rule
+- This is risk nowcasting from official forecasts and observations, not weather simulation.
+- Use TMD forecasts as inputs for rain and storm; do not build a new weather model.
+
+Techniques per hazard
+- Rain / storm: rules on forecast rain and wind first, then a classifier that adjusts for local history.
+- Flood: gradient boosting on accumulated rain, water level trend, reservoir level, terrain, and past floods.
+- Drought: SPI and NDVI or soil moisture anomalies combined into a drought index; trend for 1–3 months.
+- Fire: classifier on dryness, weather, vegetation, and recent hotspots; strong seasonal patterns in the north (Feb–Apr).
+
+Training and evaluation
+- Split data by time (train on past seasons, test on later seasons) and by area to prevent leakage.
+- Focus on recall and false negatives for WARNING and CRITICAL cases.
+- Report precision, recall, F1, Brier score, and a calibration plot for each hazard.
+- Compare every model with its rule-based baseline and keep the baseline if the model is not clearly better.
+- Evaluate on real past events, for example the 2011 floods, recent northern fire seasons, and recent drought years.
+
+Explainability and safety
+- Use SHAP or rule hits as reason codes, and do not describe them as proof of cause.
+- Rule-based safety overrides always apply, for example water above bank level means at least WARNING.
+- Official warnings are passed to module 07 and are never lowered by the model.
+
+Monitoring
+- Track drift by area, season, and hazard.
+- Track the false negative rate against ground reports and later observations from module 08.

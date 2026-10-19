@@ -1,0 +1,24 @@
+Module: Hazard AI Agent
+Process and techniques
+
+The agent plans and collects evidence. It must not invent risk values or alert levels.
+
+Agent techniques
+- Tool schemas are strict. The LLM may only call registered tools with valid arguments.
+- Limit the number of tool calls and the total time per request.
+- Use deterministic shortcuts for common questions (for example "ความเสี่ยงน้ำท่วมที่ X") before calling the LLM planner.
+- Keep the system prompt short: role, allowed tools, refusal rules, and output schema.
+
+Grounding
+- Every claim in the final answer must come from a tool result.
+- If the tools return nothing useful, say that data is not available instead of guessing.
+- Keep official warnings separate from model predictions in the evidence list.
+
+Thai language handling
+- Normalize Thai place names, spelling variants, and English transliterations.
+- Convert Thai relative dates to absolute time windows in Asia/Bangkok.
+
+Evaluation
+- Build a test set of Thai and English questions with the expected intent, hazards, area, and tools.
+- Measure intent accuracy, area resolution accuracy, tool selection accuracy, and refusal correctness.
+- Trace every run so that failed plans can be reviewed.

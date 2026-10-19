@@ -1,0 +1,27 @@
+Module: Geo Data Integration
+Process and techniques
+
+This module turns many sources into one clean, versioned table of features per area and time.
+
+Canonical schema (main tables)
+- admin_area: code, level, name_th, name_en, parent_code, geometry
+- observation: area_code, variable, value, unit, observed_at, source, quality_flag
+- forecast: area_code, variable, value, unit, issued_at, valid_time, source
+- official_warning: hazard, area_code, level, issued_at, expires_at, source, text
+- feature_row: area_code, time, hazard, features (JSON or columns), schema_version, lineage
+
+Feature examples per hazard
+- Rain / storm: forecast rain 24/48/72 h, max hourly rain, wind speed, storm track distance
+- Flood: rain accumulated 1/3/7 days, water level vs bank level, reservoir % capacity, elevation, distance to river, past flood frequency
+- Drought: SPI-1 / SPI-3, days without rain, NDVI anomaly, soil moisture anomaly, reservoir level
+- Fire: hotspot count 24 h / 7 days, days since rain, humidity, wind, temperature, NDVI, land cover, season
+
+Geospatial techniques
+- Store in EPSG:4326 and use a UTM projection for distance and area calculations.
+- Use spatial indexes (GiST) on all geometry columns.
+- Pre-compute simplified geometries for the web map.
+
+Data quality
+- Never fill missing values silently. Add a quality flag and a coverage ratio.
+- Track lineage from each feature back to its raw source records.
+- Prevent future data from leaking into features (respect issued_at for forecasts).

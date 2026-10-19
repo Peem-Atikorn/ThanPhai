@@ -1,0 +1,110 @@
+# Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
+# Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
+version: "2026.10.5"
+
+official_warning:
+  # An active official warning for the hazard sets this minimum level.
+  min_level: WARNING
+
+# Observation thresholds. A rule fires when `value <op> threshold`. Rules for the same hazard
+# are all checked and the highest level wins.
+overrides:
+  flood:
+    - id: FLOOD_ABOVE_BANK_HIGH
+      variable: above_bank_m          # metres above the lowest bank (ThaiWater, sign rebuilt)
+      op: ">="
+      threshold: 0.5
+      level: CRITICAL
+    - id: FLOOD_ABOVE_BANK
+      variable: above_bank_m
+      op: ">"
+      threshold: 0.0
+      level: WARNING
+    - id: FLOOD_NEAR_BANK
+      variable: above_bank_m
+      op: ">="
+      threshold: -0.3
+      level: WATCH
+    # GISTDA Sentinel-1 flood cells (H3, ~0.12 km2 each) seen in the district during the last 7 days.
+    # Placeholder thresholds: any detection = WATCH, >= 1,000 cells (~125 km2) = WARNING. Tune with module 06.
+    - id: SAT_FLOOD_7D_LARGE
+      variable: satellite_flood_cells_7d
+      op: ">="
+      threshold: 1000
+      level: WARNING
+    - id: SAT_FLOOD_7D
+      variable: satellite_flood_cells_7d
+      op: ">="
+      threshold: 1
+      level: WATCH
+  rain_storm:
+    # TMD criteria: heavy 35.1–90 mm/day, very heavy > 90 mm/day.
+    - id: RAIN_VERY_HEAVY_24H
+      variable: rain_24h
+      op: ">"
+      threshold: 90.0
+      level: WARNING
+    - id: RAIN_HEAVY_24H
+      variable: rain_24h
+      op: ">="
+      threshold: 35.1
+      level: WATCH
+    # Forecast rain for one day (TMD NWP / WRF), same TMD thresholds. Decided per forecast day.
+    - id: RAIN_FORECAST_VERY_HEAVY
+      variable: forecast_rain_24h
+      op: ">"
+      threshold: 90.0
+      level: WARNING
+    - id: RAIN_FORECAST_HEAVY
+      variable: forecast_rain_24h
+      op: ">="
+      threshold: 35.1
+      level: WATCH
+  drought:
+    # Standard SPI classes: moderate -1.0, severe -1.5, extreme -2.0.
+    - id: DROUGHT_SPI3_EXTREME
+      variable: spi_3
+      op: "<="
+      threshold: -2.0
+      level: CRITICAL
+    - id: DROUGHT_SPI3_SEVERE
+      variable: spi_3
+      op: "<="
+      threshold: -1.5
+      level: WARNING
+    - id: DROUGHT_SPI3_MODERATE
+      variable: spi_3
+      op: "<="
+      threshold: -1.0
+      level: WATCH
+    # Vegetation stress from MODIS NDVI. Vegetation alone gives at most WATCH: a higher drought level needs a
+    # rainfall deficit (SPI) to confirm it. HazardService passes vci only where NDVI is >= 0.05 below normal,
+    # the district is not mostly urban (NDVI max >= 0.6) and no flood was seen (water also lowers NDVI).
+    - id: DROUGHT_VCI_STRESS
+      variable: vci
+      op: "<"
+      threshold: 35
+      level: WATCH
+    - id: DROUGHT_NDVI_DEFICIT_LARGE
+      variable: ndvi_deficit
+      op: ">="
+      threshold: 0.15
+      level: WATCH
+  fire:
+    # Placeholder thresholds per district; tune with module 06 after evaluation.
+    - id: FIRE_HOTSPOTS_24H_HIGH
+      variable: hotspots_24h
+      op: ">="
+      threshold: 10
+      level: WARNING
+    - id: FIRE_HOTSPOTS_24H
+      variable: hotspots_24h
+      op: ">="
+      threshold: 3
+      level: WATCH
+
+confidence:
+  official: 0.95
+  override: 0.9
+  # Multiplier applied when any input is stale or a service is degraded.
+  degraded_factor: 0.6

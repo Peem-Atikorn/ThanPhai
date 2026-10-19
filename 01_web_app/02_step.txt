@@ -1,0 +1,21 @@
+Module: Web App
+Main workflow
+
+1. The user allows location, searches for a place, or selects a province, district, or subdistrict.
+2. Validate the selected area and send it to 02_api_backend.
+3. Show the current alert level for each of the four hazards in that area.
+4. Show the map with hazard layers: rain/storm, flood, drought, fire hotspots, and official warnings.
+5. Let the user open a hazard card to see the time window, confidence, reasons, sources, and data freshness.
+6. Show time-series charts, for example 72-hour rainfall, water level trend, or drought index.
+7. Let the user ask a question in Thai or English, for example "น้ำจะท่วมอำเภอนี้ภายใน 3 วันไหม".
+8. Show the agent answer with citations, and say clearly when evidence is missing.
+9. Let the user subscribe to alerts for chosen areas, hazards, and a minimum alert level.
+10. Let the user submit a ground report (photo optional) or rate whether an alert was useful.
+11. Show a degraded-service banner when a data source or model is unavailable.
+
+Main pages
+- /              : map dashboard with four hazard summary cards
+- /area/[code]   : detailed risk timeline for one area
+- /ask           : questions and answers with the agent
+- /alerts        : subscriptions and alert history
+- /report        : ground report form

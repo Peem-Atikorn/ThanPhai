@@ -1,0 +1,29 @@
+Module: Web App
+
+Frontend environment
+- Node.js 20 LTS or newer
+- Next.js (App Router) with TypeScript
+- Tailwind CSS or another approved styling system
+- MapLibre GL JS for the map, with vector tiles or GeoJSON layers
+- TanStack Query for server state, caching, and polling
+- Zod for form and response validation
+- next-intl or a similar library for Thai and English text
+- Recharts or ECharts for time-series charts (rainfall, water level, drought index)
+
+Auth and notifications
+- OIDC client for the shared identity provider (Keycloak or approved alternative)
+- Web Push, or LINE Login with LINE Messaging API, for alert subscription
+
+Required configuration
+- NEXT_PUBLIC_API_BASE_URL
+- NEXT_PUBLIC_MAP_STYLE_URL and NEXT_PUBLIC_DEFAULT_CENTER
+- NEXT_PUBLIC_DEFAULT_LOCALE (th) and SUPPORTED_LOCALES (th, en)
+- OIDC_ISSUER and OIDC_CLIENT_ID
+- ALERT_POLL_INTERVAL_SECONDS
+
+Example installation
+- npx create-next-app@latest web --typescript --app
+- npm install maplibre-gl @tanstack/react-query zod next-intl recharts
+- Test tools: npm install -D vitest @testing-library/react playwright
+
+Use MapLibre with a free tile source for the prototype. Do not call external data providers from the browser. All data must come through 02_api_backend.

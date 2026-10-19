@@ -1,0 +1,26 @@
+Module: Alert, Feedback and Monitoring
+Process and techniques
+
+This module closes the loop: it sends alerts, collects what really happened, and measures whether the system works.
+
+Alert techniques
+- Avoid alert fatigue: send on level changes, group several hazards in one message, and use cooldowns.
+- Official warnings and CRITICAL alerts bypass quiet hours.
+- Every message includes the source and the time the data was produced.
+- Keep a full alert history so it is possible to check what was sent and when.
+
+Feedback techniques
+- Ground reports are evidence, not truth. Weight them by user history and agreement with other reports.
+- Never show a single unverified report as an official event.
+- Ask one simple question after an alert: "เกิดเหตุจริงไหม / Did it happen?" (yes, no, not sure).
+
+Privacy
+- Store subscription areas, not continuous GPS tracking.
+- Remove faces and license plates from report photos, or keep photos private.
+- Delete reports and photos after REPORT_RETENTION_DAYS unless they are needed as labelled events.
+- Let users export or delete their data.
+
+Metrics
+- Service: uptime, p95 latency, source freshness, queue backlog, delivery success rate.
+- Model: recall on WARNING and CRITICAL events, false alarm rate, lead time before the event, calibration.
+- Users: active subscriptions, alert open rate, feedback rate, and "useful" rating.
