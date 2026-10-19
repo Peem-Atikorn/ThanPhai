@@ -175,6 +175,17 @@ docker compose up -d
 | `develop` | Shared working branch. Every feature branch starts from here and merges back here. |
 | `feature/<module>-<topic>` | One task per branch, e.g. `feature/08-line-alerts`, `fix/04-tmd-empty-stations`. |
 
+**Branch names** (checked automatically on every push and pull request): `<type>/<module>-<topic>`
+
+| Part | Allowed |
+|---|---|
+| type | `feature` new work · `fix` bug fix · `hotfix` urgent fix for `main` · `docs` · `refactor` · `test` · `chore` (tooling, deps) |
+| module | `01`–`08` for one module, `00` for shared code or infrastructure, `all` for the whole project |
+| topic | lowercase English words joined by `-` |
+
+Examples: `feature/08-line-alerts`, `fix/04-tmd-empty-stations`, `docs/all-setup-guide`, `chore/00-docker-compose`.
+Pull requests into `main` may come only from `develop` or `hotfix/*`; `main` and `develop` accept changes only through pull requests.
+
 ```bash
 git clone https://github.com/Peem-Atikorn/ThanPhai.git
 cd ThanPhai
