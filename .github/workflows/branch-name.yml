@@ -1,9 +1,10 @@
 # Branch naming rule for the team (see README "Team workflow").
-#   <type>/<module>-<short-topic>
+#   <type>/<name>/<module>-<short-topic>
 #   type:   feature | fix | hotfix | docs | refactor | test | chore
+#   name:   who owns the branch: lowercase nickname, 2-20 letters/digits (e.g. peem, supawit)
 #   module: 01-08 for one module, 00 for shared/infra, all for the whole project
 #   topic:  lowercase English words joined by "-"
-# Examples: feature/08-line-alerts, fix/04-tmd-empty-stations, docs/all-setup-guide
+# Examples: feature/supawit/08-line-alerts, fix/peem/04-tmd-empty-stations, docs/peem/all-setup-guide
 # Pull requests into main may come only from develop or hotfix/*.
 name: branch-name
 
@@ -22,9 +23,9 @@ jobs:
           BRANCH: ${{ github.head_ref || github.ref_name }}
           BASE: ${{ github.base_ref }}
         run: |
-          pattern='^(feature|fix|hotfix|docs|refactor|test|chore)/(0[0-8]|all)-[a-z0-9]+(-[a-z0-9]+)*$'
+          pattern='^(feature|fix|hotfix|docs|refactor|test|chore)/[a-z][a-z0-9]{1,19}/(0[0-8]|all)-[a-z0-9]+(-[a-z0-9]+)*$'
           if [ "$BRANCH" != "develop" ] && ! [[ "$BRANCH" =~ $pattern ]]; then
-            echo "::error::Branch '$BRANCH' does not follow <type>/<module>-<topic>, e.g. feature/08-line-alerts or fix/04-tmd-empty-stations"
+            echo "::error::Branch '$BRANCH' does not follow <type>/<name>/<module>-<topic>, e.g. feature/supawit/08-line-alerts or fix/peem/04-tmd-empty-stations"
             exit 1
           fi
           if [ "$BASE" = "main" ] && [ "$BRANCH" != "develop" ] && [[ "$BRANCH" != hotfix/* ]]; then
