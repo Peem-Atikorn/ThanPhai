@@ -173,28 +173,46 @@ docker compose up -d
 |---|---|
 | `main` | Working version for demos and submission. Merge into it from `develop` only. |
 | `develop` | Shared working branch. Every feature branch starts from here and merges back here. |
-| `feature/<module>-<topic>` | One task per branch, e.g. `feature/08-line-alerts`, `fix/04-tmd-empty-stations`. |
+| `feature/<name>/<module>-<topic>` | One task per branch, e.g. `feature/supawit/08-line-alerts`, `fix/peem/04-tmd-empty-stations`. |
 
-**Branch names** (checked automatically on every push and pull request): `<type>/<module>-<topic>`
+**Branch names** (checked automatically on every push and pull request): `<type>/<name>/<module>-<topic>`
 
 | Part | Allowed |
 |---|---|
 | type | `feature` new work · `fix` bug fix · `hotfix` urgent fix for `main` · `docs` · `refactor` · `test` · `chore` (tooling, deps) |
+| name | who owns the branch: your lowercase nickname, 2–20 letters/digits, the same every time (e.g. `peem`, `supawit`) |
 | module | `01`–`08` for one module, `00` for shared code or infrastructure, `all` for the whole project |
 | topic | lowercase English words joined by `-` |
 
-Examples: `feature/08-line-alerts`, `fix/04-tmd-empty-stations`, `docs/all-setup-guide`, `chore/00-docker-compose`.
+Examples: `feature/supawit/08-line-alerts`, `fix/peem/04-tmd-empty-stations`, `docs/peem/all-setup-guide`, `chore/supawit/00-docker-compose`.
 Pull requests into `main` may come only from `develop` or `hotfix/*`; `main` and `develop` accept changes only through pull requests.
 
 ```bash
 git clone https://github.com/Peem-Atikorn/ThanPhai.git
 cd ThanPhai
 git switch develop
-git switch -c feature/08-line-alerts
+git switch -c feature/supawit/08-line-alerts
 # ... work, then run: make test
-git push -u origin feature/08-line-alerts   # open a Pull Request into develop
+git push -u origin feature/supawit/08-line-alerts   # open a Pull Request into develop
 ```
 
 * Copy `.env.example` to `.env` and fill in your own keys. **Never commit `.env`.**
 * `data/raw` and `data/processed` are not in Git (≈1.4 GB). Build them with `make data` (and `make ndvi`, `make fire-model` if you need drought/fire).
 * Run `make test` before opening a Pull Request. `PROGRESS.md` lists what is done and what is next.
+
+### Open tasks (pick one, put your name in the branch)
+
+| Module | Task | Branch name example | Needs |
+|---|---|---|---|
+| 08 Alerts | Send alerts through LINE when an area a user follows reaches WARNING/CRITICAL; store subscriptions | `feature/<name>/08-line-alerts` | LINE Messaging API channel |
+| 08 Alerts | Ground reports: users report flooding/smoke with a photo and location | `feature/<name>/08-ground-reports` | — |
+| 01 Web | "Follow this area" button and a page listing followed areas (pairs with 08) | `feature/<name>/01-follow-area` | — |
+| 05 Geo | Read TMD warning text and map it to the provinces it names, so warnings apply per district | `feature/<name>/05-warning-provinces` | — |
+| 04 Data | Water quality (42 ThaiWater stations: DO, pH, salinity) as a layer | `feature/<name>/04-water-quality` | — |
+| 04 Data | Active tropical storms from ThaiWater `storm_data` (name, category, track) | `feature/<name>/04-active-storms` | — |
+| 06 Models | CHIRPS rainfall → SPI drought index per district (drought can then reach WARNING) | `feature/<name>/06-chirps-spi` | ~2 GB download |
+| 06 Models | Flood model trained on GISTDA flood history | `feature/<name>/06-flood-model` | GISTDA key |
+| 07 Knowledge | RAG over DDPM disaster guides so the assistant can answer "what should I do" | `feature/<name>/07-ddpm-rag` | DDPM guide PDFs |
+| 02 API | Login (Keycloak) for subscriptions and reports | `feature/<name>/02-keycloak-auth` | — |
+
+Details and what is already done: `PROGRESS.md` ("Next steps").
