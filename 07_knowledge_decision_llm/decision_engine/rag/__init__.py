@@ -1,0 +1,19 @@
+"""Disaster Knowledge & Hybrid RAG Engine (Module 07)."""
+
+from decision_engine.rag.models import DisasterPassage
+from decision_engine.rag.retriever import HybridDisasterRetriever
+from decision_engine.rag.service import (
+    format_guidance_for_agent,
+    format_guidance_for_facts,
+    get_default_retriever,
+    get_disaster_guidance,
+)
+
+__all__ = [
+    "DisasterPassage",
+    "HybridDisasterRetriever",
+    "get_default_retriever",
+    "get_disaster_guidance",
+    "format_guidance_for_facts",
+    "format_guidance_for_agent",
+]

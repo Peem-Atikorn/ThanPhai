@@ -114,3 +114,19 @@ def test_thresholds_match_brute_force():
     watch_bf = max(t for t in cands if rec(t) >= 0.8)
     warning_bf = min(t for t in cands if t >= watch_bf and prec(t) >= 0.7)
     assert thresholds(y, p) == (watch_bf, warning_bf)
+
+
+def test_extended_features_support_ndvi_and_humidity():
+    from risk_models.fire.dataset import EXTENDED_FEATURES
+
+    g = grid_from(np.zeros((40, 2)))
+    ndvi_fake = np.full(g.counts.shape, 0.45, dtype=np.float32)
+    hum_fake = np.full(g.counts.shape, 55.0, dtype=np.float32)
+    f = features(g, ["TH10", "TH10"], np.zeros((12, 2), np.float32), ndvi=ndvi_fake, humidity=hum_fake)
+    assert "ndvi" in f and "rel_humidity" in f
+    assert f["ndvi"][0, 0] == 0.45
+    assert f["rel_humidity"][0, 0] == 55.0
+
+    table = to_table(g, f)
+    for col in EXTENDED_FEATURES:
+        assert col in table.columns

@@ -336,6 +336,21 @@ class HazardAgent:
         lines = [prefix] if prefix else []
         for hazard in u.hazards:
             lines.append(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard.value]}:")
-            lines.extend(f"  - {step}" for step in PREPARE_TH[hazard.value])
-        lines.append("แหล่งข้อมูลแนะนำ: คู่มือเตรียมพร้อมรับมือสาธารณภัย ปภ. (จะเชื่อมกับ RAG ในโมดูล 07)")
+            steps = None
+            source_citation = None
+            try:
+                from decision_engine.rag import get_disaster_guidance
+                passages = get_disaster_guidance(hazard.value, top_k=1)
+                if passages:
+                    steps = passages[0].procedure_steps
+                    source_citation = passages[0].citation
+            except Exception:
+                pass
+            if not steps:
+                steps = PREPARE_TH[hazard.value]
+            lines.extend(f"  - {step}" for step in steps)
+            if source_citation:
+                lines.append(f"  แหล่งอ้างอิง: {source_citation}")
+        if not any("แหล่งอ้างอิง:" in line for line in lines):
+            lines.append("แหล่งข้อมูลแนะนำ: คู่มือเตรียมพร้อมรับมือสาธารณภัย ปภ. (จะเชื่อมกับ RAG ในโมดูล 07)")
         return AgentAnswer("\n".join(lines), "prepare", None, [h.value for h in u.hazards], evidence, notes=u.notes)
