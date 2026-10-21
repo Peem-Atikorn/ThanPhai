@@ -180,6 +180,12 @@ Round 7 (dams, 2026-10-19):
     hotspots outside Thailand within 100 km of a district centre are shown with its PM2.5 (context only, never a rule input). Live 2026-10-22: 18 districts.
 79. Hazard toolbar uses auto-fill columns so new hazard tabs fit; "ความเสี่ยงทั้ง N ประเภท" counts the tabs instead of saying 4.
 
+### Round 11 — heat (branch `feature/peem/all-heat`, stacked on all-pm25)
+80. New hazard `heat` ("ความร้อนจัด"): NOAA heat index from Open-Meteo hourly temperature + humidity, highest of the next 24 h per district (0.4° grid, every 3 h).
+    TMD/BMA bands are 27 / 33 / 42 / 52 °C (เฝ้าระวัง / เตือนภัย / อันตราย / อันตรายมาก). Levels follow severity one step down: 33 WATCH, 42 WARNING, 52 CRITICAL; TMD's own label is shown next to the value.
+    Live 2026-10-22: 837 of 928 districts WATCH (max 40.3 °C) — the team should decide whether WATCH should start at 42 instead.
+81. Open-Meteo grid adapters (PM2.5, heat) share one pacer: one batch of up to 100 points, then 12 s, so together they stay under 600 calls a minute.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

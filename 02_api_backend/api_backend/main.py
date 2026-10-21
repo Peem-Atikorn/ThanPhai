@@ -81,8 +81,7 @@ async def fresh_service() -> HazardService:
         service.refresh_satellite_in_background()
     if service.fire_stale:
         service.refresh_fire_in_background()
-    if service.air_model_stale:
-        service.refresh_air_model_in_background()
+    service.refresh_grids_in_background()
     return service
 
 

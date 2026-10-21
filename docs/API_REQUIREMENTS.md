@@ -131,7 +131,7 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Design rule | Fetch history **once** and cache it (`data/cache/`). Refresh only recent months. For history of all 77 provinces, use **CHIRPS** files (1.9) instead of Open-Meteo. Retry 429 after 65 s. |
 | Terms | Free for **non-commercial** use (student project qualifies). Commercial use needs a paid plan. |
 | License | CC BY 4.0 — credit "Weather data by Open-Meteo.com" |
-| Used by | 04 (fallback forecast), 05/06 (history and features), 06 (flood: river discharge) |
+| Used by | 04 (fallback forecast), 05/06 (history and features), 06 (flood: river discharge), 02 (heat index: hourly temperature + humidity per 0.4° cell every 3 h, ~306 calls) |
 
 ### 1.7 DDPM — กรมป้องกันและบรรเทาสาธารณภัย 📄
 

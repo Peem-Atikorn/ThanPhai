@@ -17,6 +17,8 @@ HAZARD_WORDS = {
     # Smoke and haze are what people breathe, so they are air-quality questions.
     HazardType.AIR_QUALITY: ("ฝุ่น", "pm2.5", "pm 2.5", "pm25", "หมอกควัน", "คุณภาพอากาศ", "มลพิษทางอากาศ", "aqi",
                              "air quality", "smoke", "haze"),
+    HazardType.HEAT: ("ร้อนจัด", "อากาศร้อน", "ร้อนมาก", "ดัชนีความร้อน", "ฮีตสโตรก", "ฮีทสโตรก", "ลมแดด", "heat stroke",
+                      "heatstroke", "heat index", "heat wave", "heatwave"),
 }
 DAM_WORDS = ("เขื่อน", "อ่างเก็บน้ำ", "ปริมาณน้ำในอ่าง", "dam", "reservoir")
 # Questions about river flow are always river questions; river and bank words only when no area is named

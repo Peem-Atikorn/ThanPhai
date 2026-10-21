@@ -311,7 +311,9 @@ def test_pm25_station_wins_and_model_fills_districts_without_one(base_service, m
                             station_id=f"a{hours_ago}", observed_at=now - timedelta(hours=hours_ago), fetched_at=now, attribution="t")
 
     # The model says 50 everywhere; the station in Sena says 80 and a stuck station says 200.
-    monkeypatch.setattr(svc, "air_model", {sena: 50.0, other: 50.0})
+    from types import SimpleNamespace
+
+    monkeypatch.setitem(svc.grid, "air_model", {sena: SimpleNamespace(value=50.0), other: SimpleNamespace(value=50.0)})
     decisions, _, status = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [],
                                          "air4thai": [station(1, 80.0), station(30, 200.0)]}, [])
     at_sena = next(i for i in decisions[sena] if i["hazard"] == "air_quality")
@@ -345,3 +347,18 @@ def test_cross_border_hotspots_are_context_for_pm25_not_fire(base_service):
     assert next(i for i in decisions[mae_sai] if i["hazard"] == "air_quality")["observations"]["cross_border_hotspots_24h"] == 3
     far = next(c for c in svc.amphoe_codes if c.startswith("TH90"))  # Songkhla
     assert next(i for i in decisions[far] if i["hazard"] == "air_quality")["observations"]["cross_border_hotspots_24h"] == 0
+
+
+def test_heat_level_comes_from_the_forecast_heat_index(base_service, monkeypatch):
+    from types import SimpleNamespace
+
+    svc = stale_copy(base_service)
+    sena = next(a.code for a in svc.gazetteer.resolve("อำเภอเสนา"))
+    peak = {"peak_time": "2026-04-20T14:00:00+07:00", "temperature_c": 38.0, "humidity_pct": 55.0}
+    monkeypatch.setitem(svc.grid, "heat_model", {sena: SimpleNamespace(value=44.6, extra=peak)})
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
+    heat = next(i for i in decisions[sena] if i["hazard"] == "heat")
+    assert heat["level"] == "WARNING" and heat["rule_ids"][0] == "HEAT_INDEX_DANGER"
+    assert "14:00" in heat["notices"][0]
+    other = next(c for c in svc.amphoe_codes if c != sena)
+    assert next(i for i in decisions[other] if i["hazard"] == "heat")["level"] is None  # no forecast yet = no data

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -56,17 +57,25 @@ class OpenMeteoForecast(Adapter):
         return records
 
 
-class OpenMeteoAirQuality(Adapter):
-    """CAMS PM2.5 forecast for many points (district centres), averaged over the next 24 hours.
+# All grid adapters share this, so together they stay under Open-Meteo's 600 calls a minute
+# (one batch of up to 100 points, then a pause, whichever adapter sends it).
+_PACE = asyncio.Lock()
+PACE_SECONDS = 12.0
+
+
+class OpenMeteoGrid(Adapter):
+    """Hourly values for many points (district centres), summarised over the next 24 hours.
 
     Open-Meteo takes many coordinates in one call but counts each one against the free quota
     (600 a minute, 10,000 a day, non-commercial). All 928 districts at once got 429 on 2026-10-22, so
-    points are snapped to the CAMS global grid (0.4°): 306 cells cover every district.
+    points are snapped to a 0.4° grid (306 cells cover every district) and batches are paced.
+    Subclasses set the endpoint, the hourly variables, and `summarise`.
     """
 
-    name = "open_meteo_air_quality"
-    attribution = "Air quality data by Open-Meteo.com / CAMS (CC BY 4.0)"
-    base_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+    base_url: str
+    hourly: tuple[str, ...]
+    variable: str
+    unit: str
     grid_degrees = 0.4
     batch_size = 100
     timeout_seconds = 60.0
@@ -85,16 +94,22 @@ class OpenMeteoAirQuality(Adapter):
             params = {
                 "latitude": ",".join(str(lat) for lat, _ in batch),
                 "longitude": ",".join(str(lon) for _, lon in batch),
-                "hourly": "pm2_5",
+                "hourly": ",".join(self.hourly),
                 "forecast_days": 2,
                 "timezone": "Asia/Bangkok",
             }
-            response = await client.get(self.base_url, params=params, timeout=self.timeout_seconds)
-            response.raise_for_status()
-            body = response.json()
+            async with _PACE:
+                response = await client.get(self.base_url, params=params, timeout=self.timeout_seconds)
+                response.raise_for_status()
+                body = response.json()
+                await asyncio.sleep(PACE_SECONDS)  # background jobs only, so the wait costs nobody
             # One coordinate returns an object, several return a list in the same order.
             batches.append(body if isinstance(body, list) else [body])
         return batches
+
+    def summarise(self, hours: list[dict]) -> tuple[float, dict] | None:
+        """(value, extra) from the next 24 hourly rows ({"time": datetime, <variable>: value}), or None."""
+        raise NotImplementedError
 
     def parse(self, raw: Any, fetched_at: datetime) -> list[SourceRecord]:
         start = fetched_at.replace(minute=0, second=0, microsecond=0)
@@ -102,29 +117,87 @@ class OpenMeteoAirQuality(Adapter):
         per_cell = {}
         for cell, loc in zip(self.cells, (loc for batch in raw for loc in batch)):
             hourly = loc["hourly"]
-            per_cell[cell] = [v for t, v in zip(hourly["time"], hourly["pm2_5"])
-                              if v is not None and start <= datetime.fromisoformat(t).replace(tzinfo=BANGKOK) < end]
+            rows = [{"time": datetime.fromisoformat(t).replace(tzinfo=BANGKOK),
+                     **{name: hourly[name][i] for name in self.hourly}} for i, t in enumerate(hourly["time"])]
+            per_cell[cell] = self.summarise([r for r in rows if start <= r["time"] < end])
         records = []
         for (code, lat, lon), cell in zip(self.points, self.cell_of):
-            values = per_cell.get(cell)
-            if not values:
+            summary = per_cell.get(cell)
+            if summary is None:
                 continue
+            value, extra = summary
             records.append(
                 SourceRecord(
                     source=self.name,
-                    variable="pm25_model_24h",
-                    value=round(sum(values) / len(values), 1),
-                    unit="µg/m³",
+                    variable=self.variable,
+                    value=value,
+                    unit=self.unit,
                     lat=lat,
                     lon=lon,
                     issued_at=fetched_at,
                     valid_time=fetched_at,
                     fetched_at=fetched_at,
                     attribution=self.attribution,
-                    extra={"area_code": code, "max_1h": max(values)},
+                    extra={"area_code": code, **extra},
                 )
             )
         return records
+
+
+class OpenMeteoAirQuality(OpenMeteoGrid):
+    """CAMS PM2.5 forecast (0.4° global grid), mean of the next 24 hours."""
+
+    name = "open_meteo_air_quality"
+    attribution = "Air quality data by Open-Meteo.com / CAMS (CC BY 4.0)"
+    base_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+    hourly = ("pm2_5",)
+    variable = "pm25_model_24h"
+    unit = "µg/m³"
+
+    def summarise(self, hours: list[dict]) -> tuple[float, dict] | None:
+        values = [h["pm2_5"] for h in hours if h["pm2_5"] is not None]
+        if not values:
+            return None
+        return round(sum(values) / len(values), 1), {"max_1h": max(values)}
+
+
+def heat_index_c(temp_c: float, rh: float) -> float:
+    """NOAA heat index (Rothfusz regression with NOAA's adjustments), in °C.
+
+    Below 80 °F NOAA uses its simple formula, which stays close to the air temperature.
+    """
+    t = temp_c * 9 / 5 + 32
+    simple = 0.5 * (t + 61.0 + (t - 68.0) * 1.2 + rh * 0.094)
+    if (simple + t) / 2 < 80:
+        hi = simple
+    else:
+        hi = (-42.379 + 2.04901523 * t + 10.14333127 * rh - 0.22475541 * t * rh - 0.00683783 * t * t
+              - 0.05481717 * rh * rh + 0.00122874 * t * t * rh + 0.00085282 * t * rh * rh - 0.00000199 * t * t * rh * rh)
+        if rh < 13 and 80 <= t <= 112:
+            hi -= ((13 - rh) / 4) * ((17 - abs(t - 95)) / 17) ** 0.5
+        elif rh > 85 and 80 <= t <= 87:
+            hi += ((rh - 85) / 10) * ((87 - t) / 5)
+    return (hi - 32) * 5 / 9
+
+
+class OpenMeteoHeatIndex(OpenMeteoGrid):
+    """Highest heat index in the next 24 hours, from forecast temperature and humidity."""
+
+    name = "open_meteo_heat"
+    attribution = "Weather data by Open-Meteo.com (CC BY 4.0)"
+    base_url = "https://api.open-meteo.com/v1/forecast"
+    hourly = ("temperature_2m", "relative_humidity_2m")
+    variable = "heat_index_max_24h"
+    unit = "°C"
+
+    def summarise(self, hours: list[dict]) -> tuple[float, dict] | None:
+        rows = [h for h in hours if h["temperature_2m"] is not None and h["relative_humidity_2m"] is not None]
+        if not rows:
+            return None
+        peak = max(rows, key=lambda h: heat_index_c(h["temperature_2m"], h["relative_humidity_2m"]))
+        value = heat_index_c(peak["temperature_2m"], peak["relative_humidity_2m"])
+        return round(value, 1), {"peak_time": peak["time"].isoformat(), "temperature_c": peak["temperature_2m"],
+                                 "humidity_pct": peak["relative_humidity_2m"]}
 
 
 class OpenMeteoRiverDischarge(Adapter):

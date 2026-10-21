@@ -11,6 +11,7 @@ from external_data.adapters import (
     FirmsHotspots,
     OpenMeteoAirQuality,
     OpenMeteoForecast,
+    OpenMeteoHeatIndex,
     OpenMeteoRiverDischarge,
     ThaiWaterRain24h,
     ThaiWaterWaterLevel,
@@ -169,3 +170,22 @@ def test_open_meteo_air_quality_single_point_object():
     assert adapter.cells == [(13.6, 100.4)]
     records = adapter.parse([[raw]], datetime(2026, 10, 22, 3, 0, tzinfo=BANGKOK))
     assert [r.extra["area_code"] for r in records] == ["TH1001", "TH1002"] and records[0].value == records[1].value
+
+
+@pytest.mark.parametrize(("temp", "rh", "expected"), [(26, 50, 26.0), (32, 70, 40.4), (35, 60, 45.1), (40, 60, 62.6)])
+def test_heat_index_matches_noaa(temp, rh, expected):
+    from external_data.adapters.open_meteo import heat_index_c
+
+    assert heat_index_c(temp, rh) == pytest.approx(expected, abs=0.1)
+
+
+def test_open_meteo_heat_takes_peak_of_next_24_hours():
+    from external_data.adapters.open_meteo import heat_index_c
+
+    raw = load_json("om_heat.json")
+    adapter = OpenMeteoHeatIndex([("TH1001", 13.6, 100.4), ("TH5001", 18.8, 99.2)])
+    records = adapter.parse([raw], datetime(2026, 10, 22, 0, 0, tzinfo=BANGKOK))
+    h = raw[0]["hourly"]
+    expected = max(heat_index_c(t, rh) for t, rh in zip(h["temperature_2m"][:24], h["relative_humidity_2m"][:24]))
+    assert records[0].variable == "heat_index_max_24h" and records[0].value == round(expected, 1)
+    assert records[0].extra["peak_time"].startswith("2026-10-22T") and records[0].extra["area_code"] == "TH1001"

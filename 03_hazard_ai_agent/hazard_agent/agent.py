@@ -15,7 +15,7 @@ from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, und
 from thanphai_shared import HazardType
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
-HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5"}
+HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5", "heat": "ความร้อนจัด"}
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
@@ -26,7 +26,20 @@ PREPARE_TH = {
     "fire": ["งดเผาในที่โล่ง", "ปิดประตูหน้าต่างเมื่อมีควัน และใช้หน้ากาก N95", "แจ้ง 1362 (กรมอุทยานฯ) เมื่อพบไฟป่า"],
     "air_quality": ["ลดกิจกรรมกลางแจ้ง โดยเฉพาะเด็ก ผู้สูงอายุ หญิงตั้งครรภ์ และผู้มีโรคหัวใจหรือทางเดินหายใจ",
                     "สวมหน้ากาก N95 เมื่อออกนอกอาคาร", "ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศถ้ามี"],
+    "heat": ["ดื่มน้ำบ่อย ๆ แม้ไม่กระหายน้ำ", "เลี่ยงงานหนักกลางแจ้งช่วง 11.00–15.00 น. และพักในที่ร่ม",
+             "ดูแลเด็ก ผู้สูงอายุ และผู้มีโรคประจำตัว หากตัวร้อนจัด ซึม หรือหมดสติ โทร 1669"],
 }
+
+
+def tmd_heat_label(heat_index: float) -> str:
+    """TMD/BMA heat-index band (display only; alert levels come from rules.yaml)."""
+    if heat_index >= 52:
+        return "อันตรายมาก"
+    if heat_index >= 42:
+        return "อันตราย"
+    if heat_index >= 33:
+        return "เตือนภัย"
+    return "เฝ้าระวัง" if heat_index >= 27 else "ปกติ"
 
 
 class HazardTools(Protocol):
@@ -138,6 +151,9 @@ def _reason(item: dict) -> str:
         parts.append(f"PM2.5 เฉลี่ย 24 ชม. {obs['pm25_24h']:.1f} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)")
     if obs.get("pm25_model_24h") is not None:
         parts.append(f"แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า {obs['pm25_model_24h']:.1f} มคก./ลบ.ม.")
+    if obs.get("heat_index_max_24h") is not None:
+        hi = obs["heat_index_max_24h"]
+        parts.append(f"ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า {hi:.1f}°C (เกณฑ์กรมอุตุฯ: {tmd_heat_label(hi)})")
     if obs.get("cross_border_hotspots_24h"):
         parts.append(f"จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. {int(obs['cross_border_hotspots_24h'])} จุด (24 ชม.)")
     if obs.get("vci") is not None:

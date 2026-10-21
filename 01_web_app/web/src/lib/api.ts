@@ -1,4 +1,4 @@
-export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality";
+export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
@@ -7,6 +7,7 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "fire", th: "ไฟป่า/ไฟหญ้า", ready: true },
   { id: "drought", th: "ภัยแล้ง", ready: true },
   { id: "air_quality", th: "ฝุ่น PM2.5", ready: true },
+  { id: "heat", th: "ความร้อนจัด", ready: true },
 ];
 
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
@@ -181,6 +182,14 @@ export const api = {
   },
 };
 
+/** TMD/BMA heat-index band, shown next to the value (alert levels come from the backend rules). */
+export function tmdHeatLabel(heatIndex: number): string {
+  if (heatIndex >= 52) return "อันตรายมาก";
+  if (heatIndex >= 42) return "อันตราย";
+  if (heatIndex >= 33) return "เตือนภัย";
+  return heatIndex >= 27 ? "เฝ้าระวัง" : "ปกติ";
+}
+
 export function describeObservation(key: string, value: number | null): string | null {
   if (value === null || value === undefined) return null;
   switch (key) {
@@ -205,6 +214,8 @@ export function describeObservation(key: string, value: number | null): string |
       return `PM2.5 เฉลี่ย 24 ชม. ${value.toFixed(1)} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)`;
     case "pm25_model_24h":
       return `แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า ${value.toFixed(1)} มคก./ลบ.ม.`;
+    case "heat_index_max_24h":
+      return `ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(1)}°C (เกณฑ์กรมอุตุฯ: ${tmdHeatLabel(value)})`;
     case "cross_border_hotspots_24h":
       return value > 0 ? `จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. ${value} จุด (24 ชม.)` : null;
     case "spi_3":

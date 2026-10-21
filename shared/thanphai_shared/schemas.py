@@ -10,6 +10,7 @@ class HazardType(str, Enum):
     DROUGHT = "drought"
     FIRE = "fire"
     AIR_QUALITY = "air_quality"
+    HEAT = "heat"
 
 
 class AlertLevel(int, Enum):

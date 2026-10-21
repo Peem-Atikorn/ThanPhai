@@ -1,6 +1,6 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.10.22"
+version: "2026.10.22.2"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
@@ -122,6 +122,26 @@ overrides:
       variable: pm25_model_24h
       op: ">="
       threshold: 37.6
+      level: WATCH
+  heat:
+    # Heat index (NOAA formula from forecast temperature and humidity), highest of the next 24 h.
+    # TMD/BMA bands: 27–32.9 เฝ้าระวัง, 33–41.9 เตือนภัย, 42–51.9 อันตราย, >= 52 อันตรายมาก. The lowest band covers
+    # almost every Thai afternoon, so levels follow severity one step down: TMD เตือนภัย -> WATCH,
+    # อันตราย -> WARNING, อันตรายมาก -> CRITICAL. The UI also shows TMD's own label next to the value.
+    - id: HEAT_INDEX_EXTREME_DANGER
+      variable: heat_index_max_24h
+      op: ">="
+      threshold: 52.0
+      level: CRITICAL
+    - id: HEAT_INDEX_DANGER
+      variable: heat_index_max_24h
+      op: ">="
+      threshold: 42.0
+      level: WARNING
+    - id: HEAT_INDEX_EXTREME_CAUTION
+      variable: heat_index_max_24h
+      op: ">="
+      threshold: 33.0
       level: WATCH
 
 confidence:

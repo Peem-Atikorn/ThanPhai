@@ -124,3 +124,9 @@ def test_pm25_model_alone_gives_at_most_watch():
 
 def test_pm25_without_any_value_is_no_data():
     assert decide(HazardType.AIR_QUALITY, observations={"pm25_24h": None, "pm25_model_24h": None}).level is None
+
+
+@pytest.mark.parametrize(("hi", "expected"), [(30.0, L.NORMAL), (32.9, L.NORMAL), (33.0, L.WATCH), (41.9, L.WATCH),
+                                              (42.0, L.WARNING), (51.9, L.WARNING), (52.0, L.CRITICAL)])
+def test_heat_index_bands(hi, expected):
+    assert decide(HazardType.HEAT, observations={"heat_index_max_24h": hi}).level == expected

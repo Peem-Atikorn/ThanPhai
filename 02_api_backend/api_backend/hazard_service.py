@@ -16,8 +16,8 @@ import geopandas as gpd
 import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
-from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, OpenMeteoAirQuality, ThaiWaterRain24h, ThaiWaterWaterLevel,
-                                    TmdNwpDailyForecast, TmdWarnings)
+from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, OpenMeteoAirQuality, OpenMeteoHeatIndex, ThaiWaterRain24h,
+                                    ThaiWaterWaterLevel, TmdNwpDailyForecast, TmdWarnings)
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
@@ -61,6 +61,14 @@ SOURCES = {
     HazardType.FIRE: ["NASA FIRMS"],
     HazardType.DROUGHT: [],
     HazardType.AIR_QUALITY: ["กรมควบคุมมลพิษ (Air4Thai)"],
+    HazardType.HEAT: ["Open-Meteo (แบบจำลองพยากรณ์อากาศ)"],
+}
+# Open-Meteo forecasts per district centre, each on its own clock: (adapter, refresh interval).
+# Each refresh costs ~306 calls of Open-Meteo's free 10,000 a day (see OpenMeteoGrid).
+GRID_MODELS = {
+    # CAMS runs twice a day.
+    "air_model": (OpenMeteoAirQuality, timedelta(hours=6)),
+    "heat_model": (OpenMeteoHeatIndex, timedelta(hours=3)),
 }
 # Map layer: coarser than the 50 m web layer, enough for a whole-country view.
 MAP_SIMPLIFY_DEGREES = 0.004
@@ -126,11 +134,9 @@ class HazardService:
         self.fire_ttl = timedelta(hours=3)
         self.fire_predictions: dict[str, dict] = {}
         self.fire_updated_at: datetime | None = None
-        # CAMS PM2.5 forecast per district centre, for districts without an Air4Thai station. Each refresh counts
-        # ~306 calls against Open-Meteo's free 10,000 a day, and CAMS runs twice a day, so refresh every 6 h.
-        self.air_model_ttl = timedelta(hours=6)
-        self.air_model: dict[str, float] = {}
-        self.air_model_updated_at: datetime | None = None
+        # GRID_MODELS results: name -> area code -> record (value and extra).
+        self.grid: dict[str, dict] = {name: {} for name in GRID_MODELS}
+        self.grid_updated_at: dict[str, datetime | None] = {name: None for name in GRID_MODELS}
         self._geometry = self._load_map_geometry()
 
     def _load_map_geometry(self) -> dict[str, dict]:
@@ -144,7 +150,7 @@ class HazardService:
     def inputs_pending(self) -> list[str]:
         """Slow inputs still loading for the first time (after a restart), so clients can check back soon."""
         slow = {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at,
-                "air_model": self.air_model_updated_at}
+                **self.grid_updated_at}
         return [name for name, updated in slow.items()
                 if updated is None and name in self._jobs and not self._jobs[name].done()]
 
@@ -292,7 +298,8 @@ class HazardService:
         # Snapshots: background refreshes may swap these dicts while decisions are built.
         satellite = dict(self.satellite_cells)
         fire_pred = dict(self.fire_predictions)
-        air_model = dict(self.air_model)
+        air_model = {code: r.value for code, r in self.grid["air_model"].items()}
+        heat = dict(self.grid["heat_model"])
         drought = self._current_drought()
         decisions: dict[str, list[dict]] = {}
         for code in self.amphoe_codes:
@@ -316,6 +323,7 @@ class HazardService:
                                          # None when FIRMS failed, 0 when it worked and saw nothing nearby.
                                          "cross_border_hotspots_24h": (float(cross_border.get(code, 0))
                                                                        if records["nasa_firms"] is not None else None)},
+                HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
             }
             items = []
             for hazard, obs in observations.items():
@@ -339,6 +347,10 @@ class HazardService:
                     sources.append(f"NASA MODIS NDVI ({drought['month']})")
                     if drought_note:
                         notices.append(drought_note)
+                if hazard == HazardType.HEAT and code in heat:
+                    peak = heat[code].extra
+                    notices.append(f"ค่าคาดการณ์จากแบบจำลอง ช่วงร้อนสุด {peak['peak_time'][11:16]} น. "
+                                   f"อุณหภูมิ {peak['temperature_c']:.0f}°C ความชื้น {peak['humidity_pct']:.0f}%")
                 if obs.get("pm25_model_24h") is not None:
                     sources = ["Open-Meteo / CAMS (แบบจำลอง)"]
                     notices.append("ไม่มีสถานีวัดฝุ่นในอำเภอนี้ ใช้ค่าคาดการณ์จากแบบจำลองเฉลี่ย 24 ชม. ข้างหน้า")
@@ -446,23 +458,24 @@ class HazardService:
                                         "next_try_after": (now + RETRY_AFTER_FAILURE).isoformat()}
             log.warning("%s refresh failed, next try in %s: %s: %s", name, RETRY_AFTER_FAILURE, type(exc).__name__, exc)
 
-    # --- PM2.5 model (Open-Meteo CAMS) ---------------------------------------------------------
+    # --- Open-Meteo forecasts per district (GRID_MODELS) -------------------------------------
 
-    @property
-    def air_model_stale(self) -> bool:
-        return self.air_model_updated_at is None or datetime.now(timezone.utc) - self.air_model_updated_at > self.air_model_ttl
+    def grid_stale(self, name: str) -> bool:
+        updated = self.grid_updated_at[name]
+        return updated is None or datetime.now(timezone.utc) - updated > GRID_MODELS[name][1]
 
-    def refresh_air_model_in_background(self) -> None:
-        self._start_job("air_model", self.refresh_air_model, self.air_model_stale)
+    def refresh_grids_in_background(self) -> None:
+        for name in GRID_MODELS:
+            self._start_job(name, lambda name=name: self.refresh_grid(name), self.grid_stale(name))
 
-    async def refresh_air_model(self) -> None:
+    async def refresh_grid(self, name: str) -> None:
         points = [(a.code, a.lat, a.lon) for a in self.gazetteer.areas if a.level == "amphoe"]
-        adapter = OpenMeteoAirQuality(points)
+        adapter = GRID_MODELS[name][0](points)
         async with httpx.AsyncClient(headers=USER_AGENT) as client:
             records = await adapter.run(client)
-        self.air_model = {r.extra["area_code"]: r.value for r in records}
-        self.air_model_updated_at = datetime.now(timezone.utc)
-        self.source_status["air_model"] = {"ok": True, "records": len(records), "checked_at": self.air_model_updated_at.isoformat()}
+        self.grid[name] = {r.extra["area_code"]: r for r in records}
+        self.grid_updated_at[name] = now = datetime.now(timezone.utc)
+        self.source_status[name] = {"ok": True, "records": len(records), "checked_at": now.isoformat()}
         self._inputs_changed = True  # rebuild decisions with the new forecast on the next request
 
     # --- forecast (TMD NWP) ---------------------------------------------------------------
