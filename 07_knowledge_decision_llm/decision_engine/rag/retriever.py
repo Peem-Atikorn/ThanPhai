@@ -20,12 +20,13 @@ def normalize_thai(text: str) -> str:
         return ""
     # Strip invisible zero-width chars and soft hyphens
     text = text.replace("\u200b", "").replace("\xad", "")
+    # Normalize decomposed sara-am ("ํ" + "า" -> "ำ")
+    text = text.replace("ํา", "ำ").replace("\u0e4d\u0e32", "ำ")
     # Fix replacement characters and decomposed vowel patterns
     text = text.replace("\ufffd้ำ", "้ำ").replace("\ufffdำ", "ำ").replace("\ufffd้า", "้ำ").replace("\ufffdา", "ำ")
     text = text.replace("นำ้", "น้ำ").replace("น้้า", "น้ำ")
     text = re.sub(r"([\u0e48-\u0e4b])\u0e4d\u0e32", r"\1ำ", text)
     text = re.sub(r"\u0e4d([\u0e48-\u0e4b])\u0e32", r"\1ำ", text)
-    text = text.replace("\u0e4d\u0e32", "ำ")
     text = re.sub(r"ำ([\u0e48-\u0e4b])", r"\1ำ", text)
     return text
 
