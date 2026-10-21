@@ -295,3 +295,41 @@ async def test_inputs_pending_only_while_first_load_runs(base_service):
         assert "gistda_flood" not in svc.inputs_pending  # finished (or failed): stop fast polling
     finally:
         svc._jobs, svc.satellite_updated_at = saved
+
+
+def test_load_fire_model_rejects_extended_model(tmp_path):
+    from types import SimpleNamespace
+    import numpy as np
+    from risk_models.fire.dataset import EXTENDED_FEATURES
+    from risk_models.fire.model import FireModel
+
+    (tmp_path / "models").mkdir()
+
+    class DummyEstimator:
+        pass
+
+    clim = np.full((12, 1), 0.5, dtype=np.float32)
+    model_ext = FireModel(
+        estimator=DummyEstimator(),
+        watch_threshold=0.3,
+        warning_threshold=0.6,
+        trained_years=[2023],
+        version="ext-v1",
+        amphoe_codes=["TH1000"],
+        clim=clim,
+        feature_names=EXTENDED_FEATURES,
+    )
+    model_ext.save(tmp_path / "models" / "fire_model.joblib")
+    assert HazardService._load_fire_model(SimpleNamespace(data_dir=tmp_path)) is None
+
+    model_base = FireModel(
+        estimator=DummyEstimator(),
+        watch_threshold=0.3,
+        warning_threshold=0.6,
+        trained_years=[2023],
+        version="base-v1",
+        amphoe_codes=["TH1000"],
+        clim=clim,
+    )
+    model_base.save(tmp_path / "models" / "fire_model.joblib")
+    assert HazardService._load_fire_model(SimpleNamespace(data_dir=tmp_path)) is not None

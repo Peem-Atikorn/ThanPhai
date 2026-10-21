@@ -48,8 +48,8 @@ Every external API the system needs: what it gives us, how to get access, limits
 | Daily seismic events | `/api/DailySeismicEvent/v1/` | Earthquakes (out of scope, but available) | ✅ |
 
 > **Note on planned fire-model humidity feature (Module 06):**
-> Training and live inference must use the same data source to prevent train/serve skew (e.g. ERA5-Land reanalysis vs TMD surface stations have distinct biases and spatial smoothing, especially over mountainous fire zones).
-> Planned approach: Use Open-Meteo for both historical backfill (`archive-api.open-meteo.com` using ERA5-Land) and live/near-real-time observations (`api.open-meteo.com` with `past_days=1`) sampled at the centroid of each district. Alternatively, if TMD surface stations are used live, the model must be trained on TMD historical station archives with consistent spatial interpolation (nearest station or IDW).
+> Training and live inference must use the same underlying data source to prevent train/serve skew (e.g. ERA5-Land reanalysis vs NWP forecast vs surface stations exhibit distinct biases and spatial distributions).
+> Planned approach: Use Open-Meteo with matching NWP models on both sides: Historical Forecast API (`historical-forecast-api.open-meteo.com`) for training backfill and Forecast API (`api.open-meteo.com`) for live inference (using matching `models=` parameter, verifying historical model coverage back to 2021). Alternatively, if TMD surface stations are used live, the model must be trained on TMD historical surface station archives with consistent spatial interpolation (nearest station or IDW).
 
 ### 1.2 TMD NWP API (WRF model forecast) 🔑
 
