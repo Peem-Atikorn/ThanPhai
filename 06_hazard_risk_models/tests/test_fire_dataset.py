@@ -233,15 +233,31 @@ def test_live_predict_today_supports_extended_model():
     pts = pd.DataFrame({"latitude": [14.0], "longitude": [100.0], "acq_date": [date(2024, 1, 10)], "confidence": ["nominal"], "frp": [10.0]})
     amphoe_of_point = pd.Series(["TH1000"])
 
-    # 1. Calling predict_today without ndvi/humidity must not KeyError on extended model
-    res_default = predict_today(model, pts, amphoe_of_point, date(2024, 1, 10))
-    assert set(res_default.keys()) == {"TH1000", "TH1001"}
-    for v in res_default.values():
+    # 1. Calling predict_today on extended model without ndvi/humidity must raise ValueError (no silent NaN skew)
+    with pytest.raises(ValueError, match="model needs .*ndvi"):
+        predict_today(model, pts, amphoe_of_point, date(2024, 1, 10))
+
+    # 2. Calling predict_today on baseline model (FEATURES) without ndvi/humidity works as expected (used by hazard_service)
+    model_baseline = FireModel(
+        estimator=fit(table),
+        watch_threshold=0.3,
+        warning_threshold=0.6,
+        trained_years=[2023],
+        version="live-baseline",
+        amphoe_codes=["TH1000", "TH1001"],
+        clim=clim,
+    )
+    res_baseline = predict_today(model_baseline, pts, amphoe_of_point, date(2024, 1, 10))
+    assert set(res_baseline.keys()) == {"TH1000", "TH1001"}
+    for v in res_baseline.values():
         assert 0.0 <= v["probability"] <= 1.0
         assert v["level"] in {"NORMAL", "WATCH", "WARNING"}
 
-    # 2. Calling with explicit ndvi and humidity arrays
+    # 3. Calling with explicit ndvi and humidity arrays on extended model succeeds
     ndvi_arr = np.full((30, 2), 0.6, dtype=np.float32)
     hum_arr = np.full((30, 2), 50.0, dtype=np.float32)
     res_explicit = predict_today(model, pts, amphoe_of_point, date(2024, 1, 10), ndvi=ndvi_arr, humidity=hum_arr)
     assert set(res_explicit.keys()) == {"TH1000", "TH1001"}
+    for v in res_explicit.values():
+        assert 0.0 <= v["probability"] <= 1.0
+        assert v["level"] in {"NORMAL", "WATCH", "WARNING"}

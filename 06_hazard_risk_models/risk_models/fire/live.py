@@ -46,20 +46,16 @@ def predict_today(
     grid = daily_grid(points, amphoe_of_point, model.amphoe_codes, start, today)
 
     expected_names = getattr(model, "feature_names", FEATURES)
-    grid_ndvi = None
-    if "ndvi" in expected_names:
-        grid_ndvi = ndvi if ndvi is not None else np.full(grid.counts.shape, np.nan, dtype=np.float32)
-
-    grid_hum = None
-    if "rel_humidity" in expected_names:
-        grid_hum = humidity if humidity is not None else np.full(grid.counts.shape, np.nan, dtype=np.float32)
+    missing = [n for n, a in (("ndvi", ndvi), ("rel_humidity", humidity)) if n in expected_names and a is None]
+    if missing:
+        raise ValueError(f"model needs {missing} but they were not provided")
 
     feats = features(
         grid,
         [c[:4] for c in model.amphoe_codes],
         model.clim,
-        ndvi=grid_ndvi,
-        humidity=grid_hum,
+        ndvi=ndvi,
+        humidity=humidity,
     )
     table = to_table(grid, feats)  # exactly one day (today) per district after the 30-day history
     probs = model.predict_proba(table)

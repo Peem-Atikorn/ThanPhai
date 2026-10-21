@@ -19,7 +19,6 @@ from geo_integration import Gazetteer
 from geo_integration.area_mapper import AreaMapper
 from risk_models.fire import static_sources
 from risk_models.fire.dataset import (
-    EXTENDED_FEATURES,
     FEATURES,
     climatology,
     daily_grid,
@@ -37,17 +36,14 @@ REPORT_DIR = ROOT / "06_hazard_risk_models" / "reports"
 TRAIN_YEARS, VAL_YEAR, TEST_YEAR = {2021, 2022, 2023}, 2024, 2025
 
 
-def _load_optional_grid(name: str, shape: tuple[int, int]) -> np.ndarray:
-    """Load preprocessed [days, amphoe] array or return NaNs if file not present."""
-    for ext in (".npy", ".npz"):
-        path = PROCESSED / f"{name}_daily_amphoe{ext}"
-        if path.exists():
-            arr = np.load(path)
-            if hasattr(arr, "files"):
-                arr = arr[arr.files[0]]
-            if arr.shape == shape:
-                return arr.astype(np.float32)
-    return np.full(shape, np.nan, dtype=np.float32)
+def _load_optional_grid(name: str, shape: tuple[int, int]) -> np.ndarray | None:
+    path = PROCESSED / f"{name}_daily_amphoe.npy"
+    if not path.exists():
+        return None
+    arr = np.load(path)
+    if arr.shape != shape:
+        raise ValueError(f"{path.name} shape {arr.shape} != {shape}")
+    return arr.astype(np.float32)
 
 
 def log(msg: str, t0: float) -> None:
@@ -78,17 +74,19 @@ def main() -> None:
     clim = climatology(grid, TRAIN_YEARS)  # training years only, so 2024/2025 never leak in
     ndvi_arr = _load_optional_grid("ndvi", grid.counts.shape)
     humidity_arr = _load_optional_grid("humidity", grid.counts.shape)
+    names = [*FEATURES] + (["ndvi"] if ndvi_arr is not None else []) + (["rel_humidity"] if humidity_arr is not None else [])
+    log(f"features: {names}", t0)
     table = to_table(grid, features(grid, province_of, clim, ndvi=ndvi_arr, humidity=humidity_arr), labels(grid)).dropna(subset=["y"])
     year = pd.to_datetime(table["date"]).dt.year
     train, val, test = table[year.isin(TRAIN_YEARS)], table[year == VAL_YEAR], table[year == TEST_YEAR]
     log(f"rows train {len(train):,} / val {len(val):,} / test {len(test):,}", t0)
 
-    estimator = fit(train, EXTENDED_FEATURES)
+    estimator = fit(train, names)
     log("model fitted", t0)
-    p_val = estimator.predict_proba(val[EXTENDED_FEATURES])[:, 1]
+    p_val = estimator.predict_proba(val[names])[:, 1]
     watch, warning = thresholds(val["y"].to_numpy(), p_val)
     model = FireModel(estimator, watch, warning, sorted(TRAIN_YEARS), version=f"fire-hgb-{date.today():%Y%m%d}",
-                      amphoe_codes=amphoe_codes, clim=clim, feature_names=EXTENDED_FEATURES)
+                      amphoe_codes=amphoe_codes, clim=clim, feature_names=names)
 
     # Baselines get the same treatment: thresholds chosen on 2024, scored on 2025.
     y_val, y_test = val["y"].to_numpy(), test["y"].to_numpy()
