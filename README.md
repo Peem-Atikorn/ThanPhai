@@ -187,6 +187,9 @@ docker compose up -d
 Examples: `feature/supawit/08-line-alerts`, `fix/peem/04-tmd-empty-stations`, `docs/peem/all-setup-guide`, `chore/supawit/00-docker-compose`.
 Pull requests into `main` may come only from `develop` or `hotfix/*`; `main` and `develop` accept changes only through pull requests.
 
+**Notifications:** `.github/CODEOWNERS` asks every team member to review each pull request. To also get comments and pushes,
+open the repository on GitHub, click **Watch → All Activity**, and turn on push notifications in the GitHub mobile app.
+
 ```bash
 git clone https://github.com/Peem-Atikorn/ThanPhai.git
 cd ThanPhai
