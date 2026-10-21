@@ -115,7 +115,7 @@ def test_zero_hotspots_and_one_broken_source_still_give_decisions(base_service, 
 
     svc = stale_copy(base_service)
     monkeypatch.setattr(hs, "flood_features", lambda rows: (_ for _ in ()).throw(ValueError("bad frame")))
-    decisions, _, status = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": []}, [])
+    decisions, _, status = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
     first = {item["hazard"]: item for item in decisions[svc.amphoe_codes[0]]}
     assert first["fire"]["level"] == "NORMAL"           # zero hotspots is real data, not missing data
     assert first["flood"]["level"] is None              # broken source -> no data, not "normal"
@@ -220,7 +220,7 @@ def test_vegetation_drought_cases(base_service, monkeypatch):
     }
     monkeypatch.setattr(svc, "_current_drought", lambda: {"month": "2026-09", "districts": veg})
     monkeypatch.setattr(svc, "satellite_cells", {wet: {"cells": 500, "approx_km2": 62.0}})
-    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": []}, [])
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
     level = lambda code: next(i for i in decisions[code] if i["hazard"] == "drought")  # noqa: E731
     assert level(dry)["level"] == "WATCH" and "NASA MODIS NDVI (2026-09)" in level(dry)["sources"]
     assert level(wet)["level"] is None and any("น้ำท่วม" in n for n in level(wet)["notices"])
@@ -272,12 +272,12 @@ def test_stale_water_level_does_not_drive_flood(base_service):
                             fetched_at=now, attribution="t",
                             extra={"above_bank_m": above, "bank_quality": "ok", "tambon_code": None})
 
-    decisions, _, status = svc._process({"thaiwater_waterlevel": [reading(26, 0.8)], "thaiwater_rain_24h": [], "nasa_firms": []}, [])
+    decisions, _, status = svc._process({"thaiwater_waterlevel": [reading(26, 0.8)], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
     flood = next(i for i in decisions[sena] if i["hazard"] == "flood")
     assert flood["level"] is None  # the only gauge is stale: no data, not CRITICAL
     assert status["thaiwater_waterlevel"]["error"] == "stale"
 
-    decisions, _, status = svc._process({"thaiwater_waterlevel": [reading(26, 0.8), reading(1, -2.0)], "thaiwater_rain_24h": [], "nasa_firms": []}, [])
+    decisions, _, status = svc._process({"thaiwater_waterlevel": [reading(26, 0.8), reading(1, -2.0)], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
     flood = next(i for i in decisions[sena] if i["hazard"] == "flood")
     assert flood["level"] == "NORMAL" and status["thaiwater_waterlevel"]["stale_dropped"] == 1
 
@@ -295,3 +295,28 @@ async def test_inputs_pending_only_while_first_load_runs(base_service):
         assert "gistda_flood" not in svc.inputs_pending  # finished (or failed): stop fast polling
     finally:
         svc._jobs, svc.satellite_updated_at = saved
+
+
+def test_pm25_station_wins_and_model_fills_districts_without_one(base_service, monkeypatch):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    sena = next(a.code for a in svc.gazetteer.resolve("อำเภอเสนา"))
+    other = next(c for c in svc.amphoe_codes if c != sena)
+    area = svc.gazetteer.by_code[sena]
+    now = datetime.now(timezone.utc)
+
+    def station(hours_ago: float, value: float) -> SourceRecord:
+        return SourceRecord(source="air4thai", variable="pm25_24h", value=value, unit="µg/m³", lat=area.lat, lon=area.lon,
+                            station_id=f"a{hours_ago}", observed_at=now - timedelta(hours=hours_ago), fetched_at=now, attribution="t")
+
+    # The model says 50 everywhere; the station in Sena says 80 and a stuck station says 200.
+    monkeypatch.setattr(svc, "air_model", {sena: 50.0, other: 50.0})
+    decisions, _, status = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [],
+                                         "air4thai": [station(1, 80.0), station(30, 200.0)]}, [])
+    at_sena = next(i for i in decisions[sena] if i["hazard"] == "air_quality")
+    assert at_sena["level"] == "WARNING" and at_sena["observations"] == {"pm25_24h": 80.0, "pm25_model_24h": None}
+    assert status["air4thai"]["stale_dropped"] == 1
+    elsewhere = next(i for i in decisions[other] if i["hazard"] == "air_quality")
+    assert elsewhere["level"] == "WATCH" and elsewhere["observations"]["pm25_model_24h"] == 50.0
+    assert elsewhere["sources"] == ["Open-Meteo / CAMS (แบบจำลอง)"] and elsewhere["notices"]

@@ -4,6 +4,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 
 from external_data.adapters import (
+    Air4ThaiPm25,
     FirmsHotspots,
     OpenMeteoForecast,
     OpenMeteoRiverDischarge,
@@ -22,6 +23,7 @@ STATION_SOURCES = {
     "thaiwater_waterlevel": ThaiWaterWaterLevel,
     "nasa_firms": FirmsHotspots,
     "tmd_weather_3h": TmdWeather3Hours,
+    "air4thai": Air4ThaiPm25,
 }
 POINT_SOURCES = {"open_meteo_forecast": OpenMeteoForecast, "open_meteo_flood": OpenMeteoRiverDischarge}
 HEADERS = {"User-Agent": "ThanPhai/0.1 (student project)"}

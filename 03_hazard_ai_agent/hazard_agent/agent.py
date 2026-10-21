@@ -15,7 +15,7 @@ from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, und
 from thanphai_shared import HazardType
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
-HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า"}
+HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5"}
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
@@ -24,6 +24,8 @@ PREPARE_TH = {
     "rain_storm": ["หลีกเลี่ยงการเดินทางช่วงฝนตกหนัก", "อยู่ห่างจากต้นไม้ใหญ่และป้ายโฆษณา", "ระวังน้ำป่าไหลหลากหากอยู่ใกล้ภูเขาหรือลำห้วย"],
     "drought": ["กักเก็บน้ำสำรองและใช้น้ำอย่างประหยัด", "ติดตามประกาศพื้นที่ประสบภัยแล้งจาก ปภ.", "วางแผนการเพาะปลูกตามปริมาณน้ำที่มี"],
     "fire": ["งดเผาในที่โล่ง", "ปิดประตูหน้าต่างเมื่อมีควัน และใช้หน้ากาก N95", "แจ้ง 1362 (กรมอุทยานฯ) เมื่อพบไฟป่า"],
+    "air_quality": ["ลดกิจกรรมกลางแจ้ง โดยเฉพาะเด็ก ผู้สูงอายุ หญิงตั้งครรภ์ และผู้มีโรคหัวใจหรือทางเดินหายใจ",
+                    "สวมหน้ากาก N95 เมื่อออกนอกอาคาร", "ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศถ้ามี"],
 }
 
 
@@ -132,6 +134,10 @@ def _reason(item: dict) -> str:
         parts.append(f"จุดความร้อน 24 ชม. {int(obs['hotspots_24h'])} จุด")
     if obs.get("fire_probability_7d") is not None:
         parts.append(f"แบบจำลองประเมินโอกาสเกิดไฟใน 7 วัน {obs['fire_probability_7d'] * 100:.0f}%")
+    if obs.get("pm25_24h") is not None:
+        parts.append(f"PM2.5 เฉลี่ย 24 ชม. {obs['pm25_24h']:.1f} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)")
+    if obs.get("pm25_model_24h") is not None:
+        parts.append(f"แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า {obs['pm25_model_24h']:.1f} มคก./ลบ.ม.")
     if obs.get("vci") is not None:
         parts.append(f"ดัชนีความสมบูรณ์ของพืช (VCI) {obs['vci']:.0f} จาก 100 เทียบเดือนเดียวกันในอดีต")
     elif obs.get("ndvi_deficit") is not None:

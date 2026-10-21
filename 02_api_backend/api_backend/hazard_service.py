@@ -16,14 +16,15 @@ import geopandas as gpd
 import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
-from external_data.adapters import FirmsHotspots, ThaiWaterRain24h, ThaiWaterWaterLevel, TmdNwpDailyForecast, TmdWarnings
+from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, OpenMeteoAirQuality, ThaiWaterRain24h, ThaiWaterWaterLevel,
+                                    TmdNwpDailyForecast, TmdWarnings)
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
 from geo_integration import Gazetteer
 from geo_integration.area_mapper import AreaMapper
-from geo_integration.features import fire_features, flood_features, rain_features
+from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import AlertLevel, HazardType
 
 BANGKOK = timezone(timedelta(hours=7), "Asia/Bangkok")
@@ -42,6 +43,8 @@ CHAO_PHRAYA_CHAIN = ["P.17", "N.67", "C.2", "C.13", "C.3", "C.7A", "C.35", "C.36
 # Water-level readings older than this are dropped: a gauge that stopped reporting (seen live: BKC002,
 # last reading the day before, still "over the bank") must not keep a district at WARNING.
 MAX_LEVEL_AGE = timedelta(hours=6)
+# Air4Thai stations that stopped reporting (seen live: 12 of 173 stuck 8 h behind) are dropped the same way.
+MAX_PM25_AGE = timedelta(hours=6)
 GRAPH_TTL = timedelta(minutes=15)
 DAM_HISTORY_TTL = timedelta(hours=6)
 FAILURE_TTL = timedelta(seconds=60)
@@ -53,6 +56,7 @@ SOURCES = {
     HazardType.RAIN_STORM: ["ThaiWater (สสน.)"],
     HazardType.FIRE: ["NASA FIRMS"],
     HazardType.DROUGHT: [],
+    HazardType.AIR_QUALITY: ["กรมควบคุมมลพิษ (Air4Thai)"],
 }
 # Map layer: coarser than the 50 m web layer, enough for a whole-country view.
 MAP_SIMPLIFY_DEGREES = 0.004
@@ -118,6 +122,11 @@ class HazardService:
         self.fire_ttl = timedelta(hours=3)
         self.fire_predictions: dict[str, dict] = {}
         self.fire_updated_at: datetime | None = None
+        # CAMS PM2.5 forecast per district centre, for districts without an Air4Thai station. Each refresh counts
+        # ~306 calls against Open-Meteo's free 10,000 a day, and CAMS runs twice a day, so refresh every 6 h.
+        self.air_model_ttl = timedelta(hours=6)
+        self.air_model: dict[str, float] = {}
+        self.air_model_updated_at: datetime | None = None
         self._geometry = self._load_map_geometry()
 
     def _load_map_geometry(self) -> dict[str, dict]:
@@ -130,7 +139,8 @@ class HazardService:
     @property
     def inputs_pending(self) -> list[str]:
         """Slow inputs still loading for the first time (after a restart), so clients can check back soon."""
-        slow = {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at}
+        slow = {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at,
+                "air_model": self.air_model_updated_at}
         return [name for name, updated in slow.items()
                 if updated is None and name in self._jobs and not self._jobs[name].done()]
 
@@ -150,7 +160,7 @@ class HazardService:
             results, warnings_result = await self._fetch()
             media = results.pop("thaiwater_media", None)
             raw = (results, warnings_result)
-            # Mapping ~5,000 points and deciding 928 x 3 hazards is CPU work; run it off the event loop
+            # Mapping ~5,000 points and deciding 928 x 5 hazards is CPU work; run it off the event loop
             # so other requests are not blocked while it runs.
             decisions, warnings, status = await asyncio.to_thread(self._process, *raw)
             dams = raw[0].get("thaiwater_dams")
@@ -185,6 +195,7 @@ class HazardService:
             "thaiwater_waterlevel": ThaiWaterWaterLevel(),
             "thaiwater_rain_24h": ThaiWaterRain24h(),
             "nasa_firms": FirmsHotspots(),
+            "air4thai": Air4ThaiPm25(),
         }
         async with httpx.AsyncClient(headers=USER_AGENT, follow_redirects=True) as client:
             results = await asyncio.gather(*(a.run(client) for a in adapters.values()), self._fetch_main_bundle(client),
@@ -229,10 +240,17 @@ class HazardService:
             records["thaiwater_waterlevel"] = fresh or None
             if not fresh:
                 status["thaiwater_waterlevel"] = {"ok": False, "error": "stale", "checked_at": now}
+        if records["air4thai"]:
+            fresh_pm25 = self.fresh_levels(records["air4thai"], max_age=MAX_PM25_AGE)
+            status["air4thai"]["stale_dropped"] = len(records["air4thai"]) - len(fresh_pm25)
+            records["air4thai"] = fresh_pm25 or None
+            if not fresh_pm25:
+                status["air4thai"] = {"ok": False, "error": "stale", "checked_at": now}
         degraded = {
             HazardType.FLOOD: [] if records["thaiwater_waterlevel"] is not None else ["ThaiWater water level"],
             HazardType.RAIN_STORM: [] if records["thaiwater_rain_24h"] is not None else ["ThaiWater rain"],
             HazardType.FIRE: [] if records["nasa_firms"] is not None else ["NASA FIRMS"],
+            HazardType.AIR_QUALITY: [] if records["air4thai"] is not None else ["Air4Thai"],
         }
         def build(source: str, hazard: HazardType, make):
             """One hazard's features. A failure here degrades that hazard only, never the whole refresh."""
@@ -251,6 +269,7 @@ class HazardService:
         if records["nasa_firms"] and self.static_cells:
             records["nasa_firms"] = self._drop_static_records(records["nasa_firms"])
         fire = build("nasa_firms", HazardType.FIRE, lambda rows: fire_features(rows, self.amphoe_codes))
+        pm25 = build("air4thai", HazardType.AIR_QUALITY, pm25_features)
 
         def value(frame, column: str, code: str) -> float | None:
             return _clean(frame[column].get(code)) if frame is not None and not frame.empty else None
@@ -258,6 +277,7 @@ class HazardService:
         # Snapshots: background refreshes may swap these dicts while decisions are built.
         satellite = dict(self.satellite_cells)
         fire_pred = dict(self.fire_predictions)
+        air_model = dict(self.air_model)
         drought = self._current_drought()
         decisions: dict[str, list[dict]] = {}
         for code in self.amphoe_codes:
@@ -268,12 +288,16 @@ class HazardService:
             # Water is dark in near-infrared, so flooded fields have low NDVI and would read as drought.
             flooded = bool(sat and sat["cells"] > 0) or (above_bank is not None and above_bank > 0)
             drought_obs, drought_note = self._vegetation_observations(veg, flooded)
+            pm25_station = value(pm25, "pm25_24h", code)
             observations = {
                 HazardType.FLOOD: {"above_bank_m": above_bank,
                                    "satellite_flood_cells_7d": float(sat["cells"]) if sat else None},
                 HazardType.RAIN_STORM: {"rain_24h": value(rain, "rain_24h", code)},
                 HazardType.FIRE: {"hotspots_24h": value(fire, "hotspots_24h", code)},
                 HazardType.DROUGHT: drought_obs,
+                # A station reading wins; the model fills only districts without one.
+                HazardType.AIR_QUALITY: {"pm25_24h": pm25_station,
+                                         "pm25_model_24h": air_model.get(code) if pm25_station is None else None},
             }
             items = []
             for hazard, obs in observations.items():
@@ -297,6 +321,9 @@ class HazardService:
                     sources.append(f"NASA MODIS NDVI ({drought['month']})")
                     if drought_note:
                         notices.append(drought_note)
+                if obs.get("pm25_model_24h") is not None:
+                    sources = ["Open-Meteo / CAMS (แบบจำลอง)"]
+                    notices.append("ไม่มีสถานีวัดฝุ่นในอำเภอนี้ ใช้ค่าคาดการณ์จากแบบจำลองเฉลี่ย 24 ชม. ข้างหน้า")
                 items.append({
                     "hazard": hazard.value,
                     "level": d.level.name if d.level is not None else None,
@@ -377,6 +404,25 @@ class HazardService:
             self.source_status[name] = {"ok": False, "error": type(exc).__name__, "checked_at": now.isoformat(),
                                         "next_try_after": (now + RETRY_AFTER_FAILURE).isoformat()}
             log.warning("%s refresh failed, next try in %s: %s: %s", name, RETRY_AFTER_FAILURE, type(exc).__name__, exc)
+
+    # --- PM2.5 model (Open-Meteo CAMS) ---------------------------------------------------------
+
+    @property
+    def air_model_stale(self) -> bool:
+        return self.air_model_updated_at is None or datetime.now(timezone.utc) - self.air_model_updated_at > self.air_model_ttl
+
+    def refresh_air_model_in_background(self) -> None:
+        self._start_job("air_model", self.refresh_air_model, self.air_model_stale)
+
+    async def refresh_air_model(self) -> None:
+        points = [(a.code, a.lat, a.lon) for a in self.gazetteer.areas if a.level == "amphoe"]
+        adapter = OpenMeteoAirQuality(points)
+        async with httpx.AsyncClient(headers=USER_AGENT) as client:
+            records = await adapter.run(client)
+        self.air_model = {r.extra["area_code"]: r.value for r in records}
+        self.air_model_updated_at = datetime.now(timezone.utc)
+        self.source_status["air_model"] = {"ok": True, "records": len(records), "checked_at": self.air_model_updated_at.isoformat()}
+        self._inputs_changed = True  # rebuild decisions with the new forecast on the next request
 
     # --- forecast (TMD NWP) ---------------------------------------------------------------
 
@@ -538,9 +584,9 @@ class HazardService:
         return sorted(rows, key=lambda d: -(d["storage_percent"] or 0))
 
     @staticmethod
-    def fresh_levels(records, now: datetime | None = None) -> list:
+    def fresh_levels(records, now: datetime | None = None, max_age: timedelta = MAX_LEVEL_AGE) -> list:
         now = now or datetime.now(timezone.utc)
-        return [r for r in records if r.observed_at is not None and now - r.observed_at <= MAX_LEVEL_AGE]
+        return [r for r in records if r.observed_at is not None and now - r.observed_at <= max_age]
 
     @staticmethod
     def river_status(above_bank: float | None) -> tuple[str, str]:

@@ -1,4 +1,4 @@
-export type Hazard = "flood" | "rain_storm" | "fire" | "drought";
+export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
@@ -6,6 +6,7 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "rain_storm", th: "ฝนหนัก/พายุ", ready: true },
   { id: "fire", th: "ไฟป่า/ไฟหญ้า", ready: true },
   { id: "drought", th: "ภัยแล้ง", ready: true },
+  { id: "air_quality", th: "ฝุ่น PM2.5", ready: true },
 ];
 
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
@@ -200,6 +201,10 @@ export function describeObservation(key: string, value: number | null): string |
       return `ดัชนีความสมบูรณ์ของพืช (VCI) ${value.toFixed(0)} จาก 100`;
     case "ndvi_deficit":
       return value < 0.05 ? "พืชพรรณเขียวใกล้เคียงปกติของเดือนนี้ (NDVI)" : `NDVI ต่ำกว่าปกติ ${value.toFixed(2)}`;
+    case "pm25_24h":
+      return `PM2.5 เฉลี่ย 24 ชม. ${value.toFixed(1)} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)`;
+    case "pm25_model_24h":
+      return `แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า ${value.toFixed(1)} มคก./ลบ.ม.`;
     case "spi_3":
       return `SPI-3 ${value.toFixed(2)}`;
     default:

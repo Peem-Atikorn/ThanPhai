@@ -178,6 +178,26 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | License | Check the dataset page ⚠️ (HDX COD-AB is usually CC BY-IGO) |
 | Used by | 05 (area table), 01 (map), 03 (gazetteer) |
 
+### 1.12 Air4Thai — PM2.5 stations (กรมควบคุมมลพิษ) ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://air4thai.pcd.go.th/services/getNewAQI_JSON.php` (all stations, latest hour) |
+| Auth | None |
+| Data | ~173 stations (`GROUND`, `BKK`, `MOBILE`); `AQILast.PM25.value` = 24-hour average PM2.5 (µg/m³), `-1` = no reading; date and time in Thai local time |
+| Quirks | Some stations lag many hours (27 of 170 were over 6 h old on 2026-10-22 03:00), so readings older than 6 h are dropped. The server sends the wrong intermediate certificates; Python needs the Let's Encrypt `YR1` + `Root YR` intermediates (bundled in `adapters/air4thai.py`, valid to 2028-09-02). |
+| Thresholds | PCD PM2.5 bands since 2023-06-01: 0–15 very good, 15.1–25 good, 25.1–37.5 moderate, 37.6–75 starts to affect health, ≥ 75.1 affects health |
+| Used by | 04, 02 (`air_quality` hazard) |
+
+### 1.13 Open-Meteo Air Quality — CAMS PM2.5 forecast ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=..&longitude=..&hourly=pm2_5` (comma-separated coordinates return a list) |
+| Auth and limits | None; same Open-Meteo limits as 1.6, and **each coordinate counts as a call**. 928 district points in one go got 429 on 2026-10-22, so points snap to the 0.4° CAMS grid (306 calls) and refresh every 6 h |
+| Use | Only for districts without an Air4Thai station; the model alone gives at most WATCH |
+| License | CC BY 4.0 — credit "Air quality data by Open-Meteo.com / CAMS" |
+
 ---
 
 ## 2. Map and location APIs
@@ -264,6 +284,8 @@ VAPID_PRIVATE_KEY=
 - ข้อมูลภาพถ่ายดาวเทียมและน้ำท่วม: GISTDA
 - Fire data: NASA FIRMS
 - Weather data by Open-Meteo.com (CC BY 4.0)
+- ข้อมูลคุณภาพอากาศ: กรมควบคุมมลพิษ (Air4Thai)
+- Air quality data by Open-Meteo.com / CAMS (CC BY 4.0)
 - Rainfall: CHIRPS, UCSB Climate Hazards Center
 - Boundaries: OCHA HDX
 - Map data © OpenStreetMap contributors (if the OSM basemap is used)

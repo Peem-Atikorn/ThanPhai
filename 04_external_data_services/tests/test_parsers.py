@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from external_data.adapters import (
+    Air4ThaiPm25,
     FirmsHotspots,
+    OpenMeteoAirQuality,
     OpenMeteoForecast,
     OpenMeteoRiverDischarge,
     ThaiWaterRain24h,
@@ -130,6 +132,40 @@ def test_tmd_weather_3h_parses_stations():
 
 
 def test_classify_hazards():
-    assert classify_hazards("ไฟป่าและหมอกควันภาคเหนือ") == [HazardType.FIRE]
+    assert classify_hazards("ไฟป่าและหมอกควันภาคเหนือ") == [HazardType.FIRE, HazardType.AIR_QUALITY]
     assert classify_hazards("พายุโซนร้อน") == [HazardType.RAIN_STORM]
     assert classify_hazards("อากาศหนาว") == []
+
+
+def test_air4thai_skips_missing_pm25_and_uses_local_time():
+    # Saved 2026-10-22: three current stations, one stuck since 2026-10-13, one without PM2.5 (-1).
+    records = Air4ThaiPm25().parse(load_json("air4thai_aqi.json"), NOW)
+    assert [r.station_id for r in records] == ["119t", "52t", "53t", "81t"]
+    first = records[0]
+    assert first.variable == "pm25_24h" and first.value == 9.0 and first.unit == "µg/m³"
+    assert first.observed_at == datetime(2026, 10, 22, 3, 0, tzinfo=BANGKOK)
+    assert (first.lat, first.lon) == (8.0506237, 98.9180489)
+    assert records[3].observed_at == datetime(2026, 10, 13, 19, 0, tzinfo=BANGKOK)  # dropped later as stale, not here
+
+
+def test_open_meteo_air_quality_averages_next_24_hours():
+    raw = load_json("om_air_quality.json")
+    points = [("TH5001", 18.7883, 98.9853), ("TH1001", 13.7563, 100.5018)]
+    adapter = OpenMeteoAirQuality(points)
+    fetched = datetime(2026, 10, 22, 3, 20, tzinfo=BANGKOK)
+    records = adapter.parse([raw], fetched)
+    assert [r.extra["area_code"] for r in records] == ["TH5001", "TH1001"]
+    hourly = raw[0]["hourly"]
+    expected = [v for v in hourly["pm2_5"][3:27] if v is not None]  # 03:00 today to 02:00 tomorrow
+    assert records[0].value == round(sum(expected) / len(expected), 1)
+    assert records[0].extra["max_1h"] == max(expected)
+    assert records[0].variable == "pm25_model_24h" and records[0].lat == 18.7883
+
+
+def test_open_meteo_air_quality_single_point_object():
+    raw = load_json("om_air_quality.json")[1]
+    # Two districts in the same 0.4° CAMS cell share one requested point.
+    adapter = OpenMeteoAirQuality([("TH1001", 13.7563, 100.5018), ("TH1002", 13.80, 100.55)])
+    assert adapter.cells == [(13.6, 100.4)]
+    records = adapter.parse([[raw]], datetime(2026, 10, 22, 3, 0, tzinfo=BANGKOK))
+    assert [r.extra["area_code"] for r in records] == ["TH1001", "TH1002"] and records[0].value == records[1].value

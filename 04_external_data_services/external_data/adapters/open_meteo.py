@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
@@ -53,6 +53,77 @@ class OpenMeteoForecast(Adapter):
                         attribution=self.attribution,
                     )
                 )
+        return records
+
+
+class OpenMeteoAirQuality(Adapter):
+    """CAMS PM2.5 forecast for many points (district centres), averaged over the next 24 hours.
+
+    Open-Meteo takes many coordinates in one call but counts each one against the free quota
+    (600 a minute, 10,000 a day, non-commercial). All 928 districts at once got 429 on 2026-10-22, so
+    points are snapped to the CAMS global grid (0.4°): 306 cells cover every district.
+    """
+
+    name = "open_meteo_air_quality"
+    attribution = "Air quality data by Open-Meteo.com / CAMS (CC BY 4.0)"
+    base_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+    grid_degrees = 0.4
+    batch_size = 100
+    timeout_seconds = 60.0
+
+    def __init__(self, points: list[tuple[str, float, float]]):
+        """points: (area_code, lat, lon)."""
+        self.points = points
+        g = self.grid_degrees
+        self.cell_of = [(round(round(lat / g) * g, 4), round(round(lon / g) * g, 4)) for _, lat, lon in points]
+        self.cells = list(dict.fromkeys(self.cell_of))
+
+    async def fetch(self, client: httpx.AsyncClient) -> Any:
+        batches = []
+        for start in range(0, len(self.cells), self.batch_size):
+            batch = self.cells[start:start + self.batch_size]
+            params = {
+                "latitude": ",".join(str(lat) for lat, _ in batch),
+                "longitude": ",".join(str(lon) for _, lon in batch),
+                "hourly": "pm2_5",
+                "forecast_days": 2,
+                "timezone": "Asia/Bangkok",
+            }
+            response = await client.get(self.base_url, params=params, timeout=self.timeout_seconds)
+            response.raise_for_status()
+            body = response.json()
+            # One coordinate returns an object, several return a list in the same order.
+            batches.append(body if isinstance(body, list) else [body])
+        return batches
+
+    def parse(self, raw: Any, fetched_at: datetime) -> list[SourceRecord]:
+        start = fetched_at.replace(minute=0, second=0, microsecond=0)
+        end = start + timedelta(hours=24)
+        per_cell = {}
+        for cell, loc in zip(self.cells, (loc for batch in raw for loc in batch)):
+            hourly = loc["hourly"]
+            per_cell[cell] = [v for t, v in zip(hourly["time"], hourly["pm2_5"])
+                              if v is not None and start <= datetime.fromisoformat(t).replace(tzinfo=BANGKOK) < end]
+        records = []
+        for (code, lat, lon), cell in zip(self.points, self.cell_of):
+            values = per_cell.get(cell)
+            if not values:
+                continue
+            records.append(
+                SourceRecord(
+                    source=self.name,
+                    variable="pm25_model_24h",
+                    value=round(sum(values) / len(values), 1),
+                    unit="µg/m³",
+                    lat=lat,
+                    lon=lon,
+                    issued_at=fetched_at,
+                    valid_time=fetched_at,
+                    fetched_at=fetched_at,
+                    attribution=self.attribution,
+                    extra={"area_code": code, "max_1h": max(values)},
+                )
+            )
         return records
 
 

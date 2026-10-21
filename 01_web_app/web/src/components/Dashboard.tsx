@@ -21,6 +21,7 @@ const hazardDescriptions: Record<Hazard, string> = {
   rain_storm: "ปริมาณฝนและสภาพอากาศรายพื้นที่",
   fire: "จุดความร้อนและโอกาสเกิดไฟในพื้นที่",
   drought: "ความแห้งแล้งและความสมบูรณ์ของพืชพรรณ",
+  air_quality: "ค่าฝุ่น PM2.5 เฉลี่ย 24 ชม. จากสถานีวัดและแบบจำลอง",
 };
 
 function formatTime(iso: string | null | undefined) {

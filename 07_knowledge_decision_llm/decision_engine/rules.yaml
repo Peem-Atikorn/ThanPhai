@@ -1,6 +1,6 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.10.5"
+version: "2026.10.22"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
@@ -101,6 +101,27 @@ overrides:
       variable: hotspots_24h
       op: ">="
       threshold: 3
+      level: WATCH
+  air_quality:
+    # PM2.5 24-hour average, Pollution Control Department bands (since 2023-06-01): 37.6–75 "starts to
+    # affect health" (orange), >= 75.1 "affects health" (red). PCD has no higher band, so no CRITICAL rule.
+    - id: PM25_UNHEALTHY
+      variable: pm25_24h
+      op: ">="
+      threshold: 75.1
+      level: WARNING
+    - id: PM25_STARTS_AFFECTING
+      variable: pm25_24h
+      op: ">="
+      threshold: 37.6
+      level: WATCH
+    # CAMS model forecast (Open-Meteo), mean of the next 24 h at the district centre. HazardService passes it
+    # only for districts without an Air4Thai station. Model alone gives at most WATCH until it is checked
+    # against the stations.
+    - id: PM25_MODEL_STARTS_AFFECTING
+      variable: pm25_model_24h
+      op: ">="
+      threshold: 37.6
       level: WATCH
 
 confidence:

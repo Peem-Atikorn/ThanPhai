@@ -169,6 +169,14 @@ Round 7 (dams, 2026-10-19):
 71. API-hammering check: idle page = 3 requests per load (layer, dams, rivers), then nothing until the 10-min refresh. On-demand graphs/histories now share one upstream call per key while loading and remember a ThaiWater failure for 60 s (repeated clicks no longer re-call it).
 72. Bug: each auto-refresh blanked the map for a moment (layer reset to null while loading); the last layer of the same hazard stays until the new one arrives.
 
+### Round 10 — PM2.5 (branch `feature/peem/all-pm25`)
+73. New hazard `air_quality` (5th tab "ฝุ่น PM2.5"). Air4Thai (PCD) 24-hour PM2.5 at ~170 stations, worst station per district;
+    rules use PCD bands: >= 37.6 WATCH, >= 75.1 WARNING (PCD has no higher band, so no CRITICAL). Readings older than 6 h are dropped (27 of 170 on 2026-10-22 03:00).
+74. Districts without a station (815 of 928) use the Open-Meteo CAMS forecast (mean of the next 24 h); the model alone gives at most WATCH. Refreshed every 6 h.
+75. Bug found live: all 928 district points in one go got Open-Meteo 429 (600/min). Points snap to the 0.4° CAMS grid: 306 calls per refresh.
+76. Bug found live: Python cannot verify air4thai.pcd.go.th (the server sends Sectigo intermediates for a Let's Encrypt certificate). The two public Let's Encrypt intermediates are bundled in the adapter; verification stays on.
+77. Agent: "ฝุ่น", "pm2.5", "หมอกควัน", "คุณภาพอากาศ" are air-quality questions now (they were fire); answers give the station or model value and N95 advice.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

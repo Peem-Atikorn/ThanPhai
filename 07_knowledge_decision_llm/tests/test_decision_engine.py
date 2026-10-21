@@ -110,3 +110,17 @@ def test_none_observation_is_ignored():
 
 def test_rules_version_is_reported():
     assert decide(model_level=L.WATCH).rules_version == engine.version
+
+
+@pytest.mark.parametrize(("pm25", "expected"), [(15.0, L.NORMAL), (37.5, L.NORMAL), (37.6, L.WATCH), (75.0, L.WATCH), (75.1, L.WARNING), (300.0, L.WARNING)])
+def test_pm25_pcd_bands(pm25, expected):
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_24h": pm25}).level == expected
+
+
+def test_pm25_model_alone_gives_at_most_watch():
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_model_24h": 120.0}).level == L.WATCH
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_model_24h": 20.0}).level == L.NORMAL
+
+
+def test_pm25_without_any_value_is_no_data():
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_24h": None, "pm25_model_24h": None}).level is None
