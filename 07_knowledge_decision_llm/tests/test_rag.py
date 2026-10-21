@@ -105,10 +105,13 @@ def test_team_recommendations_not_under_official_citation():
     assert "ทีมทันภัย" not in parts[0]
 
 
-def test_all_hazard_passages_are_not_borrowed_from_other_chapters():
-    for hazard in ("flood", "rain_storm", "fire", "drought"):
-        for p in get_disaster_guidance(hazard, alert_level="CRITICAL", query="ต้องเตรียมตัวอย่างไร"):
-            assert p.id != "ddpm-gas-valve-shutoff"
+CHAPTER_PAGES = {"flood": range(10, 21), "rain_storm": range(31, 39), "all": range(4, 7)}
+
+
+def test_official_passages_cite_pages_from_their_own_chapter():
+    for p in DISASTER_KNOWLEDGE_BASE:
+        if p.citation:
+            assert set(p.pages) <= set(CHAPTER_PAGES[p.hazard]), f"{p.id} cites pages outside chapter {p.hazard}"
 
 
 def test_retriever_filter_by_hazard():

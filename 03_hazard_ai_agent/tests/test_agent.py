@@ -4,6 +4,7 @@ import pytest
 
 from geo_integration import Area, Gazetteer
 from hazard_agent import HazardAgent, understand
+from hazard_agent.agent import HAZARD_TH, PREPARE_TH
 from hazard_agent.understanding import detect_hazards, detect_window
 from thanphai_shared import HazardType
 
@@ -208,6 +209,7 @@ def test_prepare_fire_includes_prepare_th():
     assert answer.intent == "prepare"
     # Fire advice must include items from PREPARE_TH
     assert any(step in answer.text for step in ["งดเผาในที่โล่ง", "หน้ากาก N95", "1362"])
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
     assert not any("แหล่ง" in line and "ปภ." in line for line in answer.text.splitlines())
 
 
@@ -216,6 +218,7 @@ def test_prepare_drought_includes_prepare_th_and_no_gas_valve():
     assert answer.intent == "prepare"
     # Drought advice must include items from PREPARE_TH
     assert any(step in answer.text for step in ["กักเก็บน้ำสำรอง", "ใช้น้ำอย่างประหยัด", "วางแผนการเพาะปลูก"])
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
     # Drought advice must not contain gas valve shutoff
     assert "วาล์วก๊าซ" not in answer.text
     assert "ท่อแก๊ส" not in answer.text
@@ -227,7 +230,15 @@ def test_prepare_without_rag_uses_fallback(monkeypatch):
     answer = agent.ask("ต้องเตรียมตัวยังไงถ้าน้ำจะท่วม", NOW)
     assert answer.intent == "prepare"
     assert "ยกของมีค่า" in answer.text
-    assert "ยังไม่มีคู่มือราชการในระบบสำหรับภัยนี้ ข้อแนะนำข้างต้นเป็นคำแนะนำทั่วไปของทีมทันภัย" in answer.text
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+
+
+def test_prepare_all_hazards_never_lists_team_steps_under_ddpm_citation():
+    text = agent.ask("อำเภอเสนา ต้องเตรียมตัวอย่างไร", NOW).text
+    for hazard in ("drought", "fire"):
+        block = text.split(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard]}:")[1].split("การเตรียมพร้อมรับ")[0]
+        first_team_step = PREPARE_TH[hazard][0]
+        assert block.index("คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):") < block.index(first_team_step)
 
 
 def test_explainer_rewrites_and_keeps_facts():

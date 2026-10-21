@@ -15,13 +15,8 @@ from thanphai_shared import HazardType
 
 log = logging.getLogger("agent")
 
-try:
-    from decision_engine.rag import get_disaster_guidance
-    from decision_engine.rag.models import format_page_ranges
-except ImportError as _err:
-    get_disaster_guidance = None
-    format_page_ranges = None
-    log.warning("decision_engine.rag not available: %s", _err)
+from decision_engine.rag import get_disaster_guidance
+from decision_engine.rag.models import format_page_ranges
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
 HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า"}
@@ -348,7 +343,7 @@ class HazardAgent:
         for hazard in u.hazards:
             lines.append(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard.value]}:")
             steps = []
-            team_steps = []
+            official, team = [], []
             source_citation = None
             if get_disaster_guidance is not None:
                 actual_level = None
@@ -357,31 +352,25 @@ class HazardAgent:
                         actual_level = ev.get("level") or ev.get("alert_level")
                         break
                 passages = get_disaster_guidance(hazard=hazard.value, alert_level=actual_level, query=question, top_k=2)
-                if passages:
-                    official = [p for p in passages if p.citation]
-                    team = [p for p in passages if not p.citation]
-                    if actual_level:
-                        official.sort(key=lambda p: (
-                            0 if p.alert_levels == [actual_level.upper()] else (
-                                1 if actual_level.upper() in [l.upper() for l in p.alert_levels] else 2
-                            )
-                        ))
-                    steps = list(dict.fromkeys(s for p in official for s in p.procedure_steps))
-                    team_steps = list(dict.fromkeys(s for p in team for s in p.procedure_steps))
-                    if not any(p.hazard == hazard.value for p in official):
-                        # ยังไม่มี passage ของภัยนี้: PREPARE_TH เป็นคำแนะนำของทีม ห้ามแสดงใต้ citation ของ ปภ.
-                        team_steps = list(dict.fromkeys([*PREPARE_TH.get(hazard.value, []), *team_steps]))
+                official = [p for p in passages if p.citation]
+                team = [p for p in passages if not p.citation]
+                if actual_level:
+                    official.sort(key=lambda p: (
+                        0 if p.alert_levels == [actual_level.upper()] else (
+                            1 if actual_level.upper() in [l.upper() for l in p.alert_levels] else 2
+                        )
+                    ))
+                steps = list(dict.fromkeys(s for p in official for s in p.procedure_steps))
+                by_doc: dict[str, list[int]] = {}
+                for p in official:
+                    by_doc.setdefault(f"{p.authority} {p.title}", []).extend(p.pages)
+                source_citation = " · ".join(f"[{doc} หน้า {format_page_ranges(pages)}]" for doc, pages in by_doc.items()) if by_doc else None
 
-                    by_doc: dict[str, list[int]] = {}
-                    for p in official:
-                        by_doc.setdefault(f"{p.authority} {p.title}", []).extend(p.pages)
-                    if format_page_ranges is not None:
-                        source_citation = " · ".join(f"[{doc} หน้า {format_page_ranges(pages)}]" for doc, pages in by_doc.items()) if by_doc else None
-                    else:
-                        source_citation = " · ".join(f"[{doc}]" for doc in by_doc) if by_doc else None
+            team_steps = list(dict.fromkeys(s for p in team for s in p.procedure_steps))
+            if not any(p.hazard == hazard.value for p in official):
+                # ยังไม่มี passage ของภัยนี้: PREPARE_TH เป็นคำแนะนำของทีมเสมอ
+                team_steps = list(dict.fromkeys([*PREPARE_TH.get(hazard.value, []), *team_steps]))
 
-            if not steps and not team_steps:
-                steps = PREPARE_TH.get(hazard.value, [])
             if steps:
                 lines.extend(f"  - {step}" for step in steps)
                 if source_citation:
@@ -389,6 +378,4 @@ class HazardAgent:
             if team_steps:
                 lines.append("  คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
                 lines.extend(f"  - {step}" for step in team_steps)
-        if not any("แหล่งอ้างอิง:" in line for line in lines):
-            lines.append("ยังไม่มีคู่มือราชการในระบบสำหรับภัยนี้ ข้อแนะนำข้างต้นเป็นคำแนะนำทั่วไปของทีมทันภัย")
         return AgentAnswer("\n".join(lines), "prepare", None, [h.value for h in u.hazards], evidence, notes=u.notes)
