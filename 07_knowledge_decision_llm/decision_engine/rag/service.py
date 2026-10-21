@@ -3,21 +3,21 @@
 from typing import Optional
 
 from decision_engine.rag.models import DisasterPassage
-from decision_engine.rag.retriever import HybridDisasterRetriever
+from decision_engine.rag.retriever import DisasterRetriever
 
-_GLOBAL_RETRIEVER: Optional[HybridDisasterRetriever] = None
+_GLOBAL_RETRIEVER: Optional[DisasterRetriever] = None
 
 
-def get_default_retriever() -> HybridDisasterRetriever:
+def get_default_retriever() -> DisasterRetriever:
     global _GLOBAL_RETRIEVER
     if _GLOBAL_RETRIEVER is None:
-        _GLOBAL_RETRIEVER = HybridDisasterRetriever()
+        _GLOBAL_RETRIEVER = DisasterRetriever()
     return _GLOBAL_RETRIEVER
 
 
 def get_disaster_guidance(
     hazard: str,
-    alert_level: str = "WARNING",
+    alert_level: Optional[str] = None,
     query: str = "",
     top_k: int = 2,
 ) -> list[DisasterPassage]:

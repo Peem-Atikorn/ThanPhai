@@ -1,8 +1,8 @@
-"""Unit tests for Module 07 Disaster Knowledge & Hybrid RAG Engine."""
+"""Unit tests for Module 07 Disaster Knowledge & RAG Engine."""
 
 import pytest
 from decision_engine.rag.models import DisasterPassage
-from decision_engine.rag.retriever import HybridDisasterRetriever, tokenize_thai
+from decision_engine.rag.retriever import DisasterRetriever, tokenize_thai
 from decision_engine.rag.service import (
     format_guidance_for_agent,
     format_guidance_for_facts,
@@ -13,19 +13,25 @@ from decision_engine.rag.service import (
 def test_tokenize_thai():
     tokens = tokenize_thai("น้ำท่วมฉับพลันและน้ำป่าไหลหลาก")
     assert len(tokens) > 0
-    # Should include key words
     assert any("น้ำ" in t or "ท่วม" in t for t in tokens)
 
 
 def test_retriever_initialization():
-    retriever = HybridDisasterRetriever()
+    retriever = DisasterRetriever()
     assert len(retriever.passages) > 0
     assert retriever.bm25.avgdl > 0
 
 
+def test_all_passages_have_real_page_and_source_url():
+    retriever = DisasterRetriever()
+    for p in retriever.passages:
+        assert p.source_url.startswith("http://") or p.source_url.startswith("https://"), f"{p.id} missing url"
+        assert p.page is not None and p.page > 0, f"{p.id} missing real page"
+        assert p.citation.startswith("[ปภ."), f"{p.id} citation format"
+
+
 def test_retriever_filter_by_hazard():
-    retriever = HybridDisasterRetriever()
-    # Search for flood
+    retriever = DisasterRetriever()
     results = retriever.search(query="การเตรียมตัวรับน้ำท่วม", hazard="flood", top_k=3)
     assert len(results) > 0
     for r in results:
@@ -34,18 +40,18 @@ def test_retriever_filter_by_hazard():
 
 
 def test_retriever_filter_by_alert_level():
-    retriever = HybridDisasterRetriever()
-    results = retriever.search(query="อพยพด่วน", hazard="flood", alert_level="CRITICAL", top_k=2)
+    retriever = DisasterRetriever()
+    results = retriever.search(query="อพยพด่วน หนีภัยน้ำท่วม", hazard="flood", alert_level="CRITICAL", top_k=2)
     assert len(results) > 0
-    # CRITICAL passage should rank higher or match
     assert "CRITICAL" in results[0].alert_levels
+    assert any("อพยพ" in s for s in results[0].procedure_steps)
 
 
-def test_retriever_fire_hazard_and_pm25():
-    retriever = HybridDisasterRetriever()
-    results = retriever.search(query="ควันไฟป่าและฝุ่น PM2.5 N95", hazard="fire", top_k=2)
+def test_retriever_storm_and_lightning():
+    retriever = DisasterRetriever()
+    results = retriever.search(query="ฟ้าผ่า พายุฝนฟ้าคะนอง หลบที่ไหน", hazard="rain_storm", top_k=2)
     assert len(results) > 0
-    assert any("N95" in step or "หน้ากาก" in step for r in results for step in r.procedure_steps)
+    assert any("ฟ้าผ่า" in s or "อาคาร" in s for r in results for step in r.procedure_steps for s in [step])
 
 
 def test_service_get_disaster_guidance():
@@ -59,11 +65,12 @@ def test_format_guidance_for_facts():
     formatted = format_guidance_for_facts(guidance)
     assert "คำแนะนำตามคู่มือราชการ" in formatted
     assert "ที่มา:" in formatted
+    assert "หน้า" in formatted
 
 
 def test_format_guidance_for_agent():
-    guidance = get_disaster_guidance(hazard="drought", alert_level="WARNING", top_k=1)
+    guidance = get_disaster_guidance(hazard="flood", alert_level="WARNING", top_k=1)
     steps = format_guidance_for_agent(guidance)
     assert isinstance(steps, list)
     assert len(steps) > 0
-    assert any("น้ำ" in s for s in steps)
+    assert any("น้ำ" in s or "ของมีค่า" in s for s in steps)

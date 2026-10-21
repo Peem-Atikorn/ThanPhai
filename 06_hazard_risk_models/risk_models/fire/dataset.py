@@ -17,7 +17,6 @@ HORIZON_DAYS = 7
 TARGET_MIN_HOTSPOTS = 3
 HISTORY_DAYS = 30
 FEATURES = ["c1", "c3", "c7", "c30", "frp7", "prov7", "doy_sin", "doy_cos", "clim"]
-EXTENDED_FEATURES = [*FEATURES, "ndvi", "rel_humidity"]
 
 
 def load_hotspots(folder: Path) -> pd.DataFrame:
@@ -76,13 +75,7 @@ def climatology(grid: DailyGrid, years: set[int]) -> np.ndarray:
     return clim
 
 
-def features(
-    grid: DailyGrid,
-    province_of: list[str],
-    clim: np.ndarray,
-    ndvi: np.ndarray | None = None,
-    humidity: np.ndarray | None = None,
-) -> dict[str, np.ndarray]:
+def features(grid: DailyGrid, province_of: list[str], clim: np.ndarray) -> dict[str, np.ndarray]:
     """Feature arrays shaped [days, amphoe]."""
     c7 = _window_sum(grid.counts, 7)
     provinces = sorted(set(province_of))
@@ -92,7 +85,7 @@ def features(
     doy = np.array([d.timetuple().tm_yday for d in grid.dates], dtype=np.float32)
     months = np.array([d.month for d in grid.dates])
     ones = np.ones(grid.counts.shape, dtype=np.float32)
-    feats = {
+    return {
         "c1": grid.counts,
         "c3": _window_sum(grid.counts, 3),
         "c7": c7,
@@ -103,11 +96,6 @@ def features(
         "doy_cos": ones * np.cos(2 * np.pi * doy / 365.25)[:, None],
         "clim": clim[months - 1],
     }
-    if ndvi is not None:
-        feats["ndvi"] = ndvi
-    if humidity is not None:
-        feats["rel_humidity"] = humidity
-    return feats
 
 
 def labels(grid: DailyGrid) -> np.ndarray:

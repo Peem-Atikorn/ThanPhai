@@ -4,6 +4,7 @@ The deterministic path below works without any LLM. An LLM can later replace `un
 questions and `compose` for wording, but it must keep the same evidence and alert levels.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Callable, Protocol
@@ -11,6 +12,14 @@ from typing import Callable, Protocol
 from geo_integration import Area, Gazetteer
 from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, understand
 from thanphai_shared import HazardType
+
+log = logging.getLogger("agent")
+
+try:
+    from decision_engine.rag import get_disaster_guidance
+except ImportError as _err:
+    get_disaster_guidance = None
+    log.warning("decision_engine.rag not available: %s", _err)
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
 HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า"}
@@ -160,7 +169,7 @@ class HazardAgent:
             text = "ทันภัยตอบได้เฉพาะเรื่องฝนหนัก/พายุ น้ำท่วม ภัยแล้ง และไฟป่าในประเทศไทยครับ ลองถามเช่น \"น้ำจะท่วมอำเภอบางบัวทองไหม\""
             return AgentAnswer(text, u.intent, None, [])
         if u.intent == "prepare" and not u.area:
-            return self._prepare(u, [])
+            return self._prepare(question, u, [])
         if not u.area:
             text = "ไม่พบชื่อพื้นที่ในคำถาม ช่วยระบุอำเภอหรือจังหวัด เช่น \"อำเภอเสนา จังหวัดพระนครศรีอยุธยา\" ครับ"
             return AgentAnswer(text, u.intent, None, [h.value for h in u.hazards], notes=u.notes)
@@ -329,23 +338,32 @@ class HazardAgent:
         answer = AgentAnswer("\n".join(lines), u.intent, area_info,
                              [h.value for h in u.hazards], assessments + related, sources, calls, u.notes)
         if u.intent == "prepare":
-            return self._prepare(u, answer.evidence, prefix=answer.text)
+            return self._prepare(question, u, answer.evidence, prefix=answer.text)
         return answer
 
-    def _prepare(self, u: Understanding, evidence: list[dict], prefix: str = "") -> AgentAnswer:
+    def _prepare(self, question: str, u: Understanding, evidence: list[dict], prefix: str = "") -> AgentAnswer:
         lines = [prefix] if prefix else []
         for hazard in u.hazards:
             lines.append(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard.value]}:")
             steps = None
             source_citation = None
-            try:
-                from decision_engine.rag import get_disaster_guidance
-                passages = get_disaster_guidance(hazard.value, top_k=1)
+            if get_disaster_guidance is not None:
+                actual_level = None
+                for ev in evidence:
+                    if ev.get("hazard") == hazard.value:
+                        actual_level = ev.get("level") or ev.get("alert_level")
+                        break
+                passages = get_disaster_guidance(hazard=hazard.value, alert_level=actual_level, query=question, top_k=2)
                 if passages:
-                    steps = passages[0].procedure_steps
-                    source_citation = passages[0].citation
-            except Exception:
-                pass
+                    steps = []
+                    citations = []
+                    for p in passages:
+                        for s in p.procedure_steps:
+                            if s not in steps:
+                                steps.append(s)
+                        if p.citation and p.citation not in citations:
+                            citations.append(p.citation)
+                    source_citation = " · ".join(citations) if citations else None
             if not steps:
                 steps = PREPARE_TH[hazard.value]
             lines.extend(f"  - {step}" for step in steps)

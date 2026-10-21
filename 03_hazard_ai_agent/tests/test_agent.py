@@ -165,6 +165,14 @@ def test_prepare_without_area():
     assert answer.intent == "prepare" and "ยกของมีค่า" in answer.text
 
 
+def test_prepare_evacuation_gets_critical_passage():
+    answer = agent.ask("น้ำท่วมสูงมาก ต้องอพยพอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    assert "อพยพ" in answer.text
+    assert "เด็กและคนชรา" in answer.text or "เส้นทางที่ปลอดภัย" in answer.text
+    assert "14" in answer.text
+
+
 def test_explainer_rewrites_and_keeps_facts():
     calls = []
 

@@ -1,40 +1,25 @@
-"""Hybrid Disaster Retriever: combines BM25 (PyThaiNLP tokenized) and Semantic search.
-
-Conforms to Module 07 specifications:
-- Thai tokenized BM25 keyword matching
-- Dense vector or semantic fallback
-- Reciprocal rank fusion (RRF)
-- Filtering by hazard, alert_level, and authority
-- Cites document_id, authority, title, and section
-"""
+"""Disaster Knowledge Retriever: BM25 keyword matching with PyThaiNLP tokenization and alert level prioritization."""
 
 import math
-import re
+from dataclasses import replace
 from typing import Optional
+
+from pythainlp.corpus import thai_stopwords
+from pythainlp.tokenize import word_tokenize
 
 from decision_engine.rag.knowledge_data import DISASTER_KNOWLEDGE_BASE
 from decision_engine.rag.models import DisasterPassage
 
-try:
-    from pythainlp.tokenize import word_tokenize
-    HAS_PYTHAINLP = True
-except ImportError:
-    HAS_PYTHAINLP = False
-
-# Fallback English/basic Thai tokenizer if pythainlp is missing
-_TOKEN_SPLIT = re.compile(r"[\s,;./\-\(\)]+")
+THAI_STOPWORDS = set(thai_stopwords())
 
 
 def tokenize_thai(text: str) -> list[str]:
-    """Tokenize Thai and English text into clean lowercase terms."""
+    """Tokenize Thai and English text into clean lowercase terms using PyThaiNLP."""
     if not text:
         return []
-    if HAS_PYTHAINLP:
-        tokens = word_tokenize(text.lower(), engine="newmm", keep_whitespace=False)
-    else:
-        tokens = [t.lower() for t in _TOKEN_SPLIT.split(text) if t]
-    # Filter punctuation and single whitespace characters
-    return [t.strip() for t in tokens if len(t.strip()) > 1]
+    tokens = word_tokenize(text.lower(), engine="newmm", keep_whitespace=False)
+    # Filter stopwords, punctuation, and single characters
+    return [t.strip() for t in tokens if len(t.strip()) > 1 and t.strip() not in THAI_STOPWORDS]
 
 
 class BM25Index:
@@ -66,7 +51,6 @@ class BM25Index:
         N = len(self.corpus)
         self.idf = {}
         for term, freq in self.df.items():
-            # Standard Lucene/BM25 formula
             self.idf[term] = math.log(1.0 + (N - freq + 0.5) / (freq + 0.5))
 
     def score(self, query_tokens: list[str]) -> list[float]:
@@ -88,8 +72,8 @@ class BM25Index:
         return scores
 
 
-class HybridDisasterRetriever:
-    """Disaster knowledge hybrid retriever combining BM25 keyword matching and metadata scoring."""
+class DisasterRetriever:
+    """Disaster knowledge retriever using BM25 keyword matching with alert level relevance boost."""
 
     def __init__(self, passages: Optional[list[DisasterPassage]] = None):
         self.passages = passages if passages is not None else list(DISASTER_KNOWLEDGE_BASE)
@@ -102,10 +86,10 @@ class HybridDisasterRetriever:
         hazard: Optional[str] = None,
         alert_level: Optional[str] = None,
         authority: Optional[str] = None,
-        top_k: int = 3,
+        top_k: int = 2,
         min_score: float = 0.05,
     ) -> list[DisasterPassage]:
-        """Search relevant disaster passages using hybrid filtering + BM25 + intent match."""
+        """Search relevant disaster passages using BM25 and alert level filtering."""
         query_tokens = tokenize_thai(query)
         bm25_scores = self.bm25.score(query_tokens)
 
@@ -128,35 +112,22 @@ class HybridDisasterRetriever:
                 if alert_level.upper() in [lvl.upper() for lvl in passage.alert_levels]:
                     level_boost = 0.35
                 else:
-                    # Penalty if requested alert level doesn't match
                     level_boost = -0.2
 
-            # 3. Final hybrid score
+            # 3. Final score
             kw_score = norm_bm25[idx] if norm_bm25 else 0.0
-            
-            # If query is empty, rely on hazard and alert level match
             if not query.strip():
                 final_score = 0.5 + max(0.0, level_boost)
             else:
                 final_score = (kw_score * 0.65) + (level_boost * 0.35)
 
             if final_score >= min_score or (not query.strip() and final_score > 0):
-                # Copy passage to attach individual score
-                res_passage = DisasterPassage(
-                    id=passage.id,
-                    document_id=passage.document_id,
-                    authority=passage.authority,
-                    hazard=passage.hazard,
-                    alert_levels=list(passage.alert_levels),
-                    title=passage.title,
-                    section=passage.section,
-                    procedure_steps=list(passage.procedure_steps),
-                    content=passage.content,
-                    citation=passage.citation,
-                    score=round(final_score, 4),
-                )
-                scored_candidates.append((final_score, res_passage))
+                scored_candidates.append((final_score, replace(passage, score=round(final_score, 4))))
 
         # Sort descending by score
         scored_candidates.sort(key=lambda x: x[0], reverse=True)
         return [c[1] for c in scored_candidates[:top_k]]
+
+
+# Backward compatibility alias
+HybridDisasterRetriever = DisasterRetriever
