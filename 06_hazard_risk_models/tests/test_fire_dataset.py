@@ -261,3 +261,42 @@ def test_live_predict_today_supports_extended_model():
     for v in res_explicit.values():
         assert 0.0 <= v["probability"] <= 1.0
         assert v["level"] in {"NORMAL", "WATCH", "WARNING"}
+
+
+def test_hazard_service_load_fire_model_safeguard():
+    from risk_models.fire.dataset import EXTENDED_FEATURES, FEATURES
+    from risk_models.fire.model import FireModel, fit
+
+    g = grid_from(np.zeros((40, 2)))
+    clim = np.full((12, 2), 0.5, dtype=np.float32)
+    table = to_table(g, features(g, ["TH10", "TH10"], clim), labels(g)).dropna(subset=["y"])
+    table.iloc[0, table.columns.get_loc("y")] = 1.0
+
+    # Extended model: extra features detected to trigger fallback to rules in hazard_service
+    table["ndvi"] = 0.5
+    table["rel_humidity"] = 60.0
+    model_ext = FireModel(
+        estimator=fit(table, EXTENDED_FEATURES),
+        watch_threshold=0.3,
+        warning_threshold=0.6,
+        trained_years=[2023],
+        version="ext-v1",
+        amphoe_codes=["TH1000", "TH1001"],
+        clim=clim,
+        feature_names=EXTENDED_FEATURES,
+    )
+    extra_ext = [n for n in getattr(model_ext, "feature_names", FEATURES) if n not in FEATURES]
+    assert extra_ext == ["ndvi", "rel_humidity"]
+
+    # Baseline model: no extra features, allowed to load in hazard_service
+    model_base = FireModel(
+        estimator=fit(table),
+        watch_threshold=0.3,
+        warning_threshold=0.6,
+        trained_years=[2023],
+        version="base-v1",
+        amphoe_codes=["TH1000", "TH1001"],
+        clim=clim,
+    )
+    extra_base = [n for n in getattr(model_base, "feature_names", FEATURES) if n not in FEATURES]
+    assert extra_base == []
