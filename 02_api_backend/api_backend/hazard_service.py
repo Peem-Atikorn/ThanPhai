@@ -16,7 +16,7 @@ import geopandas as gpd
 import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
-from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex, OpenMeteoMarine,
+from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsCyclones, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex, OpenMeteoMarine,
                                     ThaiWaterRain24h, ThaiWaterWaterLevel, TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings,
                                     UsgsEarthquakes, merge_quakes)
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
@@ -53,6 +53,9 @@ CROSS_BORDER_KM = 100
 # Earthquakes count for district levels for a day; the list endpoint shows a week.
 QUAKE_WINDOW = timedelta(hours=24)
 QUAKE_LIST_WINDOW = timedelta(days=7)
+# A cyclone this close (current position or forecast track) is mentioned on the district card even when its
+# wind areas do not reach the district.
+CYCLONE_NOTICE_KM = 800
 GRAPH_TTL = timedelta(minutes=15)
 DAM_HISTORY_TTL = timedelta(hours=6)
 FAILURE_TTL = timedelta(seconds=60)
@@ -68,6 +71,7 @@ SOURCES = {
     HazardType.HEAT: ["Open-Meteo (แบบจำลองพยากรณ์อากาศ)"],
     HazardType.EARTHQUAKE: ["กรมอุตุนิยมวิทยา (กองเฝ้าระวังแผ่นดินไหว)", "USGS"],
     HazardType.MARINE: ["Open-Meteo Marine (แบบจำลองคลื่น)"],
+    HazardType.TROPICAL_CYCLONE: ["GDACS (UN/EU)"],
 }
 # Open-Meteo forecasts per district, each on its own clock: (adapter, refresh interval, where to sample).
 # "centres" = district centres; "offshore" = points at sea next to each district (see geo_integration.coast).
@@ -227,6 +231,7 @@ class HazardService:
             "tmd_earthquakes": TmdEarthquakes(),
             "usgs_earthquakes": UsgsEarthquakes(days=7),
             "gdacs": GdacsEvents(),
+            "gdacs_cyclones": GdacsCyclones(),
         }
         async with httpx.AsyncClient(headers=USER_AGENT, follow_redirects=True) as client:
             results = await asyncio.gather(*(a.run(client) for a in adapters.values()), self._fetch_main_bundle(client),
@@ -284,6 +289,7 @@ class HazardService:
             HazardType.AIR_QUALITY: [] if records["air4thai"] is not None else ["Air4Thai"],
             HazardType.EARTHQUAKE: [name for name, source in (("TMD earthquakes", "tmd_earthquakes"), ("USGS", "usgs_earthquakes"))
                                     if records.get(source) is None],
+            HazardType.TROPICAL_CYCLONE: [] if records.get("gdacs_cyclones") is not None else ["GDACS"],
         }
         def build(source: str, hazard: HazardType, make):
             """One hazard's features. A failure here degrades that hazard only, never the whole refresh."""
@@ -314,6 +320,7 @@ class HazardService:
         fire = build("nasa_firms", HazardType.FIRE, lambda rows: fire_features(rows, self.amphoe_codes))
         pm25 = build("air4thai", HazardType.AIR_QUALITY, pm25_features)
         quakes = self._quake_shaking(records.get("tmd_earthquakes"), records.get("usgs_earthquakes"))
+        cyclones = self._cyclone_exposure(records.get("gdacs_cyclones"))
 
         def value(frame, column: str, code: str) -> float | None:
             return _clean(frame[column].get(code)) if frame is not None and not frame.empty else None
@@ -350,6 +357,10 @@ class HazardService:
                 HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
                 # Inland districts have no sea: no value, and the card says why.
                 HazardType.MARINE: {"wave_height_max_24h": marine[code].value if code in marine else None},
+                # 0 = GDACS works and no storm wind area reaches the district; None = GDACS failed.
+                HazardType.TROPICAL_CYCLONE: ({"cyclone_wind_kmh": None} if cyclones is None else
+                                              {k: v for k, v in cyclones.get(code, {"cyclone_wind_kmh": 0.0}).items()
+                                               if not k.startswith("_")}),
                 # No earthquake in the last day = not felt (MMI 1); None only when both feeds failed.
                 HazardType.EARTHQUAKE: ({"quake_mmi_24h": None} if quakes is None else
                                         {k: v for k, v in quakes[code].items() if not k.startswith("_")} if code in quakes
@@ -386,6 +397,8 @@ class HazardService:
                         notices.append(f"คลื่นสูงสุดคาดว่าราว {marine[code].extra['peak_time'][11:16]} น. (ค่าจากแบบจำลอง)")
                     elif self.grid_updated_at["marine_model"] is not None:
                         notices = ["อำเภอนี้ไม่ติดทะเล"]
+                if hazard == HazardType.TROPICAL_CYCLONE and cyclones and code in cyclones:
+                    notices.append(self._cyclone_notice(cyclones[code]))
                 if hazard == HazardType.EARTHQUAKE and quakes and code in quakes:
                     notices.append(self._quake_notice(quakes[code]))
                 if obs.get("pm25_model_24h") is not None:
@@ -470,6 +483,51 @@ class HazardService:
                          "_label": mmi_label_th(value), "_place": r.extra.get("place_th") or r.extra.get("place") or "",
                          "_time": r.observed_at}
         return out
+
+    def _cyclone_exposure(self, records: list | None) -> dict[str, dict] | None:
+        """Per district: strongest GDACS wind area over its centre and distance to the nearest track point now or ahead.
+
+        Districts with neither (no storm within CYCLONE_NOTICE_KM) are left out; None when GDACS failed.
+        """
+        from shapely.geometry import Point, shape
+        from shapely.prepared import prep
+
+        from risk_models.earthquake import distance_km
+
+        if records is None:
+            return None
+        now = datetime.now(timezone.utc)
+        areas = [(r.value, r.valid_time, r.extra["event"], prep(shape(r.extra["geometry"])))
+                 for r in records if r.variable == "cyclone_wind_area"]
+        # The latest analysed position (6 h old at most) and every forecast point.
+        track = [r for r in records if r.variable == "cyclone_track_point" and r.valid_time and r.valid_time >= now - timedelta(hours=6)]
+        out: dict[str, dict] = {}
+        for code in self.amphoe_codes:
+            area = self.gazetteer.by_code[code]
+            centre = Point(area.lon, area.lat)
+            hits = [(wind, when, event) for wind, when, event, geom in areas if geom.contains(centre)]
+            near = min(((distance_km(area.lat, area.lon, r.lat, r.lon), r) for r in track), default=None, key=lambda x: x[0])
+            if not hits and (near is None or near[0] > CYCLONE_NOTICE_KM):
+                continue
+            row: dict = {"cyclone_wind_kmh": 0.0}
+            if hits:
+                wind, when, event = max(hits, key=lambda h: (h[0], -(h[1].timestamp() if h[1] else 0)))
+                # Earliest time a wind area of that strength reaches the district.
+                first = min((h[1] for h in hits if h[0] == wind and h[1]), default=None)
+                row.update({"cyclone_wind_kmh": wind, "_event": event, "_time": first})
+            if near is not None:
+                row.update({"cyclone_distance_km": round(near[0]), "_near_event": near[1].extra["event"],
+                            "_near_time": near[1].valid_time})
+            out[code] = row
+        return out
+
+    @staticmethod
+    def _cyclone_notice(c: dict) -> str:
+        if c["cyclone_wind_kmh"] > 0:
+            when = f" ราว {c['_time'].astimezone(BANGKOK).strftime('%d/%m %H:%M')} น." if c.get("_time") else ""
+            return f"พายุ {c['_event']}: อยู่ในรัศมีลมแรง {c['cyclone_wind_kmh']:.0f} กม./ชม. ขึ้นไป{when} (GDACS รวมเส้นทางคาดการณ์)"
+        when = c["_near_time"].astimezone(BANGKOK).strftime("%d/%m %H:%M")
+        return f"พายุ {c['_near_event']} เข้าใกล้ที่สุดราว {c['cyclone_distance_km']} กม. ช่วง {when} น. (เส้นทางคาดการณ์ของ GDACS)"
 
     @staticmethod
     def _quake_notice(q: dict) -> str:

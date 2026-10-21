@@ -10,8 +10,8 @@ function when(iso: string) {
 
 const ALERT_CLASS: Record<string, string> = { Red: "level-CRITICAL", Orange: "level-WARNING", Green: "level-NORMAL" };
 
-/** Recent earthquakes (TMD + USGS) and GDACS events around South-East Asia, shown under the earthquake map. */
-export default function EventsPanel({ revision }: { revision: number }) {
+/** Recent earthquakes (TMD + USGS, unless `quakes` is false) and GDACS events around South-East Asia. */
+export default function EventsPanel({ revision, quakes: showQuakes = true }: { revision: number; quakes?: boolean }) {
   const [quakes, setQuakes] = useState<Earthquake[] | null>(null);
   const [events, setEvents] = useState<RegionalEvent[] | null>(null);
   const [error, setError] = useState(false);
@@ -27,8 +27,9 @@ export default function EventsPanel({ revision }: { revision: number }) {
   const felt = quakes?.filter((q) => q.magnitude >= 2.5).slice(0, 12) ?? [];
   return (
     <section className="media-panel events-panel" aria-label="แผ่นดินไหวและเหตุการณ์ในภูมิภาค">
-      <h3><Icon name="earthquake" />แผ่นดินไหว 7 วันล่าสุด</h3>
       {error && <p className="data-notice">โหลดรายการไม่สำเร็จ ลองใหม่ภายหลัง</p>}
+      {showQuakes && <>
+      <h3><Icon name="earthquake" />แผ่นดินไหว 7 วันล่าสุด</h3>
       {quakes && felt.length === 0 && <p className="source-note">ไม่มีแผ่นดินไหวขนาด 2.5 ขึ้นไปในภูมิภาค</p>}
       <ul className="event-list">
         {felt.map((q) => (
@@ -42,6 +43,7 @@ export default function EventsPanel({ revision }: { revision: number }) {
           </li>
         ))}
       </ul>
+      </>}
       <h3><Icon name="map" />เหตุการณ์ในภูมิภาค (GDACS)</h3>
       {events && events.length === 0 && <p className="source-note">ไม่มีเหตุการณ์ในเอเชียตะวันออกเฉียงใต้ช่วง 7 วันที่ผ่านมา</p>}
       <ul className="event-list">
@@ -56,7 +58,7 @@ export default function EventsPanel({ revision }: { revision: number }) {
           </li>
         ))}
       </ul>
-      <p className="source-note">ที่มา: กรมอุตุนิยมวิทยา, USGS, GDACS · ระดับสีของ GDACS คือระดับผลกระทบที่ GDACS ประเมิน ไม่ใช่ระดับเตือนภัยของทันภัย</p>
+      <p className="source-note">ที่มา: {showQuakes ? "กรมอุตุนิยมวิทยา, USGS, " : ""}GDACS · ระดับสีของ GDACS คือระดับผลกระทบที่ GDACS ประเมิน ไม่ใช่ระดับเตือนภัยของทันภัย</p>
     </section>
   );
 }

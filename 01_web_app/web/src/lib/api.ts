@@ -1,4 +1,4 @@
-export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine";
+export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
@@ -10,6 +10,7 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "heat", th: "ความร้อนจัด", ready: true },
   { id: "earthquake", th: "แผ่นดินไหว", ready: true },
   { id: "marine", th: "คลื่นลมแรง", ready: true },
+  { id: "tropical_cyclone", th: "พายุหมุนเขตร้อน", ready: true },
 ];
 
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
@@ -260,6 +261,10 @@ export function describeObservation(key: string, value: number | null): string |
       return `ห่างราว ${value.toFixed(0)} กม.`;
     case "wave_height_max_24h":
       return `คลื่นสูงสุดใน 24 ชม. ข้างหน้าราว ${value.toFixed(1)} ม.`;
+    case "cyclone_wind_kmh":
+      return value > 0 ? `อยู่ในรัศมีลมแรงของพายุ ${value.toFixed(0)} กม./ชม. ขึ้นไป (รวมเส้นทางคาดการณ์)` : "ไม่อยู่ในรัศมีลมแรงของพายุ";
+    case "cyclone_distance_km":
+      return `พายุเข้าใกล้ที่สุดราว ${value.toFixed(0)} กม.`;
     case "cross_border_hotspots_24h":
       return value > 0 ? `จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. ${value} จุด (24 ชม.)` : null;
     case "spi_3":

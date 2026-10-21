@@ -140,3 +140,8 @@ def test_earthquake_shaking_levels(mmi, expected):
 @pytest.mark.parametrize(("wave", "expected"), [(0.5, L.NORMAL), (1.9, L.NORMAL), (2.0, L.WATCH), (3.0, L.WARNING), (4.5, L.CRITICAL)])
 def test_wave_height_levels(wave, expected):
     assert decide(HazardType.MARINE, observations={"wave_height_max_24h": wave}).level == expected
+
+
+@pytest.mark.parametrize(("wind", "expected"), [(0.0, L.NORMAL), (63.0, L.WATCH), (93.0, L.WARNING), (119.0, L.CRITICAL)])
+def test_cyclone_wind_levels(wind, expected):
+    assert decide(HazardType.TROPICAL_CYCLONE, observations={"cyclone_wind_kmh": wind}).level == expected

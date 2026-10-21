@@ -15,7 +15,7 @@ from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, und
 from thanphai_shared import HazardType
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
-HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5", "heat": "ความร้อนจัด", "earthquake": "แผ่นดินไหว", "marine": "คลื่นลมแรง"}
+HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5", "heat": "ความร้อนจัด", "earthquake": "แผ่นดินไหว", "marine": "คลื่นลมแรง", "tropical_cyclone": "พายุหมุนเขตร้อน"}
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
@@ -32,6 +32,8 @@ PREPARE_TH = {
                    "ห้ามใช้ลิฟต์ ออกจากอาคารทางบันไดเมื่อหยุดสั่น", "ระวังอาฟเตอร์ช็อก และตรวจรอยร้าวของอาคารก่อนกลับเข้าไป"],
     "marine": ["เรือเล็กงดออกจากฝั่งเมื่อคลื่นสูง 2 เมตรขึ้นไป", "งดเล่นน้ำทะเลเมื่อมีธงแดงหรือคลื่นแรง",
                "ติดตามประกาศของกรมอุตุนิยมวิทยาและกรมเจ้าท่าก่อนออกเรือ"],
+    "tropical_cyclone": ["เก็บหรือยึดสิ่งของนอกบ้านที่ลมพัดปลิวได้ และเตรียมไฟฉาย น้ำดื่ม อาหาร", "เรือทุกขนาดงดออกจากฝั่งในเส้นทางพายุ",
+                         "ติดตามประกาศเตือนพายุของกรมอุตุนิยมวิทยาและคำสั่งอพยพของ ปภ."],
 }
 
 
@@ -166,6 +168,10 @@ def _reason(item: dict) -> str:
             parts.append("ไม่มีแผ่นดินไหวใน 24 ชม. ที่ผ่านมา")
     if obs.get("wave_height_max_24h") is not None:
         parts.append(f"คลื่นสูงสุดใน 24 ชม. ข้างหน้าราว {obs['wave_height_max_24h']:.1f} เมตร")
+    if obs.get("cyclone_wind_kmh"):
+        parts.append(f"อยู่ในรัศมีลมแรงของพายุ {obs['cyclone_wind_kmh']:.0f} กม./ชม. ขึ้นไป (รวมเส้นทางคาดการณ์)")
+    if obs.get("cyclone_distance_km") is not None:
+        parts.append(f"พายุหมุนเขตร้อนเข้าใกล้ที่สุดราว {obs['cyclone_distance_km']:.0f} กม.")
     if obs.get("cross_border_hotspots_24h"):
         parts.append(f"จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. {int(obs['cross_border_hotspots_24h'])} จุด (24 ชม.)")
     if obs.get("vci") is not None:

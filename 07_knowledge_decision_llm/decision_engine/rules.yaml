@@ -1,6 +1,6 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.10.22.4"
+version: "2026.10.22.5"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
@@ -178,6 +178,24 @@ overrides:
       variable: wave_height_max_24h
       op: ">="
       threshold: 2.0
+      level: WATCH
+  tropical_cyclone:
+    # Strongest GDACS wind area (current position or forecast track) that covers the district centre, km/h:
+    # 63 = tropical-storm force, 93 = 58 mph, 119 = typhoon force. Rain from weaker storms is handled by rain_storm.
+    - id: CYCLONE_TYPHOON_WINDS
+      variable: cyclone_wind_kmh
+      op: ">="
+      threshold: 119
+      level: CRITICAL
+    - id: CYCLONE_STRONG_WINDS
+      variable: cyclone_wind_kmh
+      op: ">="
+      threshold: 93
+      level: WARNING
+    - id: CYCLONE_STORM_WINDS
+      variable: cyclone_wind_kmh
+      op: ">="
+      threshold: 63
       level: WATCH
 
 confidence:

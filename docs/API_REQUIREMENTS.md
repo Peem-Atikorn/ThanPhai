@@ -223,7 +223,8 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Auth | None |
 | Quirks | Several types in one call stop at 100 events worldwide, so ThanPhai asks one type at a time. `fromdate` filters on the event's **start**, so long cyclones and floods need a 30-day look-back. No events = HTTP 204 with an empty body. Dates have no zone (UTC). |
 | Data | `eventtype` (EQ, TC, FL, ...), `name`, `alertlevel` (Green/Orange/Red = GDACS impact estimate, not a ThanPhai level), `country`, `severitydata`, `iscurrent`, report URL |
-| Used by | 02 (`/v1/regional-events`), later the tropical-cyclone hazard |
+| Geometry | `https://www.gdacs.org/gdacsapi/api/polygons/getgeometry?eventtype=TC&eventid=..&episodeid=..` (~0.5 MB): `featuretype` `WindRadii` polygons per forecast time with `Class` Poly_Green / Poly_Orange / Poly_Red (>= 39 / 58 / 74 mph) and `polygonlabel` "22/10 06:00"; `PointRadii` track points as small circles labelled "14/10 12:00 UTC"; `polygondate` = issue time |
+| Used by | 02 (`/v1/regional-events`, `tropical_cyclone` hazard) |
 
 ### 1.17 Open-Meteo Marine — wave forecast ✅
 

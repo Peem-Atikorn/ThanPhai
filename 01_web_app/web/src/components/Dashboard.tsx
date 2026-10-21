@@ -26,6 +26,7 @@ const hazardDescriptions: Record<Hazard, string> = {
   heat: "ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้าจากแบบจำลองพยากรณ์อากาศ",
   earthquake: "แรงสั่นที่ประเมินจากแผ่นดินไหวใน 24 ชม. ที่ผ่านมา (กรมอุตุฯ และ USGS)",
   marine: "ความสูงคลื่นสูงสุดใน 24 ชม. ข้างหน้า เฉพาะอำเภอติดทะเล (อำเภออื่นแสดงเป็นไม่มีข้อมูล)",
+  tropical_cyclone: "รัศมีลมแรงของพายุตามเส้นทางปัจจุบันและคาดการณ์ (GDACS)",
 };
 
 function formatTime(iso: string | null | undefined) {
@@ -385,7 +386,7 @@ export default function Dashboard() {
             {!!layer?.meta.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {layer.meta.degraded_services.join(", ")}</p>}
           </div>}
           {view === "hazard" && hazard === "rain_storm" && <div id="weather-images" className="media-anchor"><MediaPanel revision={revision} /></div>}
-          {view === "hazard" && hazard === "earthquake" && <EventsPanel revision={revision} />}
+          {view === "hazard" && (hazard === "earthquake" || hazard === "tropical_cyclone") && <EventsPanel revision={revision} quakes={hazard === "earthquake"} />}
         </section>
 
         <aside className="detail-sidebar" aria-label="ค้นหาและดูรายละเอียดพื้นที่">

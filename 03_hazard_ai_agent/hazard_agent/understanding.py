@@ -22,6 +22,8 @@ HAZARD_WORDS = {
     HazardType.EARTHQUAKE: ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "aftershock", "earthquake", "quake", "seismic"),
     HazardType.MARINE: ("คลื่นลมแรง", "คลื่นสูง", "คลื่นทะเล", "ออกเรือ", "เดินเรือ", "ลงเรือ", "ทะเล", "high waves",
                              "rough sea"),
+    HazardType.TROPICAL_CYCLONE: ("ไต้ฝุ่น", "พายุโซนร้อน", "ดีเปรสชัน", "พายุหมุน", "ไซโคลน", "typhoon", "cyclone",
+                                  "tropical storm"),
 }
 DAM_WORDS = ("เขื่อน", "อ่างเก็บน้ำ", "ปริมาณน้ำในอ่าง", "dam", "reservoir")
 # Questions about river flow are always river questions; river and bank words only when no area is named
@@ -68,6 +70,9 @@ def detect_hazards(text: str) -> list[HazardType]:
     # "ฝน" alone is rain; "ฝนทิ้งช่วง" is drought, not rain.
     if HazardType.DROUGHT in found and "ฝนทิ้งช่วง" in lowered and not any(w in lowered for w in ("ฝนตก", "ฝนหนัก", "พายุ")):
         found.remove(HazardType.RAIN_STORM)
+    # "ไต้ฝุ่น" (typhoon) contains "ฝุ่น" (dust): count dust only if it appears outside the word typhoon.
+    if HazardType.AIR_QUALITY in found and not any(w in lowered.replace("ไต้ฝุ่น", "") for w in HAZARD_WORDS[HazardType.AIR_QUALITY]):
+        found.remove(HazardType.AIR_QUALITY)
     return found
 
 

@@ -201,6 +201,13 @@ Round 7 (dams, 2026-10-19):
 86. Bug: offline API tests started real Open-Meteo jobs through `fresh_service()` (12 s pacing showed up as 11 s per test, 2:46 in all).
     Test services now mark the forecasts fresh; backend suite back to ~22 s and no network.
 
+### Round 14 — tropical cyclones (branch `feature/peem/all-tropical-cyclone`, stacked on all-marine)
+87. New hazard `tropical_cyclone`: for each current GDACS cyclone in 88–135°E, 11°S–30°N, its wind areas (`WindRadii`: Green >= 63, Orange >= 93,
+    Red >= 119 km/h, one set per forecast time) are tested against district centres; the strongest covering area sets the level (63 WATCH, 93 WARNING, 119 CRITICAL).
+    Districts within 800 km of the current position or forecast track also get the closest distance and time as a notice. Live 2026-10-22: CHAMPI-26 (red) is ~2,500 km away, all NORMAL.
+88. Bug: "ไต้ฝุ่น" (typhoon) contains "ฝุ่น" (dust), so typhoon questions were also read as PM2.5 questions. Dust words now count only outside "ไต้ฝุ่น".
+89. The earthquake tab's GDACS list also shows under the cyclone tab (without the earthquake list).
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

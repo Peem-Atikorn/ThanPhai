@@ -419,3 +419,32 @@ def test_offshore_points_cover_the_coast(base_service):
     phuket = next(a.code for a in base_service.gazetteer.resolve("อำเภอเมืองภูเก็ต"))
     chiang_mai = next(a.code for a in base_service.gazetteer.resolve("อำเภอเมืองเชียงใหม่"))
     assert phuket in codes and chiang_mai not in codes
+
+
+def test_cyclone_wind_area_over_a_district(base_service):
+    from shapely.geometry import box, mapping
+
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    sena = next(a.code for a in svc.gazetteer.resolve("อำเภอเสนา"))
+    area = svc.gazetteer.by_code[sena]
+    now = datetime.now(timezone.utc)
+
+    def wind(kmh, size, hours):
+        return SourceRecord(source="gdacs_cyclones", variable="cyclone_wind_area", value=kmh, unit="km/h",
+                            valid_time=now + timedelta(hours=hours), fetched_at=now, attribution="t",
+                            extra={"event": "TEST-26", "geometry": mapping(box(area.lon - size, area.lat - size, area.lon + size, area.lat + size))})
+
+    track = SourceRecord(source="gdacs_cyclones", variable="cyclone_track_point", value=None, unit="", lat=area.lat, lon=area.lon + 0.5,
+                         valid_time=now + timedelta(hours=12), fetched_at=now, attribution="t", extra={"event": "TEST-26", "forecast": True})
+    records = [wind(63.0, 3.0, 6), wind(93.0, 1.0, 12), wind(119.0, 0.1, 12)]
+    # The 119 km/h box is 0.1° around Sena's centre, the 93 one covers ~1°, the 63 one ~3°.
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": [],
+                                    "gdacs_cyclones": records + [track]}, [])
+    item = next(i for i in decisions[sena] if i["hazard"] == "tropical_cyclone")
+    assert item["level"] == "CRITICAL" and item["observations"]["cyclone_distance_km"] < 60
+    assert "TEST-26" in item["notices"][-1]
+    far = next(c for c in svc.amphoe_codes if c.startswith("TH96"))  # Narathiwat, ~900 km away
+    far_item = next(i for i in decisions[far] if i["hazard"] == "tropical_cyclone")
+    assert far_item["level"] == "NORMAL" and far_item["observations"] == {"cyclone_wind_kmh": 0.0}

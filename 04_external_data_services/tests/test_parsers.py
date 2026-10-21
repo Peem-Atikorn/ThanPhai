@@ -251,3 +251,17 @@ def test_open_meteo_marine_skips_land_cells():
     assert [r.extra["area_code"] for r in records] == ["TH8301"]
     waves = [v for v in raw[0]["hourly"]["wave_height"][:24] if v is not None]
     assert records[0].value == round(max(waves), 2) and records[0].unit == "m"
+
+
+def test_gdacs_cyclone_wind_areas_and_track():
+    from external_data.adapters.gdacs_cyclones import GdacsCyclones
+
+    records = GdacsCyclones().parse([load_json("gdacs_cyclone_geometry.json")], NOW)
+    wind = [r for r in records if r.variable == "cyclone_wind_area"]
+    track = [r for r in records if r.variable == "cyclone_track_point"]
+    assert sorted(r.value for r in wind) == [63.0, 93.0, 119.0]
+    assert all(r.valid_time == datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc) for r in wind)
+    assert wind[0].extra["geometry"]["type"] in ("Polygon", "MultiPolygon") and wind[0].extra["event"] == "CHAMPI-26"
+    assert [r.extra["forecast"] for r in track] == [False, False, True]  # issued 21/10 18:00 UTC; the last point is 26/10
+    assert track[0].valid_time == datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+    assert 9 < track[0].lat < 10.5 and 160 < track[0].lon < 162  # centre of the small circle
