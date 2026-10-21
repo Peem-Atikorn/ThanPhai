@@ -1,4 +1,4 @@
-export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat";
+export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
@@ -8,6 +8,7 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "drought", th: "ภัยแล้ง", ready: true },
   { id: "air_quality", th: "ฝุ่น PM2.5", ready: true },
   { id: "heat", th: "ความร้อนจัด", ready: true },
+  { id: "earthquake", th: "แผ่นดินไหว", ready: true },
 ];
 
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
@@ -133,6 +134,38 @@ export interface Media {
   data_updated_at: string | null;
 }
 
+export interface Earthquake {
+  id: string | null;
+  time: string;
+  magnitude: number;
+  lat: number;
+  lon: number;
+  depth_km: number | null;
+  place_th: string | null; // TMD: country or province
+  where_th: string | null; // TMD: direction and distance from a Thai district
+  place: string | null; // USGS, English
+  url: string | null;
+  tsunami: boolean;
+  source: string;
+}
+
+export interface RegionalEvent {
+  id: string;
+  type: string;
+  type_th: string;
+  name: string | null;
+  alert: "Green" | "Orange" | "Red" | null;
+  alert_th: string | null;
+  countries: string | null;
+  severity_text: string | null;
+  from: string | null;
+  to: string;
+  current: boolean;
+  lat: number;
+  lon: number;
+  url: string | null;
+}
+
 export interface AreaHazards {
   area: { code: string; level: string; name_th: string; name_en: string; parents: string[] };
   assessments: Assessment[];
@@ -169,6 +202,8 @@ export const api = {
   rivers: () => get<{ rivers: River[]; data_updated_at: string | null }>(`/v1/rivers`),
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
   media: () => get<Media>(`/v1/media`),
+  earthquakes: () => get<{ earthquakes: Earthquake[] }>(`/v1/earthquakes`),
+  regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),
   search: (q: string) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }[]>(`/v1/areas/search?q=${encodeURIComponent(q)}`),
   ask: async (question: string): Promise<AskAnswer> => {
@@ -216,6 +251,12 @@ export function describeObservation(key: string, value: number | null): string |
       return `แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า ${value.toFixed(1)} มคก./ลบ.ม.`;
     case "heat_index_max_24h":
       return `ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(1)}°C (เกณฑ์กรมอุตุฯ: ${tmdHeatLabel(value)})`;
+    case "quake_mmi_24h":
+      return value <= 1 ? "ไม่มีแผ่นดินไหวที่รู้สึกได้ใน 24 ชม." : `ประเมินแรงสั่นระดับ ${value.toFixed(0)} (มาตราเมอร์คัลลี)`;
+    case "quake_magnitude":
+      return `แผ่นดินไหวขนาด ${value.toFixed(1)}`;
+    case "quake_distance_km":
+      return `ห่างราว ${value.toFixed(0)} กม.`;
     case "cross_border_hotspots_24h":
       return value > 0 ? `จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. ${value} จุด (24 ชม.)` : null;
     case "spi_3":

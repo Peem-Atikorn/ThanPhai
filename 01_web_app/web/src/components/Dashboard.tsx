@@ -6,6 +6,7 @@ import { api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, des
 import Icon from "@/components/Icon";
 import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
+import EventsPanel from "@/components/EventsPanel";
 import { RiverDetail, RiverRow, riverTime, RiverSort, sortRivers } from "@/components/RiverPanel";
 
 const HazardMap = dynamic(() => import("@/components/HazardMap"), {
@@ -23,6 +24,7 @@ const hazardDescriptions: Record<Hazard, string> = {
   drought: "ความแห้งแล้งและความสมบูรณ์ของพืชพรรณ",
   air_quality: "ค่าฝุ่น PM2.5 เฉลี่ย 24 ชม. จากสถานีวัดและแบบจำลอง",
   heat: "ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้าจากแบบจำลองพยากรณ์อากาศ",
+  earthquake: "แรงสั่นที่ประเมินจากแผ่นดินไหวใน 24 ชม. ที่ผ่านมา (กรมอุตุฯ และ USGS)",
 };
 
 function formatTime(iso: string | null | undefined) {
@@ -382,6 +384,7 @@ export default function Dashboard() {
             {!!layer?.meta.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {layer.meta.degraded_services.join(", ")}</p>}
           </div>}
           {view === "hazard" && hazard === "rain_storm" && <div id="weather-images" className="media-anchor"><MediaPanel revision={revision} /></div>}
+          {view === "hazard" && hazard === "earthquake" && <EventsPanel revision={revision} />}
         </section>
 
         <aside className="detail-sidebar" aria-label="ค้นหาและดูรายละเอียดพื้นที่">

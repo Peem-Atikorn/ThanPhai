@@ -189,3 +189,54 @@ def test_open_meteo_heat_takes_peak_of_next_24_hours():
     expected = max(heat_index_c(t, rh) for t, rh in zip(h["temperature_2m"][:24], h["relative_humidity_2m"][:24]))
     assert records[0].variable == "heat_index_max_24h" and records[0].value == round(expected, 1)
     assert records[0].extra["peak_time"].startswith("2026-10-22T") and records[0].extra["area_code"] == "TH1001"
+
+
+def test_tmd_earthquakes_rss():
+    from external_data.adapters.earthquakes import TmdEarthquakes
+
+    raw = (FIXTURES / "tmd_earthquakes.xml").read_text(encoding="utf-8")
+    records = TmdEarthquakes().parse(raw, NOW)
+    assert len(records) == 3
+    first = records[0]
+    assert first.variable == "earthquake" and first.value == 3.3 and (first.lat, first.lon) == (14.936, 107.593)
+    assert first.observed_at == datetime(2026, 10, 21, 13, 57, 50, tzinfo=timezone.utc)
+    assert first.extra["depth_km"] == 10 and first.extra["place_th"].startswith("ประเทศเวียดนาม")
+    assert "โขงเจียม" in first.extra["where_th"] and first.station_id == "tmd:17270"
+
+
+def test_usgs_earthquakes_geojson():
+    from external_data.adapters.earthquakes import UsgsEarthquakes
+
+    records = UsgsEarthquakes().parse(load_json("usgs_earthquakes.json"), NOW)
+    assert [r.value for r in records] == [5.0, 4.6, 4.8, 4.9]
+    assert records[0].extra["depth_km"] == pytest.approx(75.876) and records[0].station_id.startswith("usgs:")
+    assert records[0].observed_at.tzinfo is not None
+
+
+def test_merge_quakes_prefers_tmd_for_the_same_event():
+    from external_data.adapters.earthquakes import merge_quakes
+    from thanphai_shared import SourceRecord
+
+    def quake(source, minute, lat, lon):
+        return SourceRecord(source=source, variable="earthquake", value=5.0, unit="magnitude", lat=lat, lon=lon,
+                            observed_at=datetime(2026, 10, 21, 10, minute, tzinfo=timezone.utc), fetched_at=NOW, attribution="t")
+
+    tmd = [quake("tmd", 0, 20.0, 99.0)]
+    usgs = [quake("usgs", 0, 20.3, 99.2), quake("usgs", 30, 20.0, 99.0), quake("usgs", 0, 25.0, 99.0)]
+    merged = merge_quakes(tmd, usgs)
+    # Same time and 40 km apart = the same quake; 30 min later or 550 km away are different quakes.
+    assert [r.source for r in merged] == ["tmd", "usgs", "usgs"] and merged[1].observed_at.minute == 30
+
+
+def test_gdacs_keeps_south_east_asia_only():
+    from external_data.adapters.gdacs import GdacsEvents
+
+    raw = load_json("gdacs_events.json")
+    records = GdacsEvents(days=60).parse(raw, datetime(2026, 10, 22, tzinfo=timezone.utc))
+    assert [r.extra["event_type"] for r in records] == ["TC", "EQ", "EQ"]
+    champi = records[0]
+    assert champi.extra["name"] == "Tropical Cyclone CHAMPI-26" and champi.extra["alert"] == "Red"
+    assert champi.extra["url"].startswith("https://www.gdacs.org/report.aspx")
+    # A 7-day window drops events that ended earlier and are no longer current.
+    later = GdacsEvents(days=7).parse(raw, datetime(2026, 12, 1, tzinfo=timezone.utc))
+    assert all(r.extra["current"] for r in later)

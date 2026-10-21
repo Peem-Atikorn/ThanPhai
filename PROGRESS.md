@@ -186,6 +186,14 @@ Round 7 (dams, 2026-10-19):
     WATCH at TMD's 33 made 837 of 928 districts yellow on 2026-10-22 (max 40.3 °C), so WATCH starts at NOAA "Danger" 39.4 °C; 42 WARNING, 52 CRITICAL.
 81. Open-Meteo grid adapters (PM2.5, heat) share one pacer: one batch of up to 100 points, then 12 s, so together they stay under 600 calls a minute.
 
+### Round 12 — earthquakes and GDACS (branch `feature/peem/all-earthquake`, stacked on all-heat)
+82. New hazard `earthquake`: TMD earthquake RSS (small local events with Thai place text) + USGS M >= 3.5 in 88–112°E, 2°S–30°N; the same event in both
+    (within 90 s and 100 km) keeps TMD's record. Expected shaking per district centre: Allen, Wald & Worden (2012) MMI, hypocentral form (OpenQuake coefficients).
+    Rules: MMI >= 4 WATCH, >= 6 WARNING, >= 7 CRITICAL, from quakes of the last 24 h. Limits: point source (large quakes underestimated near the fault), no soil effect (Bangkok clay).
+83. `/v1/earthquakes` (7 days, newest first) and `/v1/regional-events` (GDACS earthquakes, cyclones and floods in 88–135°E, 11°S–30°N); both listed under the earthquake map.
+84. Bug found live: GDACS stops at 100 events when several types are asked together (cyclones were cut off), and `fromdate` filters on the start date
+    (CHAMPI started before the window). Now one call per type, cyclones and floods looking back 30 days; an empty result is HTTP 204 with no body.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

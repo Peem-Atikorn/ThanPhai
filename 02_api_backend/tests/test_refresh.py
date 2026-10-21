@@ -362,3 +362,35 @@ def test_heat_level_comes_from_the_forecast_heat_index(base_service, monkeypatch
     assert "14:00" in heat["notices"][0]
     other = next(c for c in svc.amphoe_codes if c != sena)
     assert next(i for i in decisions[other] if i["hazard"] == "heat")["level"] is None  # no forecast yet = no data
+
+
+def test_earthquake_shaking_per_district(base_service):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    mae_sai = next(a.code for a in svc.gazetteer.resolve("อำเภอแม่สาย"))
+    hat_yai = next(a.code for a in svc.gazetteer.resolve("อำเภอหาดใหญ่"))
+    now = datetime.now(timezone.utc)
+    # M 6.0, 10 km deep, just across the border from Mae Sai, an hour ago; and an M 7 three days ago that no longer counts.
+    quake = SourceRecord(source="tmd_earthquakes", variable="earthquake", value=6.0, unit="magnitude", lat=20.5, lon=99.75,
+                         observed_at=now - timedelta(hours=1), fetched_at=now, attribution="t",
+                         extra={"depth_km": 10.0, "place_th": "ประเทศเมียนมา"})
+    old = SourceRecord(source="tmd_earthquakes", variable="earthquake", value=7.0, unit="magnitude", lat=7.0, lon=100.5,
+                       observed_at=now - timedelta(days=3), fetched_at=now, attribution="t", extra={"depth_km": 10.0})
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": [],
+                                    "tmd_earthquakes": [quake, old], "usgs_earthquakes": []}, [])
+    near = next(i for i in decisions[mae_sai] if i["hazard"] == "earthquake")
+    assert near["level"] in ("WARNING", "CRITICAL") and near["observations"]["quake_magnitude"] == 6.0
+    assert all(isinstance(v, (int, float)) for v in near["observations"].values())  # map layer and JSON need numbers
+    assert "ประเทศเมียนมา" in near["notices"][-1]
+    far = next(i for i in decisions[hat_yai] if i["hazard"] == "earthquake")
+    assert far["level"] == "NORMAL"  # 1,300 km away, and the M 7 near Hat Yai was 3 days ago
+    assert [q["magnitude"] for q in svc._last_quakes] == [6.0, 7.0]  # the week list keeps both
+
+
+def test_earthquake_is_no_data_when_both_feeds_fail(base_service):
+    svc = stale_copy(base_service)
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": [],
+                                    "tmd_earthquakes": RuntimeError("down"), "usgs_earthquakes": RuntimeError("down")}, [])
+    quake = next(i for i in decisions[svc.amphoe_codes[0]] if i["hazard"] == "earthquake")
+    assert quake["level"] is None and quake["notices"]

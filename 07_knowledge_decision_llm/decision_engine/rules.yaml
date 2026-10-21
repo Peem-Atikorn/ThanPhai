@@ -1,6 +1,6 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.10.22.2"
+version: "2026.10.22.3"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
@@ -142,6 +142,24 @@ overrides:
       variable: heat_index_max_24h
       op: ">="
       threshold: 39.4
+      level: WATCH
+  earthquake:
+    # Expected shaking (MMI, Allen et al. 2012) at the district centre from the strongest earthquake of the last
+    # 24 h (TMD + USGS). MMI 4 = felt clearly indoors, 6 = slight damage, 7 = moderate damage (USGS scale).
+    - id: QUAKE_MMI_DAMAGING
+      variable: quake_mmi_24h
+      op: ">="
+      threshold: 7.0
+      level: CRITICAL
+    - id: QUAKE_MMI_STRONG
+      variable: quake_mmi_24h
+      op: ">="
+      threshold: 6.0
+      level: WARNING
+    - id: QUAKE_MMI_FELT
+      variable: quake_mmi_24h
+      op: ">="
+      threshold: 4.0
       level: WATCH
 
 confidence:

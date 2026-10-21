@@ -217,6 +217,20 @@ async def river_graph(station_id: str, days: int = Query(3, ge=1, le=7)) -> dict
     return {"station_id": station_id, **graph}
 
 
+@app.get("/v1/earthquakes")
+async def earthquakes() -> dict:
+    """Earthquakes of the last 7 days around Thailand (TMD, plus USGS for events TMD does not list), newest first."""
+    svc = await fresh_service()
+    return {"earthquakes": svc.quakes, **meta(svc)}
+
+
+@app.get("/v1/regional-events")
+async def regional_events() -> dict:
+    """GDACS earthquakes, tropical cyclones and floods around South-East Asia (last 7 days), current and red first."""
+    svc = await fresh_service()
+    return {"events": svc.regional_events, **meta(svc)}
+
+
 @app.get("/v1/media")
 async def media() -> dict:
     """Latest rain radar, HII rain forecast, storm track and SWAN wave images (URLs on ThaiWater)."""

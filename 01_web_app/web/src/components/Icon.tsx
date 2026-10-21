@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export type IconName = "shield" | "map" | "search" | "pin" | "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "arrow" | "refresh" | "clock" | "info" | "close" | "chat" | "phone" | "dam" | "river" | "radar";
+export type IconName = "shield" | "map" | "search" | "pin" | "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "arrow" | "refresh" | "clock" | "info" | "close" | "chat" | "phone" | "dam" | "river" | "radar";
 const paths: Record<IconName, React.ReactNode> = {
   shield: <><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z" /><path d="m8 12 3 3 5-6" /></>,
   map: <><path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15M15 6v15" /></>,
@@ -14,6 +14,8 @@ const paths: Record<IconName, React.ReactNode> = {
   air_quality: <><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h8" /><path d="M18 6v.1M21 9v.1M14 20v.1M19 20v.1" /></>,
   // Thermometer with heat rays.
   heat: <><path d="M10 14.5V4a2 2 0 1 1 4 0v10.5a4 4 0 1 1-4 0Z" /><path d="M12 9v7M18 6l2-1M18 10h2.5M18 14l2 1" /></>,
+  // Seismograph trace over cracked ground.
+  earthquake: <><path d="M2 11h4l2-5 3 10 3-8 2 3h6" /><path d="M3 19h7l2-2 2 2h7" /></>,
   arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
   refresh: <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 6a8 8 0 0 1 13 3M5 15a8 8 0 0 0 13 3" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,

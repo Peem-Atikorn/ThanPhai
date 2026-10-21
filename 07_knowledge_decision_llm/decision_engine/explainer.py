@@ -18,11 +18,11 @@ log = logging.getLogger("explainer")
 LEVELS_TH = ("ปกติ", "เฝ้าระวัง", "เตือนภัย", "วิกฤต")
 LEVELS_EN = {"ปกติ": "NORMAL", "เฝ้าระวัง": "WATCH", "เตือนภัย": "WARNING", "วิกฤต": "CRITICAL"}
 # Words that mark a line as talking about one hazard (Thai matched as-is, English lower-cased).
-FACT_LINE = re.compile(r"^• (น้ำท่วม|ฝนหนัก/พายุ|ไฟป่า/ไฟหญ้า|ภัยแล้ง|ฝุ่น PM2\.5|ความร้อนจัด): (ปกติ|เฝ้าระวัง|เตือนภัย|วิกฤต)", re.M)
+FACT_LINE = re.compile(r"^• (น้ำท่วม|ฝนหนัก/พายุ|ไฟป่า/ไฟหญ้า|ภัยแล้ง|ฝุ่น PM2\.5|ความร้อนจัด|แผ่นดินไหว): (ปกติ|เฝ้าระวัง|เตือนภัย|วิกฤต)", re.M)
 QUESTION_TIME_NUMBER = re.compile(r"(\d+)\s*(?:วัน|ชม|ชั่วโมง|สัปดาห์|อาทิตย์|day|hour|week)", re.I)
 # Advice the LLM must not invent ("go to the temple", "you should evacuate").
 ADVICE_WORDS = ("อพยพ", "ควร", "ไปที่", "หลบไป", "evacuat", "should", "go to", "move to")
-FACT_HAZARD = {"น้ำท่วม": "flood", "ฝนหนัก/พายุ": "rain_storm", "ไฟป่า/ไฟหญ้า": "fire", "ภัยแล้ง": "drought", "ฝุ่น PM2.5": "air_quality", "ความร้อนจัด": "heat"}
+FACT_HAZARD = {"น้ำท่วม": "flood", "ฝนหนัก/พายุ": "rain_storm", "ไฟป่า/ไฟหญ้า": "fire", "ภัยแล้ง": "drought", "ฝุ่น PM2.5": "air_quality", "ความร้อนจัด": "heat", "แผ่นดินไหว": "earthquake"}
 # Forecast days, one line each: "• พยากรณ์ฝน 20/10: ปกติ — 0.7 มม."
 FORECAST_LINE = re.compile(r"^• พยากรณ์ฝน \S+: (ปกติ|เฝ้าระวัง|เตือนภัย|วิกฤต)", re.M)
 
@@ -63,6 +63,7 @@ HAZARD_WORDS = {
     "drought": ("ภัยแล้ง", "drought"),
     "air_quality": ("ฝุ่น", "pm2.5", "air quality"),
     "heat": ("ความร้อนจัด", "ดัชนีความร้อน", "heat index", "heat"),
+    "earthquake": ("แผ่นดินไหว", "earthquake"),
     # Longest keyword wins, so "พยากรณ์ฝน" is a forecast mention, not a rain one.
     "rain_forecast": ("พยากรณ์ฝน", "พยากรณ์", "rain forecast", "forecast"),
 }

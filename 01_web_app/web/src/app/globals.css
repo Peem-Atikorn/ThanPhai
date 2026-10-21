@@ -329,4 +329,12 @@ h2 { font-size: 17px; font-weight: 650; }
 .images-link:hover { background: var(--accent-soft); }
 .images-link svg { width: 16px; height: 16px; }
 .media-anchor { scroll-margin-top: 12px; }
+.events-panel h3 + .event-list, .events-panel .data-notice { margin-top: 10px; }
+.events-panel h3:not(:first-child) { margin-top: 18px; }
+.event-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.event-list li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.event-list li > div { display: grid; gap: 2px; min-width: 0; }
+.event-list small { color: var(--muted); font-size: 12px; }
+.event-list a { color: var(--brand); text-decoration: underline; }
+.event-mag { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; font-weight: 700; }
 @media (max-width: 520px) { .images-link { padding: 6px 9px; font-size: 11px; } }

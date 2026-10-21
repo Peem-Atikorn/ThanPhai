@@ -130,3 +130,8 @@ def test_pm25_without_any_value_is_no_data():
                                               (42.0, L.WARNING), (51.9, L.WARNING), (52.0, L.CRITICAL)])
 def test_heat_index_bands(hi, expected):
     assert decide(HazardType.HEAT, observations={"heat_index_max_24h": hi}).level == expected
+
+
+@pytest.mark.parametrize(("mmi", "expected"), [(1.0, L.NORMAL), (3.9, L.NORMAL), (4.0, L.WATCH), (6.0, L.WARNING), (7.2, L.CRITICAL)])
+def test_earthquake_shaking_levels(mmi, expected):
+    assert decide(HazardType.EARTHQUAKE, observations={"quake_mmi_24h": mmi}).level == expected

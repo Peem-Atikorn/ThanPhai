@@ -19,6 +19,7 @@ HAZARD_WORDS = {
                              "air quality", "smoke", "haze"),
     HazardType.HEAT: ("ร้อนจัด", "อากาศร้อน", "ร้อนมาก", "ดัชนีความร้อน", "ฮีตสโตรก", "ฮีทสโตรก", "ลมแดด", "heat stroke",
                       "heatstroke", "heat index", "heat wave", "heatwave"),
+    HazardType.EARTHQUAKE: ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "aftershock", "earthquake", "quake", "seismic"),
 }
 DAM_WORDS = ("เขื่อน", "อ่างเก็บน้ำ", "ปริมาณน้ำในอ่าง", "dam", "reservoir")
 # Questions about river flow are always river questions; river and bank words only when no area is named

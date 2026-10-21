@@ -16,6 +16,9 @@ Candidate sources for each hazard. **Every source must be checked before use:** 
 | Open-Meteo | Open-Meteo | Forecast, ERA5 history, GloFAS river discharge | Fallback forecast, training history, flood | No key; non-commercial free, 10,000 calls/day | ✅ live-tested 2026-10-19 |
 | Air4Thai | Pollution Control Department (กรมควบคุมมลพิษ) | PM2.5 and AQI at ~170 stations, hourly | Air quality | No key | ✅ live-tested 2026-10-22 |
 | Open-Meteo Air Quality | Open-Meteo / CAMS | PM2.5 forecast for any lat-lon | Air quality where there is no station | No key; each coordinate counts as a call | ✅ live-tested 2026-10-22 |
+| TMD earthquakes | กรมอุตุนิยมวิทยา (กองเฝ้าระวังแผ่นดินไหว) | Latest earthquakes, Thai place text | Earthquake | RSS, no key | ✅ live-tested 2026-10-22 |
+| USGS | U.S. Geological Survey | Earthquakes M >= 3.5 around Thailand | Earthquake | No key | ✅ live-tested 2026-10-22 |
+| GDACS | UN / European Commission | Regional earthquakes, cyclones, floods with impact alerts | Context, cyclones | No key | ✅ live-tested 2026-10-22 |
 | CHIRPS | UCSB Climate Hazards Center | Historical gridded rainfall | Drought (SPI) | File download, no key | ✅ reachable |
 | MODIS / Sentinel-2 | NASA / ESA (Copernicus) | NDVI vegetation index | Drought, fire | Free Earthdata / Copernicus login | 📄 need login |
 | SRTM / Copernicus DEM | NASA / ESA | Elevation | Flood features | Open download | 📄 not tested |

@@ -198,6 +198,33 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Use | Only for districts without an Air4Thai station; the model alone gives at most WATCH |
 | License | CC BY 4.0 — credit "Air quality data by Open-Meteo.com / CAMS" |
 
+### 1.14 TMD earthquakes — กองเฝ้าระวังแผ่นดินไหว ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://earthquake.tmd.go.th/feed/rss_tmd.xml` (latest ~10 events, RSS with `geo:` and `tmd:` namespaces) |
+| Auth | None |
+| Data | `geo:lat`, `geo:long`, `tmd:depth` (km), `tmd:magnitude`, `tmd:time` (UTC, "2026-10-21 13:57:50 UTC"), `title` (country/province, Thai + English), `comments` (direction and distance from a Thai district) |
+| Note | Lists small events near Thailand (M 1–3) that USGS does not |
+
+### 1.15 USGS earthquakes ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=..&minmagnitude=3.5&minlatitude=-2&maxlatitude=30&minlongitude=88&maxlongitude=112` |
+| Auth | None (public domain) |
+| Data | GeoJSON; `mag`, `time` (ms since epoch, UTC), `place`, `tsunami`, geometry `[lon, lat, depth_km]` |
+
+### 1.16 GDACS — UN/EU disaster alerts ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC&fromdate=..&todate=..&alertlevel=green;orange;red` |
+| Auth | None |
+| Quirks | Several types in one call stop at 100 events worldwide, so ThanPhai asks one type at a time. `fromdate` filters on the event's **start**, so long cyclones and floods need a 30-day look-back. No events = HTTP 204 with an empty body. Dates have no zone (UTC). |
+| Data | `eventtype` (EQ, TC, FL, ...), `name`, `alertlevel` (Green/Orange/Red = GDACS impact estimate, not a ThanPhai level), `country`, `severitydata`, `iscurrent`, report URL |
+| Used by | 02 (`/v1/regional-events`), later the tropical-cyclone hazard |
+
 ---
 
 ## 2. Map and location APIs
@@ -286,6 +313,8 @@ VAPID_PRIVATE_KEY=
 - Weather data by Open-Meteo.com (CC BY 4.0)
 - ข้อมูลคุณภาพอากาศ: กรมควบคุมมลพิษ (Air4Thai)
 - Air quality data by Open-Meteo.com / CAMS (CC BY 4.0)
+- ข้อมูลแผ่นดินไหว: กองเฝ้าระวังแผ่นดินไหว กรมอุตุนิยมวิทยา · Earthquake data: USGS
+- Disaster alerts: GDACS (UN / European Commission)
 - Rainfall: CHIRPS, UCSB Climate Hazards Center
 - Boundaries: OCHA HDX
 - Map data © OpenStreetMap contributors (if the OSM basemap is used)

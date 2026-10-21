@@ -16,8 +16,9 @@ import geopandas as gpd
 import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
-from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, OpenMeteoAirQuality, OpenMeteoHeatIndex, ThaiWaterRain24h,
-                                    ThaiWaterWaterLevel, TmdNwpDailyForecast, TmdWarnings)
+from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex,
+                                    ThaiWaterRain24h, ThaiWaterWaterLevel, TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings,
+                                    UsgsEarthquakes, merge_quakes)
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
@@ -49,6 +50,9 @@ MAX_PM25_AGE = timedelta(hours=6)
 # Fires in Myanmar, Laos and Cambodia within this distance of a district centre are shown with its PM2.5:
 # context for where the smoke may come from, not a rule input.
 CROSS_BORDER_KM = 100
+# Earthquakes count for district levels for a day; the list endpoint shows a week.
+QUAKE_WINDOW = timedelta(hours=24)
+QUAKE_LIST_WINDOW = timedelta(days=7)
 GRAPH_TTL = timedelta(minutes=15)
 DAM_HISTORY_TTL = timedelta(hours=6)
 FAILURE_TTL = timedelta(seconds=60)
@@ -62,6 +66,7 @@ SOURCES = {
     HazardType.DROUGHT: [],
     HazardType.AIR_QUALITY: ["กรมควบคุมมลพิษ (Air4Thai)"],
     HazardType.HEAT: ["Open-Meteo (แบบจำลองพยากรณ์อากาศ)"],
+    HazardType.EARTHQUAKE: ["กรมอุตุนิยมวิทยา (กองเฝ้าระวังแผ่นดินไหว)", "USGS"],
 }
 # Open-Meteo forecasts per district centre, each on its own clock: (adapter, refresh interval).
 # Each refresh costs ~306 calls of Open-Meteo's free 10,000 a day (see OpenMeteoGrid).
@@ -110,6 +115,8 @@ class HazardService:
         self.dams: list[dict] = []  # 35 large dams, refreshed with the live data
         self.rivers: list[dict] = []  # river stations with a flow gauge or over their bank
         self.media: dict | None = None  # radar, rain-forecast, storm and wave images
+        self.quakes: list[dict] = []  # TMD + USGS, last 7 days, newest first
+        self.regional_events: list[dict] = []  # GDACS events around South-East Asia
         self._graph_cache: dict[tuple, tuple[datetime, dict]] = {}
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._boundaries: dict[str, dict] = {}  # area outlines, read on first request
@@ -137,6 +144,7 @@ class HazardService:
         # GRID_MODELS results: name -> area code -> record (value and extra).
         self.grid: dict[str, dict] = {name: {} for name in GRID_MODELS}
         self.grid_updated_at: dict[str, datetime | None] = {name: None for name in GRID_MODELS}
+        self._last_quakes: list[dict] | None = None
         self._geometry = self._load_map_geometry()
 
     def _load_map_geometry(self) -> dict[str, dict]:
@@ -181,8 +189,13 @@ class HazardService:
                 self.rivers = self._river_rows(self.fresh_levels(levels))
             if media is not None and not isinstance(media, Exception):
                 self.media = media
+            gdacs = results.get("gdacs")
+            if gdacs is not None and not isinstance(gdacs, Exception):
+                self.regional_events = self._regional_rows(gdacs)
             # Swap everything at once so readers never see a half-updated state.
             self.decisions = decisions
+            if self._last_quakes is not None:
+                self.quakes = self._last_quakes
             if warnings is not None:
                 self.warnings = warnings  # keep the last good warnings if TMD failed this time
             # Merge, not replace: the forecast refresh writes its own entry on a different schedule.
@@ -207,6 +220,9 @@ class HazardService:
             # One regional download: hotspots in Thailand drive the fire rules, the rest is PM2.5 context.
             "nasa_firms": FirmsHotspots(bbox=REGION_BBOX),
             "air4thai": Air4ThaiPm25(),
+            "tmd_earthquakes": TmdEarthquakes(),
+            "usgs_earthquakes": UsgsEarthquakes(days=7),
+            "gdacs": GdacsEvents(),
         }
         async with httpx.AsyncClient(headers=USER_AGENT, follow_redirects=True) as client:
             results = await asyncio.gather(*(a.run(client) for a in adapters.values()), self._fetch_main_bundle(client),
@@ -262,6 +278,8 @@ class HazardService:
             HazardType.RAIN_STORM: [] if records["thaiwater_rain_24h"] is not None else ["ThaiWater rain"],
             HazardType.FIRE: [] if records["nasa_firms"] is not None else ["NASA FIRMS"],
             HazardType.AIR_QUALITY: [] if records["air4thai"] is not None else ["Air4Thai"],
+            HazardType.EARTHQUAKE: [name for name, source in (("TMD earthquakes", "tmd_earthquakes"), ("USGS", "usgs_earthquakes"))
+                                    if records.get(source) is None],
         }
         def build(source: str, hazard: HazardType, make):
             """One hazard's features. A failure here degrades that hazard only, never the whole refresh."""
@@ -291,6 +309,7 @@ class HazardService:
             records["nasa_firms"] = self._drop_static_records(records["nasa_firms"])
         fire = build("nasa_firms", HazardType.FIRE, lambda rows: fire_features(rows, self.amphoe_codes))
         pm25 = build("air4thai", HazardType.AIR_QUALITY, pm25_features)
+        quakes = self._quake_shaking(records.get("tmd_earthquakes"), records.get("usgs_earthquakes"))
 
         def value(frame, column: str, code: str) -> float | None:
             return _clean(frame[column].get(code)) if frame is not None and not frame.empty else None
@@ -324,6 +343,10 @@ class HazardService:
                                          "cross_border_hotspots_24h": (float(cross_border.get(code, 0))
                                                                        if records["nasa_firms"] is not None else None)},
                 HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
+                # No earthquake in the last day = not felt (MMI 1); None only when both feeds failed.
+                HazardType.EARTHQUAKE: ({"quake_mmi_24h": None} if quakes is None else
+                                        {k: v for k, v in quakes[code].items() if not k.startswith("_")} if code in quakes
+                                        else {"quake_mmi_24h": 1.0}),
             }
             items = []
             for hazard, obs in observations.items():
@@ -351,6 +374,8 @@ class HazardService:
                     peak = heat[code].extra
                     notices.append(f"ค่าคาดการณ์จากแบบจำลอง ช่วงร้อนสุด {peak['peak_time'][11:16]} น. "
                                    f"อุณหภูมิ {peak['temperature_c']:.0f}°C ความชื้น {peak['humidity_pct']:.0f}%")
+                if hazard == HazardType.EARTHQUAKE and quakes and code in quakes:
+                    notices.append(self._quake_notice(quakes[code]))
                 if obs.get("pm25_model_24h") is not None:
                     sources = ["Open-Meteo / CAMS (แบบจำลอง)"]
                     notices.append("ไม่มีสถานีวัดฝุ่นในอำเภอนี้ ใช้ค่าคาดการณ์จากแบบจำลองเฉลี่ย 24 ชม. ข้างหน้า")
@@ -397,6 +422,58 @@ class HazardService:
             self._drought = json.loads(path.read_text(encoding="utf-8"))
             self._drought_mtime = mtime
         return self._drought
+
+    def _quake_shaking(self, tmd: list | None, usgs: list | None) -> dict[str, dict] | None:
+        """Strongest expected shaking per district from the last day's earthquakes; None when both feeds failed.
+
+        Also keeps the week's merged list for /v1/earthquakes (swapped in by refresh()).
+        """
+        from risk_models.earthquake import mmi_label_th, shaking_at
+
+        self._last_quakes = None
+        if tmd is None and usgs is None:
+            return None
+        now = datetime.now(timezone.utc)
+        merged = sorted(merge_quakes(tmd or [], usgs or []), key=lambda r: r.observed_at, reverse=True)
+        week = [r for r in merged if now - r.observed_at <= QUAKE_LIST_WINDOW]
+        self._last_quakes = [{
+            "id": r.station_id, "time": r.observed_at.isoformat(), "magnitude": r.value, "lat": r.lat, "lon": r.lon,
+            "depth_km": r.extra.get("depth_km"), "place_th": r.extra.get("place_th"), "where_th": r.extra.get("where_th"),
+            "place": r.extra.get("place"), "url": r.extra.get("url"), "tsunami": r.extra.get("tsunami", False),
+            "source": "กรมอุตุนิยมวิทยา" if r.source == "tmd_earthquakes" else "USGS",
+        } for r in week]
+        recent = [r for r in week if now - r.observed_at <= QUAKE_WINDOW]
+        out: dict[str, dict] = {}
+        for code in self.amphoe_codes:
+            area = self.gazetteer.by_code[code]
+            best = None
+            for r in recent:
+                value, km = shaking_at(area.lat, area.lon, r.lat, r.lon, r.value, r.extra.get("depth_km"))
+                if best is None or value > best[0]:
+                    best = (value, km, r)
+            if best is None or best[0] < 2:
+                continue  # nothing felt here (MMI 1): no quake details, so far-away small quakes do not clutter answers
+            value, km, r = best
+            out[code] = {"quake_mmi_24h": round(value, 1), "quake_magnitude": r.value, "quake_distance_km": round(km),
+                         "_label": mmi_label_th(value), "_place": r.extra.get("place_th") or r.extra.get("place") or "",
+                         "_time": r.observed_at}
+        return out
+
+    @staticmethod
+    def _quake_notice(q: dict) -> str:
+        when = q["_time"].astimezone(BANGKOK).strftime("%d/%m %H:%M")
+        return (f"แผ่นดินไหวขนาด {q['quake_magnitude']:.1f} {q['_place']} ห่างราว {q['quake_distance_km']} กม. "
+                f"เมื่อ {when} น. ประเมินแรงสั่นที่นี่ระดับ {q['quake_mmi_24h']:.0f} ({q['_label']})")
+
+    @staticmethod
+    def _regional_rows(records) -> list[dict]:
+        rows = [{"id": r.station_id, "type": r.extra["event_type"], "type_th": r.extra["type_th"], "name": r.extra["name"],
+                 "alert": r.extra["alert"], "alert_th": r.extra["alert_th"], "countries": r.extra["countries"],
+                 "severity_text": r.extra["severity_text"], "from": r.extra["from"], "to": r.observed_at.isoformat(),
+                 "current": r.extra["current"], "lat": r.lat, "lon": r.lon, "url": r.extra["url"]} for r in records]
+        order = {"Red": 0, "Orange": 1, "Green": 2}
+        rows.sort(key=lambda e: e["to"], reverse=True)  # newest first within each group below
+        return sorted(rows, key=lambda e: (not e["current"], order.get(e["alert"], 3)))
 
     def _cross_border_counts(self, records: list) -> dict[str, int]:
         """Hotspots outside Thailand within CROSS_BORDER_KM of each district centre (districts with none are left out)."""
