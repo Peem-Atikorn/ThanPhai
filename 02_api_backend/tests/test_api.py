@@ -26,6 +26,8 @@ def client():
     svc.decisions[sena] = [item("flood", "CRITICAL", above_bank_m=2.11), item("fire", "NORMAL", hotspots_24h=0)]
     svc.warnings = [{"title": "ฝนตกหนักถึงหนักมากบริเวณประเทศไทย", "hazards": ["rain_storm", "flood"]}]
     svc.updated_at = datetime.now(timezone.utc)
+    # Fresh forecasts, so requests do not start real Open-Meteo jobs in the background.
+    svc.grid_updated_at = {name: svc.updated_at for name in svc.grid_updated_at}
     svc.source_status = {"thaiwater_waterlevel": {"ok": True}, "nasa_firms": {"ok": False}}
     main.service, main.agent = svc, HazardAgent(svc.gazetteer, svc)
     return TestClient(main.app), svc, sena

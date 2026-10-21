@@ -225,6 +225,15 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Data | `eventtype` (EQ, TC, FL, ...), `name`, `alertlevel` (Green/Orange/Red = GDACS impact estimate, not a ThanPhai level), `country`, `severitydata`, `iscurrent`, report URL |
 | Used by | 02 (`/v1/regional-events`), later the tropical-cyclone hazard |
 
+### 1.17 Open-Meteo Marine — wave forecast ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://marine-api.open-meteo.com/v1/marine?latitude=..&longitude=..&hourly=wave_height` (comma-separated coordinates) |
+| Auth and limits | None; Open-Meteo limits (1.6), each coordinate counts. ~300 points 5–20 km offshore, snapped to 0.1°, every 6 h |
+| Quirk | Land cells return `null` for every hour; that is how coastal districts are told apart from land borders |
+| License | CC BY 4.0 — credit "Marine data by Open-Meteo.com" |
+
 ---
 
 ## 2. Map and location APIs

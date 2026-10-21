@@ -1,4 +1,4 @@
-export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake";
+export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
@@ -9,6 +9,7 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "air_quality", th: "ฝุ่น PM2.5", ready: true },
   { id: "heat", th: "ความร้อนจัด", ready: true },
   { id: "earthquake", th: "แผ่นดินไหว", ready: true },
+  { id: "marine", th: "คลื่นลมแรง", ready: true },
 ];
 
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
@@ -257,6 +258,8 @@ export function describeObservation(key: string, value: number | null): string |
       return `แผ่นดินไหวขนาด ${value.toFixed(1)}`;
     case "quake_distance_km":
       return `ห่างราว ${value.toFixed(0)} กม.`;
+    case "wave_height_max_24h":
+      return `คลื่นสูงสุดใน 24 ชม. ข้างหน้าราว ${value.toFixed(1)} ม.`;
     case "cross_border_hotspots_24h":
       return value > 0 ? `จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. ${value} จุด (24 ชม.)` : null;
     case "spi_3":

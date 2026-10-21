@@ -240,3 +240,14 @@ def test_gdacs_keeps_south_east_asia_only():
     # A 7-day window drops events that ended earlier and are no longer current.
     later = GdacsEvents(days=7).parse(raw, datetime(2026, 12, 1, tzinfo=timezone.utc))
     assert all(r.extra["current"] for r in later)
+
+
+def test_open_meteo_marine_skips_land_cells():
+    from external_data.adapters import OpenMeteoMarine
+
+    raw = load_json("om_marine.json")  # off Phuket (sea) and central Bangkok (land: all null)
+    adapter = OpenMeteoMarine([("TH8301", 7.9, 98.2), ("TH1001", 13.8, 100.5)])
+    records = adapter.parse([raw], datetime(2026, 10, 22, 0, 0, tzinfo=BANGKOK))
+    assert [r.extra["area_code"] for r in records] == ["TH8301"]
+    waves = [v for v in raw[0]["hourly"]["wave_height"][:24] if v is not None]
+    assert records[0].value == round(max(waves), 2) and records[0].unit == "m"

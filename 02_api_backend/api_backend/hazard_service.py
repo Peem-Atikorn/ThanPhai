@@ -16,7 +16,7 @@ import geopandas as gpd
 import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
-from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex,
+from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex, OpenMeteoMarine,
                                     ThaiWaterRain24h, ThaiWaterWaterLevel, TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings,
                                     UsgsEarthquakes, merge_quakes)
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
@@ -67,13 +67,16 @@ SOURCES = {
     HazardType.AIR_QUALITY: ["กรมควบคุมมลพิษ (Air4Thai)"],
     HazardType.HEAT: ["Open-Meteo (แบบจำลองพยากรณ์อากาศ)"],
     HazardType.EARTHQUAKE: ["กรมอุตุนิยมวิทยา (กองเฝ้าระวังแผ่นดินไหว)", "USGS"],
+    HazardType.MARINE: ["Open-Meteo Marine (แบบจำลองคลื่น)"],
 }
-# Open-Meteo forecasts per district centre, each on its own clock: (adapter, refresh interval).
-# Each refresh costs ~306 calls of Open-Meteo's free 10,000 a day (see OpenMeteoGrid).
+# Open-Meteo forecasts per district, each on its own clock: (adapter, refresh interval, where to sample).
+# "centres" = district centres; "offshore" = points at sea next to each district (see geo_integration.coast).
+# Each refresh costs ~300 calls of Open-Meteo's free 10,000 a day (see OpenMeteoGrid): ~4,800 a day in all.
 GRID_MODELS = {
     # CAMS runs twice a day.
-    "air_model": (OpenMeteoAirQuality, timedelta(hours=6)),
-    "heat_model": (OpenMeteoHeatIndex, timedelta(hours=3)),
+    "air_model": (OpenMeteoAirQuality, timedelta(hours=6), "centres"),
+    "heat_model": (OpenMeteoHeatIndex, timedelta(hours=3), "centres"),
+    "marine_model": (OpenMeteoMarine, timedelta(hours=6), "offshore"),
 }
 # Map layer: coarser than the 50 m web layer, enough for a whole-country view.
 MAP_SIMPLIFY_DEGREES = 0.004
@@ -144,6 +147,7 @@ class HazardService:
         # GRID_MODELS results: name -> area code -> record (value and extra).
         self.grid: dict[str, dict] = {name: {} for name in GRID_MODELS}
         self.grid_updated_at: dict[str, datetime | None] = {name: None for name in GRID_MODELS}
+        self._offshore: list[tuple[str, float, float]] | None = None  # built on the first marine refresh
         self._last_quakes: list[dict] | None = None
         self._geometry = self._load_map_geometry()
 
@@ -319,6 +323,7 @@ class HazardService:
         fire_pred = dict(self.fire_predictions)
         air_model = {code: r.value for code, r in self.grid["air_model"].items()}
         heat = dict(self.grid["heat_model"])
+        marine = dict(self.grid["marine_model"])
         drought = self._current_drought()
         decisions: dict[str, list[dict]] = {}
         for code in self.amphoe_codes:
@@ -343,6 +348,8 @@ class HazardService:
                                          "cross_border_hotspots_24h": (float(cross_border.get(code, 0))
                                                                        if records["nasa_firms"] is not None else None)},
                 HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
+                # Inland districts have no sea: no value, and the card says why.
+                HazardType.MARINE: {"wave_height_max_24h": marine[code].value if code in marine else None},
                 # No earthquake in the last day = not felt (MMI 1); None only when both feeds failed.
                 HazardType.EARTHQUAKE: ({"quake_mmi_24h": None} if quakes is None else
                                         {k: v for k, v in quakes[code].items() if not k.startswith("_")} if code in quakes
@@ -374,6 +381,11 @@ class HazardService:
                     peak = heat[code].extra
                     notices.append(f"ค่าคาดการณ์จากแบบจำลอง ช่วงร้อนสุด {peak['peak_time'][11:16]} น. "
                                    f"อุณหภูมิ {peak['temperature_c']:.0f}°C ความชื้น {peak['humidity_pct']:.0f}%")
+                if hazard == HazardType.MARINE:
+                    if code in marine:
+                        notices.append(f"คลื่นสูงสุดคาดว่าราว {marine[code].extra['peak_time'][11:16]} น. (ค่าจากแบบจำลอง)")
+                    elif self.grid_updated_at["marine_model"] is not None:
+                        notices = ["อำเภอนี้ไม่ติดทะเล"]
                 if hazard == HazardType.EARTHQUAKE and quakes and code in quakes:
                     notices.append(self._quake_notice(quakes[code]))
                 if obs.get("pm25_model_24h") is not None:
@@ -475,6 +487,11 @@ class HazardService:
         rows.sort(key=lambda e: e["to"], reverse=True)  # newest first within each group below
         return sorted(rows, key=lambda e: (not e["current"], order.get(e["alert"], 3)))
 
+    def _offshore_points(self) -> list[tuple[str, float, float]]:
+        from geo_integration.coast import offshore_points
+
+        return offshore_points(gpd.read_file(self.data_dir / "admin_areas_web.gpkg", layer="amphoe"))
+
     def _cross_border_counts(self, records: list) -> dict[str, int]:
         """Hotspots outside Thailand within CROSS_BORDER_KM of each district centre (districts with none are left out)."""
         import numpy as np
@@ -546,11 +563,22 @@ class HazardService:
             self._start_job(name, lambda name=name: self.refresh_grid(name), self.grid_stale(name))
 
     async def refresh_grid(self, name: str) -> None:
-        points = [(a.code, a.lat, a.lon) for a in self.gazetteer.areas if a.level == "amphoe"]
-        adapter = GRID_MODELS[name][0](points)
+        adapter_class, _, where = GRID_MODELS[name]
+        if where == "offshore":
+            if self._offshore is None:
+                self._offshore = await asyncio.to_thread(self._offshore_points)
+            points = self._offshore
+        else:
+            points = [(a.code, a.lat, a.lon) for a in self.gazetteer.areas if a.level == "amphoe"]
         async with httpx.AsyncClient(headers=USER_AGENT) as client:
-            records = await adapter.run(client)
-        self.grid[name] = {r.extra["area_code"]: r for r in records}
+            records = await adapter_class(points).run(client)
+        # A district can have several points (offshore): keep its highest value.
+        best: dict[str, object] = {}
+        for r in records:
+            code = r.extra["area_code"]
+            if code not in best or r.value > best[code].value:
+                best[code] = r
+        self.grid[name] = best
         self.grid_updated_at[name] = now = datetime.now(timezone.utc)
         self.source_status[name] = {"ok": True, "records": len(records), "checked_at": now.isoformat()}
         self._inputs_changed = True  # rebuild decisions with the new forecast on the next request

@@ -1,6 +1,6 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.10.22.3"
+version: "2026.10.22.4"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
@@ -160,6 +160,24 @@ overrides:
       variable: quake_mmi_24h
       op: ">="
       threshold: 4.0
+      level: WATCH
+  marine:
+    # Highest significant wave height in the next 24 h in the sea next to a coastal district (Open-Meteo Marine).
+    # TMD advises small boats to stay ashore at 2-3 m and warns of > 3 m near storms; 4 m is "very rough" (WMO sea state 6).
+    - id: WAVE_VERY_ROUGH
+      variable: wave_height_max_24h
+      op: ">="
+      threshold: 4.0
+      level: CRITICAL
+    - id: WAVE_HIGH
+      variable: wave_height_max_24h
+      op: ">="
+      threshold: 3.0
+      level: WARNING
+    - id: WAVE_SMALL_BOATS_ASHORE
+      variable: wave_height_max_24h
+      op: ">="
+      threshold: 2.0
       level: WATCH
 
 confidence:

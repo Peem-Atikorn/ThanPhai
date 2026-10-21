@@ -135,3 +135,8 @@ def test_heat_index_bands(hi, expected):
 @pytest.mark.parametrize(("mmi", "expected"), [(1.0, L.NORMAL), (3.9, L.NORMAL), (4.0, L.WATCH), (6.0, L.WARNING), (7.2, L.CRITICAL)])
 def test_earthquake_shaking_levels(mmi, expected):
     assert decide(HazardType.EARTHQUAKE, observations={"quake_mmi_24h": mmi}).level == expected
+
+
+@pytest.mark.parametrize(("wave", "expected"), [(0.5, L.NORMAL), (1.9, L.NORMAL), (2.0, L.WATCH), (3.0, L.WARNING), (4.5, L.CRITICAL)])
+def test_wave_height_levels(wave, expected):
+    assert decide(HazardType.MARINE, observations={"wave_height_max_24h": wave}).level == expected

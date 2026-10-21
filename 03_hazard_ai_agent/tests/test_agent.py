@@ -46,6 +46,7 @@ agent = HazardAgent(GAZ, FakeTools())
      ("ค่าฝุ่น pm2.5 วันนี้", [HazardType.AIR_QUALITY]), ("หมอกควันหนาไหม", [HazardType.AIR_QUALITY]),
      ("วันนี้อากาศร้อนจัดไหม", [HazardType.HEAT]), ("ระวังฮีตสโตรก", [HazardType.HEAT]),
      ("เมื่อกี้แผ่นดินไหวไหม", [HazardType.EARTHQUAKE]),
+     ("พรุ่งนี้ออกเรือได้ไหม", [HazardType.MARINE]), ("rainy season", [HazardType.RAIN_STORM]),
      ("Will it flood?", [HazardType.FLOOD])],
 )
 def test_detect_hazards(text, hazards):

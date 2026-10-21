@@ -26,6 +26,8 @@ def stale_copy(svc: HazardService) -> HazardService:
     svc.updated_at = datetime.now(timezone.utc) - timedelta(hours=1)
     svc._background = None
     svc._lock = asyncio.Lock()
+    # Fresh forecasts, so fresh_service() does not start real Open-Meteo jobs in the background.
+    svc.grid_updated_at = {name: datetime.now(timezone.utc) for name in svc.grid_updated_at}
     return svc
 
 
@@ -394,3 +396,26 @@ def test_earthquake_is_no_data_when_both_feeds_fail(base_service):
                                     "tmd_earthquakes": RuntimeError("down"), "usgs_earthquakes": RuntimeError("down")}, [])
     quake = next(i for i in decisions[svc.amphoe_codes[0]] if i["hazard"] == "earthquake")
     assert quake["level"] is None and quake["notices"]
+
+
+def test_marine_only_for_coastal_districts(base_service, monkeypatch):
+    from types import SimpleNamespace
+
+    svc = stale_copy(base_service)
+    phuket = next(a.code for a in svc.gazetteer.resolve("อำเภอเมืองภูเก็ต"))
+    sena = next(a.code for a in svc.gazetteer.resolve("อำเภอเสนา"))
+    monkeypatch.setitem(svc.grid, "marine_model", {phuket: SimpleNamespace(value=3.2, extra={"peak_time": "2026-10-22T15:00:00+07:00"})})
+    monkeypatch.setitem(svc.grid_updated_at, "marine_model", datetime.now(timezone.utc))
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
+    sea = next(i for i in decisions[phuket] if i["hazard"] == "marine")
+    assert sea["level"] == "WARNING" and "15:00" in sea["notices"][-1]
+    inland = next(i for i in decisions[sena] if i["hazard"] == "marine")
+    assert inland["level"] is None and inland["notices"] == ["อำเภอนี้ไม่ติดทะเล"]
+
+
+def test_offshore_points_cover_the_coast(base_service):
+    points = base_service._offshore_points()
+    codes = {c for c, _, _ in points}
+    phuket = next(a.code for a in base_service.gazetteer.resolve("อำเภอเมืองภูเก็ต"))
+    chiang_mai = next(a.code for a in base_service.gazetteer.resolve("อำเภอเมืองเชียงใหม่"))
+    assert phuket in codes and chiang_mai not in codes

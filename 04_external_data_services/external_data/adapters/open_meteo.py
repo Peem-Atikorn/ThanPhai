@@ -200,6 +200,25 @@ class OpenMeteoHeatIndex(OpenMeteoGrid):
                                  "humidity_pct": peak["relative_humidity_2m"]}
 
 
+class OpenMeteoMarine(OpenMeteoGrid):
+    """Highest significant wave height in the next 24 hours at points at sea (0.1° cells; land cells have no data)."""
+
+    name = "open_meteo_marine"
+    attribution = "Marine data by Open-Meteo.com (CC BY 4.0)"
+    base_url = "https://marine-api.open-meteo.com/v1/marine"
+    hourly = ("wave_height",)
+    variable = "wave_height_max_24h"
+    unit = "m"
+    grid_degrees = 0.1
+
+    def summarise(self, hours: list[dict]) -> tuple[float, dict] | None:
+        values = [h["wave_height"] for h in hours if h["wave_height"] is not None]
+        if not values:
+            return None  # a land cell: this point is not at sea
+        peak = max(hours, key=lambda h: h["wave_height"] if h["wave_height"] is not None else -1)
+        return round(max(values), 2), {"peak_time": peak["time"].isoformat()}
+
+
 class OpenMeteoRiverDischarge(Adapter):
     """GloFAS daily river discharge forecast, used as a flood feature."""
 

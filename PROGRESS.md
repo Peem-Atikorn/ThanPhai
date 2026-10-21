@@ -194,6 +194,13 @@ Round 7 (dams, 2026-10-19):
 84. Bug found live: GDACS stops at 100 events when several types are asked together (cyclones were cut off), and `fromdate` filters on the start date
     (CHAMPI started before the window). Now one call per type, cyclones and floods looking back 30 days; an empty result is HTTP 204 with no body.
 
+### Round 13 — waves (branch `feature/peem/all-marine`, stacked on all-earthquake)
+85. New hazard `marine` ("คลื่นลมแรง"): highest wave height of the next 24 h from Open-Meteo Marine at up to 3 points 5–20 km offshore of each district
+    (`geo_integration.coast.offshore_points`; land cells return null, which is how land borders drop out). Live 2026-10-22: 148 coastal districts.
+    Rules: >= 2 m WATCH (TMD: small boats stay ashore), >= 3 m WARNING, >= 4 m CRITICAL (WMO "very rough"). Inland districts show "อำเภอนี้ไม่ติดทะเล".
+86. Bug: offline API tests started real Open-Meteo jobs through `fresh_service()` (12 s pacing showed up as 11 s per test, 2:46 in all).
+    Test services now mark the forecasts fresh; backend suite back to ~22 s and no network.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

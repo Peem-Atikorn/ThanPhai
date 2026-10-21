@@ -2,7 +2,7 @@ from external_data.adapters.air4thai import Air4ThaiPm25
 from external_data.adapters.earthquakes import TmdEarthquakes, UsgsEarthquakes, merge_quakes
 from external_data.adapters.gdacs import GdacsEvents
 from external_data.adapters.firms import FirmsHotspots
-from external_data.adapters.open_meteo import (OpenMeteoAirQuality, OpenMeteoForecast, OpenMeteoHeatIndex,
+from external_data.adapters.open_meteo import (OpenMeteoAirQuality, OpenMeteoForecast, OpenMeteoHeatIndex, OpenMeteoMarine,
                                               OpenMeteoRiverDischarge)
 from external_data.adapters.thaiwater import ThaiWaterRain24h, ThaiWaterWaterLevel
 from external_data.adapters.tmd import TmdWarnings, TmdWeather3Hours
@@ -15,6 +15,7 @@ __all__ = [
     "OpenMeteoAirQuality",
     "OpenMeteoForecast",
     "OpenMeteoHeatIndex",
+    "OpenMeteoMarine",
     "OpenMeteoRiverDischarge",
     "ThaiWaterRain24h",
     "ThaiWaterWaterLevel",
