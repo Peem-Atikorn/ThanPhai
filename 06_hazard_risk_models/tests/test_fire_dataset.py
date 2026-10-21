@@ -114,3 +114,36 @@ def test_thresholds_match_brute_force():
     watch_bf = max(t for t in cands if rec(t) >= 0.8)
     warning_bf = min(t for t in cands if t >= watch_bf and prec(t) >= 0.7)
     assert thresholds(y, p) == (watch_bf, warning_bf)
+
+
+def test_extended_features_support_ndvi_and_humidity():
+    from risk_models.fire.dataset import EXTENDED_FEATURES
+
+    g = grid_from(np.zeros((40, 2)))
+    ndvi_fake = np.full(g.counts.shape, 0.45, dtype=np.float32)
+    hum_fake = np.full(g.counts.shape, 55.0, dtype=np.float32)
+    f = features(g, ["TH10", "TH10"], np.zeros((12, 2), np.float32), ndvi=ndvi_fake, humidity=hum_fake)
+    assert "ndvi" in f and "rel_humidity" in f
+    assert f["ndvi"][0, 0] == 0.45
+    assert f["rel_humidity"][0, 0] == 55.0
+
+    table = to_table(g, f)
+    for col in EXTENDED_FEATURES:
+        assert col in table.columns
+
+
+def test_fire_model_predict_proba_backward_compatibility_without_feature_names():
+    from risk_models.fire.model import FireModel, fit
+
+    g = grid_from(np.zeros((40, 2)))
+    f = features(g, ["TH10", "TH10"], np.zeros((12, 2), np.float32))
+    table = to_table(g, f, labels(g))
+    valid = table.dropna()
+    estimator = fit(valid)
+    m = FireModel(estimator=estimator, watch_threshold=0.2, warning_threshold=0.5, trained_years=[2023], version="v1")
+    # Simulate old unpickled model without feature_names attribute
+    del m.feature_names
+    assert not hasattr(m, "feature_names")
+    proba = m.predict_proba(valid)
+    assert len(proba) == len(valid)
+    assert (proba >= 0.0).all() and (proba <= 1.0).all()
