@@ -14,10 +14,10 @@ class DisasterPassage:
     title: str
     section: str
     source_url: str
-    page: Optional[int] = None
+    page_start: int
+    page_end: Optional[int] = None
     procedure_steps: list[str] = field(default_factory=list)
     content: str = ""
-    citation: str = ""
     score: float = 0.0
 
     def full_text(self) -> str:
@@ -25,7 +25,18 @@ class DisasterPassage:
         return f"{self.section} {self.content} {steps}".strip()
 
     def format_citation(self) -> str:
-        if self.citation:
-            return self.citation
-        page_str = f" หน้า {self.page}" if self.page else ""
+        if self.page_end and self.page_end != self.page_start:
+            page_str = f" หน้า {self.page_start}–{self.page_end}"
+        else:
+            page_str = f" หน้า {self.page_start}"
         return f"[{self.authority} {self.title}{page_str}]"
+
+    @property
+    def citation(self) -> str:
+        """Dynamic citation generated from authority, title, and page range."""
+        return self.format_citation()
+
+    @property
+    def page(self) -> int:
+        """Backwards-compatibility property returning page_start."""
+        return self.page_start

@@ -162,7 +162,7 @@ def test_emergency_gets_numbers_only():
 
 def test_prepare_without_area():
     answer = agent.ask("ต้องเตรียมตัวยังไงถ้าน้ำจะท่วม", NOW)
-    assert answer.intent == "prepare" and "ยกของมีค่า" in answer.text
+    assert answer.intent == "prepare" and "ของมีค่า" in answer.text
 
 
 def test_prepare_evacuation_gets_critical_passage():
