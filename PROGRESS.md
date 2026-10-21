@@ -208,6 +208,12 @@ Round 7 (dams, 2026-10-19):
 88. Bug: "ไต้ฝุ่น" (typhoon) contains "ฝุ่น" (dust), so typhoon questions were also read as PM2.5 questions. Dust words now count only outside "ไต้ฝุ่น".
 89. The earthquake tab's GDACS list also shows under the cyclone tab (without the earthquake list).
 
+### Round 15 — landslides (branch `feature/peem/all-landslide`, stacked on all-tropical-cyclone)
+90. New hazard `landslide`: only in districts with >= 10 past landslides in DMR's inventory (ร่องรอยแผ่นดินถล่ม 1989–2019, 56,177 points, CC BY):
+    227 of 928. `make landslide` (scripts/build_landslide_districts.py) writes data/processed/landslide_districts.json; the inventory's UTM 47N
+    coordinates match DMR's own district names for 99 % of points. Rules: observed rain > 100 mm/24 h WARNING, > 150 CRITICAL (DMR notices),
+    TMD forecast > 100 mm/day WATCH. Live 2026-10-22: ขนอม (นครศรีธรรมราช) 122.7 mm = WARNING. Other districts say why they are not assessed.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

@@ -235,6 +235,16 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Quirk | Land cells return `null` for every hour; that is how coastal districts are told apart from land borders |
 | License | CC BY 4.0 — credit "Marine data by Open-Meteo.com" |
 
+### 1.18 DMR landslide data — กรมทรัพยากรธรณี ✅
+
+| Item | Detail |
+|---|---|
+| Catalogue | CKAN `https://data.dmr.go.th/api/3/action/package_search?q=landslide` (CC BY) |
+| Used | `landslide_inventory_map` (ร่องรอยแผ่นดินถล่ม 1989–2019): CSV with `utm_e`, `utm_n` (zone 47N for the whole country), `tambon`, `district`, `province` |
+| Also available | `landslide_susceptibility` (CSV without geometry, SHP as .rar, ArcGIS MapServer `gisportal.dmr.go.th/arcgis/rest/services/HAZARD/LANDSLIDE_SUSCEPTIBILITY/MapServer`), safe areas, slope-monitoring rain gauges |
+| Rain criteria | DMR notices alert at > 100 mm in 24 h and cite > 150 mm for severe cases (no single published standard found) |
+| Used by | scripts/build_landslide_districts.py → 02 (`landslide` hazard) |
+
 ---
 
 ## 2. Map and location APIs
@@ -325,6 +335,7 @@ VAPID_PRIVATE_KEY=
 - Air quality data by Open-Meteo.com / CAMS (CC BY 4.0)
 - ข้อมูลแผ่นดินไหว: กองเฝ้าระวังแผ่นดินไหว กรมอุตุนิยมวิทยา · Earthquake data: USGS
 - Disaster alerts: GDACS (UN / European Commission)
+- ข้อมูลร่องรอยแผ่นดินถล่ม: กรมทรัพยากรธรณี (CC BY)
 - Rainfall: CHIRPS, UCSB Climate Hazards Center
 - Boundaries: OCHA HDX
 - Map data © OpenStreetMap contributors (if the OSM basemap is used)

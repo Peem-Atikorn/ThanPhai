@@ -19,6 +19,7 @@ Candidate sources for each hazard. **Every source must be checked before use:** 
 | TMD earthquakes | กรมอุตุนิยมวิทยา (กองเฝ้าระวังแผ่นดินไหว) | Latest earthquakes, Thai place text | Earthquake | RSS, no key | ✅ live-tested 2026-10-22 |
 | USGS | U.S. Geological Survey | Earthquakes M >= 3.5 around Thailand | Earthquake | No key | ✅ live-tested 2026-10-22 |
 | GDACS | UN / European Commission | Regional earthquakes, cyclones, floods with impact alerts | Context, cyclones | No key | ✅ live-tested 2026-10-22 |
+| DMR landslide inventory | กรมทรัพยากรธรณี | 56,177 past landslide points (1989–2019) | Landslide (where to check rain) | CKAN, no key, CC BY | ✅ downloaded 2026-10-22 |
 | CHIRPS | UCSB Climate Hazards Center | Historical gridded rainfall | Drought (SPI) | File download, no key | ✅ reachable |
 | MODIS / Sentinel-2 | NASA / ESA (Copernicus) | NDVI vegetation index | Drought, fire | Free Earthdata / Copernicus login | 📄 need login |
 | SRTM / Copernicus DEM | NASA / ESA | Elevation | Flood features | Open download | 📄 not tested |

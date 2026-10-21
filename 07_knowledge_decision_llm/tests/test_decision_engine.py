@@ -145,3 +145,12 @@ def test_wave_height_levels(wave, expected):
 @pytest.mark.parametrize(("wind", "expected"), [(0.0, L.NORMAL), (63.0, L.WATCH), (93.0, L.WARNING), (119.0, L.CRITICAL)])
 def test_cyclone_wind_levels(wind, expected):
     assert decide(HazardType.TROPICAL_CYCLONE, observations={"cyclone_wind_kmh": wind}).level == expected
+
+
+@pytest.mark.parametrize(("obs", "expected"), [
+    ({"landslide_rain_24h": 80.0}, L.NORMAL), ({"landslide_rain_24h": 100.0}, L.NORMAL), ({"landslide_rain_24h": 100.5}, L.WARNING),
+    ({"landslide_rain_24h": 151.0}, L.CRITICAL), ({"landslide_rain_24h": 20.0, "landslide_forecast_rain_24h": 120.0}, L.WATCH),
+    ({"landslide_rain_24h": None, "landslide_forecast_rain_24h": None}, None),
+])
+def test_landslide_rain_levels(obs, expected):
+    assert decide(HazardType.LANDSLIDE, observations=obs).level == expected

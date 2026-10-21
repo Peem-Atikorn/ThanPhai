@@ -56,6 +56,8 @@ QUAKE_LIST_WINDOW = timedelta(days=7)
 # A cyclone this close (current position or forecast track) is mentioned on the district card even when its
 # wind areas do not reach the district.
 CYCLONE_NOTICE_KM = 800
+# Districts with at least this many past landslides (DMR inventory 1989-2019) get landslide checks.
+LANDSLIDE_MIN_TRACES = 10
 GRAPH_TTL = timedelta(minutes=15)
 DAM_HISTORY_TTL = timedelta(hours=6)
 FAILURE_TTL = timedelta(seconds=60)
@@ -72,6 +74,7 @@ SOURCES = {
     HazardType.EARTHQUAKE: ["กรมอุตุนิยมวิทยา (กองเฝ้าระวังแผ่นดินไหว)", "USGS"],
     HazardType.MARINE: ["Open-Meteo Marine (แบบจำลองคลื่น)"],
     HazardType.TROPICAL_CYCLONE: ["GDACS (UN/EU)"],
+    HazardType.LANDSLIDE: ["กรมทรัพยากรธรณี (ร่องรอยดินถล่ม)", "ThaiWater (สสน.)"],
 }
 # Open-Meteo forecasts per district, each on its own clock: (adapter, refresh interval, where to sample).
 # "centres" = district centres; "offshore" = points at sea next to each district (see geo_integration.coast).
@@ -153,6 +156,8 @@ class HazardService:
         self.grid_updated_at: dict[str, datetime | None] = {name: None for name in GRID_MODELS}
         self._offshore: list[tuple[str, float, float]] | None = None  # built on the first marine refresh
         self._last_quakes: list[dict] | None = None
+        # Past landslides per district, from scripts/build_landslide_districts.py; optional.
+        self.landslide_traces = self._load_landslide_traces()
         self._geometry = self._load_map_geometry()
 
     def _load_map_geometry(self) -> dict[str, dict]:
@@ -290,6 +295,7 @@ class HazardService:
             HazardType.EARTHQUAKE: [name for name, source in (("TMD earthquakes", "tmd_earthquakes"), ("USGS", "usgs_earthquakes"))
                                     if records.get(source) is None],
             HazardType.TROPICAL_CYCLONE: [] if records.get("gdacs_cyclones") is not None else ["GDACS"],
+            HazardType.LANDSLIDE: [] if records["thaiwater_rain_24h"] is not None else ["ThaiWater rain"],
         }
         def build(source: str, hazard: HazardType, make):
             """One hazard's features. A failure here degrades that hazard only, never the whole refresh."""
@@ -328,6 +334,7 @@ class HazardService:
         # Snapshots: background refreshes may swap these dicts while decisions are built.
         satellite = dict(self.satellite_cells)
         fire_pred = dict(self.fire_predictions)
+        forecasts = dict(self.forecasts)
         air_model = {code: r.value for code, r in self.grid["air_model"].items()}
         heat = dict(self.grid["heat_model"])
         marine = dict(self.grid["marine_model"])
@@ -357,6 +364,7 @@ class HazardService:
                 HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
                 # Inland districts have no sea: no value, and the card says why.
                 HazardType.MARINE: {"wave_height_max_24h": marine[code].value if code in marine else None},
+                HazardType.LANDSLIDE: self._landslide_observations(code, value(rain, "rain_24h", code), forecasts),
                 # 0 = GDACS works and no storm wind area reaches the district; None = GDACS failed.
                 HazardType.TROPICAL_CYCLONE: ({"cyclone_wind_kmh": None} if cyclones is None else
                                               {k: v for k, v in cyclones.get(code, {"cyclone_wind_kmh": 0.0}).items()
@@ -397,6 +405,14 @@ class HazardService:
                         notices.append(f"คลื่นสูงสุดคาดว่าราว {marine[code].extra['peak_time'][11:16]} น. (ค่าจากแบบจำลอง)")
                     elif self.grid_updated_at["marine_model"] is not None:
                         notices = ["อำเภอนี้ไม่ติดทะเล"]
+                if hazard == HazardType.LANDSLIDE:
+                    traces = self.landslide_traces.get(code, 0) if self.landslide_traces is not None else None
+                    if traces is None:
+                        notices.append("ยังไม่มีข้อมูลพื้นที่เสี่ยงดินถล่ม (รัน scripts/build_landslide_districts.py)")
+                    elif traces < LANDSLIDE_MIN_TRACES:
+                        notices = [f"ไม่ใช่พื้นที่ที่เคยเกิดดินถล่มบ่อย (พบร่องรอย {traces} จุด) จึงไม่ประเมินดินถล่ม"]
+                    elif obs.get("landslide_forecast_rain_24h") is not None:
+                        sources.append("กรมอุตุนิยมวิทยา (พยากรณ์ฝน)")
                 if hazard == HazardType.TROPICAL_CYCLONE and cyclones and code in cyclones:
                     notices.append(self._cyclone_notice(cyclones[code]))
                 if hazard == HazardType.EARTHQUAKE and quakes and code in quakes:
@@ -483,6 +499,23 @@ class HazardService:
                          "_label": mmi_label_th(value), "_place": r.extra.get("place_th") or r.extra.get("place") or "",
                          "_time": r.observed_at}
         return out
+
+    def _load_landslide_traces(self) -> dict[str, int] | None:
+        path = self.data_dir / "landslide_districts.json"
+        if not path.exists():
+            log.info("no %s; landslide checks are off", path)
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))["districts"]
+
+    def _landslide_observations(self, code: str, rain_24h: float | None, forecasts: dict) -> dict:
+        """Rain inputs for landslide rules, only in districts with enough past landslides (else no level)."""
+        traces = (self.landslide_traces or {}).get(code, 0)
+        if traces < LANDSLIDE_MIN_TRACES:
+            return {"landslide_rain_24h": None, "landslide_forecast_rain_24h": None}
+        # TMD forecasts are per province; the wettest of the next days counts.
+        days = forecasts.get(code) or forecasts.get(code[:4]) or []
+        rain_ahead = max((d["rain_mm"] for d in days if d.get("rain_mm") is not None), default=None)
+        return {"landslide_rain_24h": rain_24h, "landslide_forecast_rain_24h": rain_ahead, "landslide_traces": float(traces)}
 
     def _cyclone_exposure(self, records: list | None) -> dict[str, dict] | None:
         """Per district: strongest GDACS wind area over its centre and distance to the nearest track point now or ahead.

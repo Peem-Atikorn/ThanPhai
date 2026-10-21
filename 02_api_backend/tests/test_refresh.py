@@ -448,3 +448,27 @@ def test_cyclone_wind_area_over_a_district(base_service):
     far = next(c for c in svc.amphoe_codes if c.startswith("TH96"))  # Narathiwat, ~900 km away
     far_item = next(i for i in decisions[far] if i["hazard"] == "tropical_cyclone")
     assert far_item["level"] == "NORMAL" and far_item["observations"] == {"cyclone_wind_kmh": 0.0}
+
+
+def test_landslide_only_where_landslides_happened(base_service, monkeypatch):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    tha_pla = next(a.code for a in svc.gazetteer.resolve("อำเภอท่าปลา"))
+    sena = next(a.code for a in svc.gazetteer.resolve("อำเภอเสนา"))
+    monkeypatch.setattr(svc, "landslide_traces", {tha_pla: 6482, sena: 2})
+    monkeypatch.setattr(svc, "forecasts", {tha_pla[:4]: [{"rain_mm": 40.0}, {"rain_mm": 120.0}]})
+    now = datetime.now(timezone.utc)
+
+    def rain(code, mm):
+        area = svc.gazetteer.by_code[code]
+        return SourceRecord(source="thaiwater_rain_24h", variable="rain_24h", value=mm, unit="mm", lat=area.lat, lon=area.lon,
+                            station_id=code, observed_at=now, fetched_at=now, attribution="t", extra={"tambon_code": None})
+
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [rain(tha_pla, 130.0), rain(sena, 200.0)],
+                                    "nasa_firms": [], "air4thai": []}, [])
+    hill = next(i for i in decisions[tha_pla] if i["hazard"] == "landslide")
+    assert hill["level"] == "WARNING" and hill["observations"]["landslide_forecast_rain_24h"] == 120.0
+    assert "กรมอุตุนิยมวิทยา (พยากรณ์ฝน)" in hill["sources"]
+    flat = next(i for i in decisions[sena] if i["hazard"] == "landslide")
+    assert flat["level"] is None and "2 จุด" in flat["notices"][0]  # 200 mm of rain, but no landslide history

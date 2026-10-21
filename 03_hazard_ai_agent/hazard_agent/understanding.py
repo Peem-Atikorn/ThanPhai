@@ -24,6 +24,7 @@ HAZARD_WORDS = {
                              "rough sea"),
     HazardType.TROPICAL_CYCLONE: ("ไต้ฝุ่น", "พายุโซนร้อน", "ดีเปรสชัน", "พายุหมุน", "ไซโคลน", "typhoon", "cyclone",
                                   "tropical storm"),
+    HazardType.LANDSLIDE: ("ดินถล่ม", "ดินสไลด์", "โคลนถล่ม", "ภูเขาถล่ม", "landslide", "mudslide"),
 }
 DAM_WORDS = ("เขื่อน", "อ่างเก็บน้ำ", "ปริมาณน้ำในอ่าง", "dam", "reservoir")
 # Questions about river flow are always river questions; river and bank words only when no area is named

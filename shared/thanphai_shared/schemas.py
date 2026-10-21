@@ -14,6 +14,7 @@ class HazardType(str, Enum):
     EARTHQUAKE = "earthquake"
     MARINE = "marine"
     TROPICAL_CYCLONE = "tropical_cyclone"
+    LANDSLIDE = "landslide"
 
 
 class AlertLevel(int, Enum):

@@ -1,6 +1,6 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.10.22.5"
+version: "2026.10.22.6"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
@@ -196,6 +196,24 @@ overrides:
       variable: cyclone_wind_kmh
       op: ">="
       threshold: 63
+      level: WATCH
+  landslide:
+    # Rain in districts with past landslides (DMR inventory, >= 10 traces); HazardService passes these only there.
+    # DMR alerts and prepares evacuation above 100 mm in 24 h; its severe notices cite > 150 mm.
+    - id: LANDSLIDE_RAIN_SEVERE
+      variable: landslide_rain_24h
+      op: ">"
+      threshold: 150.0
+      level: CRITICAL
+    - id: LANDSLIDE_RAIN_HEAVY
+      variable: landslide_rain_24h
+      op: ">"
+      threshold: 100.0
+      level: WARNING
+    - id: LANDSLIDE_FORECAST_RAIN
+      variable: landslide_forecast_rain_24h
+      op: ">"
+      threshold: 100.0
       level: WATCH
 
 confidence:
