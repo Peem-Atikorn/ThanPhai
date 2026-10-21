@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import Icon from "@/components/Icon";
 import DamHistoryChart from "@/components/DamHistoryChart";
@@ -66,15 +66,28 @@ type View = "hazard" | "dams" | "rivers";
 const RADAR_LAYERS: MapLayerId[] = ["rain_storm", "tropical_cyclone"];
 const stationFeatures = (stations: AirStation[]): GeoJSON.FeatureCollection => ({
   type: "FeatureCollection",
-  features: stations.map((s) => {
-    const band = pm25Band(s.pm25);
-    return {
-      type: "Feature", geometry: { type: "Point", coordinates: [s.lon, s.lat] },
-      properties: { color: band.color, text: band.text, value: s.pm25.toFixed(0),
-        title: `${s.name_th ?? "สถานี"}: PM2.5 ${s.pm25.toFixed(1)} มคก./ลบ.ม. (${band.th})` },
-    };
-  }),
+  features: stations.map((s) => ({
+    type: "Feature", geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+    properties: { pm25: s.pm25, title: `${s.name_th ?? "สถานี"}: PM2.5 ${s.pm25.toFixed(1)} มคก./ลบ.ม. (${pm25Band(s.pm25).th})` },
+  })),
 });
+// Map look, remembered per browser. Storage can be blocked (private windows): then the flag still works for this
+// page through `memory`, it is just not remembered. The server render always uses the default (off).
+const memory = new Map<string, boolean>();
+const flagListeners = new Set<() => void>();
+function readFlag(key: string): boolean {
+  try { return window.localStorage.getItem(key) === "1"; } catch { return memory.get(key) ?? false; }
+}
+function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
+  const value = useSyncExternalStore((notify) => { flagListeners.add(notify); return () => { flagListeners.delete(notify); }; },
+    () => readFlag(key), () => false);
+  const set = useCallback((on: boolean) => {
+    memory.set(key, on);
+    try { window.localStorage.setItem(key, on ? "1" : "0"); } catch { /* kept in memory only */ }
+    flagListeners.forEach((notify) => notify());
+  }, [key]);
+  return [value, set];
+}
 const damDate = (d: string | null) => d ? new Date(d).toLocaleDateString("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" }) : "—";
 
 function DamRow({ dam, active, sortBy, onSelect }: { dam: Dam; active: boolean; sortBy: "storage" | "release"; onSelect: (d: Dam) => void }) {
@@ -161,6 +174,8 @@ export default function Dashboard() {
   const [airStations, setAirStations] = useState<AirStation[] | null>(null);
   const stationLayer = useMemo(() => hazard === "air_quality" && airStations ? stationFeatures(airStations) : null, [hazard, airStations]);
   const [radarOn, setRadarOn] = useState(true);
+  const [darkMap, setDarkMap] = useStoredFlag("map-dark");
+  const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
   const [radar, setRadar] = useState<{ tiles: string; time: number } | null>(null);
   const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
   // The last item opened in each group, so its button goes back there.
@@ -414,7 +429,12 @@ export default function Dashboard() {
               selectedPoint={view === "dams" ? selectedDam : selectedRiver}
               onSelectPoint={view === "dams" ? selectDamFromMap : selectRiverFromMap}
               label={view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined}
-              stations={view === "hazard" ? stationLayer : null} radar={showRadar ? radar?.tiles ?? null : null} />
+              stations={view === "hazard" ? stationLayer : null} radar={showRadar ? radar?.tiles ?? null : null}
+              dark={darkMap} riskOnly={view === "hazard" && riskOnly} />
+            <div className="map-options" role="group" aria-label="ตัวเลือกแผนที่">
+              <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>แผนที่กลางคืน</button>
+              {view === "hazard" && <button type="button" aria-pressed={riskOnly} className={riskOnly ? "is-active" : ""} onClick={() => setRiskOnly(!riskOnly)}>เฉพาะที่เสี่ยง</button>}
+            </div>
             <div className="map-hint"><Icon name="pin" /><span>{view === "dams" ? "แตะวงกลมเพื่อดูข้อมูลเขื่อน" : view === "rivers" ? "แตะวงกลมเพื่อดูข้อมูลสถานีวัดน้ำ" : "แตะพื้นที่เพื่อดูรายละเอียด"}</span></div>
             <button type="button" className="map-reset" onClick={() => setFocus({ lat: 13.4, lon: 100.9, zoom: 5 })}><Icon name="map" />ภาพรวมประเทศ</button>
             {view === "hazard" && <>
@@ -440,7 +460,7 @@ export default function Dashboard() {
           </div> : <div className="map-summary">
             <div className="legend-heading"><h3>ระดับความเสี่ยง</h3><span>{layer ? number.format(layer.features.length) + " อำเภอ" : "รอข้อมูล"}</span></div>
             <ul className="risk-legend">{counts.map((level) => <li key={level.id}><span className="legend-dot" style={{ background: level.color }} /><span>{level.th}</span><strong>{layer ? number.format(level.n) : "—"}</strong></li>)}</ul>
-            {hazard === "air_quality" && <div className="pm-legend"><h3>จุดสถานีวัด PM2.5 (กรมควบคุมมลพิษ) · ตัวเลขคือค่าเฉลี่ย 24 ชม.</h3><ul>{PM25_BANDS.map((b, i) => <li key={b.th}><span className="legend-dot" style={{ background: b.color }} />{b.th}<small>{i === 0 ? "0–15" : i === PM25_BANDS.length - 1 ? "> 75" : `${PM25_BANDS[i - 1].max}–${b.max}`}</small></li>)}</ul>{airStations && <p className="source-note">{number.format(airStations.length)} สถานีที่มีค่าล่าสุดไม่เกิน 6 ชม. · อำเภอที่ไม่มีสถานีใช้ค่าจากแบบจำลอง</p>}</div>}
+            {hazard === "air_quality" && <div className="pm-legend"><h3>จุดสถานีวัด PM2.5 (กรมควบคุมมลพิษ) · ตัวเลขคือค่าเฉลี่ย 24 ชม. · วงใหญ่ = หลายสถานี แสดงค่าสูงสุด</h3><ul>{PM25_BANDS.map((b, i) => <li key={b.th}><span className="legend-dot" style={{ background: b.color }} />{b.th}<small>{i === 0 ? "0–15" : i === PM25_BANDS.length - 1 ? "> 75" : `${PM25_BANDS[i - 1].max}–${b.max}`}</small></li>)}</ul>{airStations && <p className="source-note">{number.format(airStations.length)} สถานีที่มีค่าล่าสุดไม่เกิน 6 ชม. · อำเภอที่ไม่มีสถานีใช้ค่าจากแบบจำลอง</p>}</div>}
             {showRadar && <p className="source-note radar-note">{radar ? <>เรดาร์ฝนล่าสุด {new Date(radar.time * 1000).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })} น. · <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a> (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)</> : "ยังโหลดเรดาร์ไม่ได้"}</p>}
             <div className="data-timestamp"><Icon name="clock" /><span>ข้อมูล ณ {formatTime(layer?.meta.data_updated_at)} (เวลาไทย){pending && " · กำลังโหลดข้อมูลดาวเทียมและพยากรณ์เพิ่มเติม"}</span></div>
             {!!layer?.meta.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {layer.meta.degraded_services.join(", ")}</p>}

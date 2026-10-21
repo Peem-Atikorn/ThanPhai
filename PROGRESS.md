@@ -224,6 +224,11 @@ Round 7 (dams, 2026-10-19):
 94. Rain and cyclone maps draw the latest RainViewer radar frame over the districts (toggle "เรดาร์บนแผนที่"). RainViewer limits since 2026-01-01:
     zoom <= 7 (MapLibre stretches beyond), one colour scheme, past 2 h only, 100 requests/IP/min, personal or educational use only — so only the latest frame, no animation.
     Unlike drawing fixed circles around model grid points, the radar shows where rain is actually falling.
+95. PM2.5 stations close together merge into one circle that shows their **highest** value (size = number of stations); tapping it zooms in.
+    A count of stations (as another team's map does for incidents) would read like a PM2.5 value, and hiding overlapping labels could hide the worst station.
+96. "แผนที่กลางคืน": the same OSM tiles with brightness inverted (light labels on dark). CARTO dark tiles were tried first: since 2026 they show "API KEY REQUIRED".
+    "เฉพาะที่เสี่ยง": districts below WATCH are not filled. Both are remembered per browser (useSyncExternalStore over localStorage, memory if blocked).
+97. Bug caught in the browser: MapLibre only accepts ["zoom"] at the top of an interpolate; a zoom interpolate inside "case" dropped the whole station layer.
 
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.

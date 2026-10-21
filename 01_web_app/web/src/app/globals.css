@@ -70,6 +70,10 @@ h2 { font-size: 17px; font-weight: 650; }
 .map-hint { top: 16px; left: 16px; padding: 9px 12px; pointer-events: none; }
 .map-reset { bottom: 32px; left: 16px; padding: 0 12px; min-height: 44px; }
 .map-reset:hover { background: var(--accent-soft); }
+.map-options { position: absolute; z-index: 1; bottom: 32px; left: 140px; display: flex; gap: 6px; flex-wrap: wrap; }
+.map-options button { min-height: 44px; padding: 0 12px; border-radius: 8px; background: white; box-shadow: var(--floating-shadow); font-size: 12px; color: var(--brand); font-weight: 600; }
+.map-options button:hover { background: var(--accent-soft); }
+.map-options button.is-active { background: var(--brand); color: #fff; }
 .map-summary { padding: 17px 22px 16px; }
 .legend-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .legend-heading h3 { font-size: 13px; font-weight: 600; }
