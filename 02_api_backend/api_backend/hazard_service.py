@@ -126,6 +126,7 @@ class HazardService:
         self.rivers: list[dict] = []  # river stations with a flow gauge or over their bank
         self.media: dict | None = None  # radar, rain-forecast, storm and wave images
         self.quakes: list[dict] = []  # TMD + USGS, last 7 days, newest first
+        self.pm25_stations: list[dict] = []  # fresh Air4Thai readings, for station points on the map
         self.regional_events: list[dict] = []  # GDACS events around South-East Asia
         self._graph_cache: dict[tuple, tuple[datetime, dict]] = {}
         self._inflight: dict[tuple, asyncio.Task] = {}
@@ -156,6 +157,7 @@ class HazardService:
         self.grid_updated_at: dict[str, datetime | None] = {name: None for name in GRID_MODELS}
         self._offshore: list[tuple[str, float, float]] | None = None  # built on the first marine refresh
         self._last_quakes: list[dict] | None = None
+        self._last_pm25: list[dict] | None = None
         # Past landslides per district, from scripts/build_landslide_districts.py; optional.
         self.landslide_traces = self._load_landslide_traces()
         self._geometry = self._load_map_geometry()
@@ -209,6 +211,8 @@ class HazardService:
             self.decisions = decisions
             if self._last_quakes is not None:
                 self.quakes = self._last_quakes
+            if self._last_pm25 is not None:
+                self.pm25_stations = self._last_pm25
             if warnings is not None:
                 self.warnings = warnings  # keep the last good warnings if TMD failed this time
             # Merge, not replace: the forecast refresh writes its own entry on a different schedule.
@@ -325,6 +329,10 @@ class HazardService:
             records["nasa_firms"] = self._drop_static_records(records["nasa_firms"])
         fire = build("nasa_firms", HazardType.FIRE, lambda rows: fire_features(rows, self.amphoe_codes))
         pm25 = build("air4thai", HazardType.AIR_QUALITY, pm25_features)
+        self._last_pm25 = None if records["air4thai"] is None else sorted((
+            {"id": r.station_id, "name_th": r.extra.get("name_th"), "area_th": r.extra.get("area_th"), "lat": r.lat, "lon": r.lon,
+             "pm25": r.value, "aqi": r.extra.get("aqi"), "time": r.observed_at.isoformat()}
+            for r in records["air4thai"] if r.lat is not None and r.lon is not None), key=lambda s: -s["pm25"])
         quakes = self._quake_shaking(records.get("tmd_earthquakes"), records.get("usgs_earthquakes"))
         cyclones = self._cyclone_exposure(records.get("gdacs_cyclones"))
 
@@ -971,6 +979,22 @@ class HazardService:
 
     def get_official_warnings(self) -> list[dict]:
         return self.warnings
+
+    def overview_layer(self) -> dict:
+        """Each district's worst level over all hazards, which hazard it is, and how many hazards are WATCH or above."""
+        order = {None: -1, "NORMAL": 0, "WATCH": 1, "WARNING": 2, "CRITICAL": 3}
+        features = []
+        for code, geometry in self._geometry.items():
+            items = self.decisions.get(code, [])
+            worst = max(items, key=lambda i: order[i["level"]], default=None)
+            area = self.gazetteer.by_code[code]
+            features.append({"type": "Feature", "geometry": geometry, "properties": {
+                "code": code, "name_th": area.name_th, "province_th": self.gazetteer.by_code[area.parent_code].name_th,
+                "level": worst["level"] if worst else None,
+                "worst_hazard": worst["hazard"] if worst and worst["level"] not in (None, "NORMAL") else None,
+                "hazards_at_risk": sum(1 for i in items if order[i["level"]] >= 1),
+            }})
+        return {"type": "FeatureCollection", "features": features}
 
     def map_layer(self, hazard: str) -> dict:
         features = []

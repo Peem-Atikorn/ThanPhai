@@ -1,7 +1,7 @@
 "use client";
 
 import type { ExpressionSpecification, StyleSpecification } from "@maplibre/maplibre-gl-style-spec";
-import { type GeoJSONSource, Map as MapLibreMap, type MapLayerMouseEvent, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import { type GeoJSONSource, Map as MapLibreMap, type MapLayerMouseEvent, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 import { type AreaBoundary, LEVELS } from "@/lib/api";
@@ -23,6 +23,10 @@ interface Props {
   label?: string;
   /** Searched province or sub-district: outlined, and the map fits to it. */
   outline?: AreaBoundary | null;
+  /** Measuring stations drawn over the districts, each with `color`, `value` (label) and `title` properties. */
+  stations?: GeoJSON.FeatureCollection | null;
+  /** Radar tile URL template (RainViewer), drawn over the districts; null hides it. */
+  radar?: string | null;
 }
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -33,6 +37,8 @@ const POINT_LAYERS = ["points", "point-selected"];
 // self-hosted tile server for heavier use (docs/API_REQUIREMENTS.md section 2).
 const STYLE: StyleSpecification = {
   version: 8,
+  // Glyphs for the station values (digits only). Protomaps hosts these fonts openly.
+  glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
   sources: {
     osm: {
       type: "raster",
@@ -55,21 +61,34 @@ const fillColor: ExpressionSpecification = [
   color("NONE"),
 ];
 
+// RainViewer serves zoom 0-7 only (since 2026-01-01); MapLibre stretches zoom 7 tiles beyond that.
+const RADAR_MAX_ZOOM = 7;
+const RADAR_ATTRIBUTION = '<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>';
+
+function applyRadar(m: MapLibreMap, radar: string | null) {
+  if (m.getLayer("radar")) m.removeLayer("radar");
+  if (m.getSource("radar")) m.removeSource("radar");
+  if (!radar) return;
+  m.addSource("radar", { type: "raster", tiles: [radar], tileSize: 256, maxzoom: RADAR_MAX_ZOOM, attribution: RADAR_ATTRIBUTION });
+  // Over the district colours, under the district lines and everything else.
+  m.addLayer({ id: "radar", type: "raster", source: "radar", paint: { "raster-opacity": 0.8 } }, "line");
+}
+
 function applyMode(m: MapLibreMap, mode: "hazard" | "points") {
   for (const id of AREA_LAYERS) m.setLayoutProperty(id, "visibility", mode === "hazard" ? "visible" : "none");
   for (const id of POINT_LAYERS) m.setLayoutProperty(id, "visibility", mode === "points" ? "visible" : "none");
 }
 
-export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null }: Props) {
+export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const ready = useRef(false);
   // Latest props, so the map "load" handler can apply whatever arrived before the style was ready.
-  const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline });
+  const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar });
 
   useEffect(() => {
-    latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline };
-  }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline]);
+    latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar };
+  }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar]);
 
   useEffect(() => {
     if (!container.current) return;
@@ -125,8 +144,29 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
       });
       m.on("mouseenter", "points", () => (m.getCanvas().style.cursor = "pointer"));
       m.on("mouseleave", "points", () => (m.getCanvas().style.cursor = ""));
+      // Measuring stations (PM2.5): coloured dots with their value; labels that would overlap are hidden.
+      m.addSource("stations", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "station-dots", type: "circle", source: "stations",
+        paint: { "circle-color": ["get", "color"], "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 7, 9, 13],
+          "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 },
+      });
+      m.addLayer({
+        id: "station-values", type: "symbol", source: "stations",
+        layout: { "text-field": ["get", "value"], "text-font": ["Noto Sans Medium"], "text-size": ["interpolate", ["linear"], ["zoom"], 5, 9, 9, 12] },
+        paint: { "text-color": ["get", "text"] },
+      });
+      const popup = new Popup({ closeButton: false, offset: 10 });
+      m.on("click", "station-dots", (e: MapLayerMouseEvent) => {
+        const f = e.features?.[0];
+        if (f?.geometry.type === "Point") popup.setLngLat(f.geometry.coordinates as [number, number]).setText(String(f.properties?.title ?? "")).addTo(m);
+      });
+      m.on("mouseenter", "station-dots", () => (m.getCanvas().style.cursor = "pointer"));
+      m.on("mouseleave", "station-dots", () => (m.getCanvas().style.cursor = ""));
       ready.current = true;
-      const { data: d, selected: s, points: pts, selectedPoint: sp, mode: md, outline: ol } = latest.current;
+      const { data: d, selected: s, points: pts, selectedPoint: sp, mode: md, outline: ol, stations: st, radar: rd } = latest.current;
+      (m.getSource("stations") as GeoJSONSource).setData(st ?? EMPTY);
+      applyRadar(m, rd);
       (m.getSource("outline") as GeoJSONSource).setData(ol ?? EMPTY);
       if (d) (m.getSource("areas") as GeoJSONSource).setData(d);
       m.setFilter("selected", ["==", ["get", "code"], s ?? ""]);
@@ -159,6 +199,14 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
   useEffect(() => {
     if (ready.current && map.current) applyMode(map.current, mode);
   }, [mode]);
+
+  useEffect(() => {
+    if (ready.current && map.current) (map.current.getSource("stations") as GeoJSONSource).setData(stations ?? EMPTY);
+  }, [stations]);
+
+  useEffect(() => {
+    if (ready.current && map.current) applyRadar(map.current, radar);
+  }, [radar]);
 
   useEffect(() => {
     const m = map.current;

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, Hazard, HAZARDS, levelInfo, LEVELS, mcmPerDayToM3s, River, riverColor, RIVER_STATUS } from "@/lib/api";
+import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import Icon from "@/components/Icon";
 import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
@@ -17,7 +17,8 @@ type Layer = Awaited<ReturnType<typeof api.layer>>;
 type SearchArea = Awaited<ReturnType<typeof api.search>>[number];
 const number = new Intl.NumberFormat("th-TH");
 const prefix = (level: string) => level === "province" ? "จ." : level === "tambon" ? "ต." : "อ.";
-const hazardDescriptions: Record<Hazard, string> = {
+const hazardDescriptions: Record<MapLayerId, string> = {
+  overview: "สีของแต่ละอำเภอคือระดับสูงสุดของทุกภัย แตะอำเภอเพื่อดูว่าเป็นภัยอะไร",
   flood: "ระดับน้ำและพื้นที่น้ำท่วมจากดาวเทียม",
   rain_storm: "ปริมาณฝนและสภาพอากาศรายพื้นที่",
   fire: "จุดความร้อนและโอกาสเกิดไฟในพื้นที่",
@@ -61,6 +62,19 @@ const riverRadius = (r: River) => scale(Math.sqrt(r.discharge_m3s ?? 0), [[0, 4]
 const riverKey = (r: River) => r.id ?? r.code;
 const RID_HOURLY = "https://hyd-app.rid.go.th/hydro5h.html";
 type View = "hazard" | "dams" | "rivers";
+// The rain radar is drawn on these maps.
+const RADAR_LAYERS: MapLayerId[] = ["rain_storm", "tropical_cyclone"];
+const stationFeatures = (stations: AirStation[]): GeoJSON.FeatureCollection => ({
+  type: "FeatureCollection",
+  features: stations.map((s) => {
+    const band = pm25Band(s.pm25);
+    return {
+      type: "Feature", geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+      properties: { color: band.color, text: band.text, value: s.pm25.toFixed(0),
+        title: `${s.name_th ?? "สถานี"}: PM2.5 ${s.pm25.toFixed(1)} มคก./ลบ.ม. (${band.th})` },
+    };
+  }),
+});
 const damDate = (d: string | null) => d ? new Date(d).toLocaleDateString("th-TH", { dateStyle: "medium", timeZone: "Asia/Bangkok" }) : "—";
 
 function DamRow({ dam, active, sortBy, onSelect }: { dam: Dam; active: boolean; sortBy: "storage" | "release"; onSelect: (d: Dam) => void }) {
@@ -113,7 +127,7 @@ function DamDetail({ dam, onClose }: { dam: Dam; onClose: () => void }) {
 }
 
 export default function Dashboard() {
-  const [hazard, setHazard] = useState<Hazard>("flood");
+  const [hazard, setHazard] = useState<MapLayerId>("overview");
   const [revision, setRevision] = useState(0);
   const [layerState, setLayerState] = useState<{ key: string; data: Layer | null; error: boolean } | null>(null);
   const layerKey = hazard + ":" + revision;
@@ -144,6 +158,21 @@ export default function Dashboard() {
   const [riverProvince, setRiverProvince] = useState<{ code: string; name: string } | null>(null);
   const visibleRivers = useMemo(() => riverProvince ? rivers.list.filter((r) => r.province_code === riverProvince.code) : rivers.list,
     [rivers.list, riverProvince]);
+  const [airStations, setAirStations] = useState<AirStation[] | null>(null);
+  const stationLayer = useMemo(() => hazard === "air_quality" && airStations ? stationFeatures(airStations) : null, [hazard, airStations]);
+  const [radarOn, setRadarOn] = useState(true);
+  const [radar, setRadar] = useState<{ tiles: string; time: number } | null>(null);
+  const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
+  // The last item opened in each group, so its button goes back there.
+  const lastInGroup = useRef<Record<string, MapItem>>({});
+  const currentItem: MapItem = view === "hazard" ? hazard : view;
+  const currentGroup = groupOf(currentItem);
+  function openItem(item: MapItem) {
+    lastInGroup.current[groupOf(item).id] = item;
+    if (item === "dams") setView("dams");
+    else if (item === "rivers") { setView("rivers"); setRiverProvince(null); }
+    else { setHazard(item); setView("hazard"); }
+  }
   const [selectedDam, setSelectedDam] = useState<string | null>(null);
   const [damSort, setDamSort] = useState<"storage" | "release">("storage");
   const damPoints = useMemo<GeoJSON.FeatureCollection>(() => ({
@@ -179,6 +208,21 @@ export default function Dashboard() {
       .catch(() => !cancelled && setDams((old) => ({ list: old.list, status: "error" })));
     return () => { cancelled = true; };
   }, [revision]);
+
+  useEffect(() => {
+    if (hazard !== "air_quality") return;
+    let cancelled = false;
+    api.airStations().then((d) => !cancelled && setAirStations(d.stations)).catch(() => {});
+    return () => { cancelled = true; };
+  }, [hazard, revision]);
+
+  useEffect(() => {
+    if (!showRadar) return;
+    let cancelled = false;
+    // A failed radar request just leaves the map without radar; the station data still shows.
+    api.radar().then((r) => !cancelled && setRadar(r)).catch(() => !cancelled && setRadar(null));
+    return () => { cancelled = true; };
+  }, [showRadar, revision]);
 
   useEffect(() => {
     let cancelled = false;
@@ -332,24 +376,36 @@ export default function Dashboard() {
   const counts = LEVELS.map((level) => ({ ...level, n: layer?.features.filter((f) => (f.properties?.level ?? "NONE") === level.id).length ?? 0 }));
   const warningCount = counts.filter((l) => l.id === "CRITICAL" || l.id === "WARNING").reduce((sum, l) => sum + l.n, 0);
   const warnings = area?.official_warnings ?? [];
+  // Overview: how many districts each hazard puts at WATCH or above (as its worst hazard).
+  const overviewBreakdown = useMemo(() => {
+    if (hazard !== "overview" || !layer) return [];
+    const n = new Map<MapLayerId, number>();
+    for (const f of layer.features) {
+      const h = f.properties?.worst_hazard as MapLayerId | null;
+      if (h) n.set(h, (n.get(h) ?? 0) + 1);
+    }
+    return [...n.entries()].sort((a, b) => b[1] - a[1]) as [Exclude<MapLayerId, "overview">, number][];
+  }, [hazard, layer]);
 
   return (
     <>
       <div className="dashboard-grid">
         <a className="mobile-search-link" href="#area-search"><Icon name="search" />ค้นหาจังหวัด อำเภอ หรือตำบล<Icon name="arrow" /></a>
         <section className="map-panel" aria-label="ภาพรวมความเสี่ยง">
-          <div className="hazard-toolbar" role="group" aria-label="เลือกประเภทภัย">
-            {HAZARDS.map((item) => { const active = view === "hazard" && hazard === item.id; return <button key={item.id} type="button" className={"hazard-button " + (active ? "is-active" : "")} aria-pressed={active} disabled={!item.ready} onClick={() => { setHazard(item.id); setView("hazard"); }}><Icon name={item.id} /><span>{item.th}</span>{!item.ready && <small>เร็ว ๆ นี้</small>}</button>; })}
-            <button type="button" className={"hazard-button " + (view === "dams" ? "is-active" : "")} aria-pressed={view === "dams"} onClick={() => setView("dams")}><Icon name="dam" /><span>เขื่อน</span></button>
-            <button type="button" className={"hazard-button " + (view === "rivers" ? "is-active" : "")} aria-pressed={view === "rivers"} onClick={() => { setView("rivers"); setRiverProvince(null); }}><Icon name="river" /><span>แม่น้ำ</span></button>
+          <div className="hazard-toolbar" role="group" aria-label="เลือกกลุ่มภัย">
+            {GROUPS.map((group) => { const active = group.id === currentGroup.id; return <button key={group.id} type="button" className={"hazard-button " + (active ? "is-active" : "")} aria-pressed={active} onClick={() => openItem(lastInGroup.current[group.id] ?? group.items[0])}><Icon name={group.icon} /><span>{group.th}</span></button>; })}
           </div>
+          {currentGroup.items.length > 1 && <div className="hazard-subtabs" role="group" aria-label={"เลือกภัยในกลุ่ม" + currentGroup.th}>
+            {currentGroup.items.map((item) => { const active = item === currentItem; return <button key={item} type="button" className={active ? "is-active" : ""} aria-pressed={active} onClick={() => openItem(item)}><Icon name={item === "overview" ? "shield" : item === "dams" ? "dam" : item === "rivers" ? "river" : item} />{itemTh(item)}</button>; })}
+          </div>}
           <div className="map-heading">
             {view === "dams"
               ? <div><h2>ปริมาณน้ำและการระบายน้ำของเขื่อน</h2><p>เขื่อนขนาดใหญ่ทั่วประเทศ · ขนาดวงกลมตามปริมาณน้ำในอ่าง</p></div>
               : view === "rivers"
               ? <div><h2>ระดับน้ำและน้ำไหลผ่านในแม่น้ำ</h2><p>สถานีวัดน้ำรายชั่วโมง · ขนาดวงกลมตามปริมาณน้ำไหลผ่าน</p></div>
-              : <div><h2>แผนที่ความเสี่ยง{HAZARDS.find((h) => h.id === hazard)?.th}</h2><p>{hazardDescriptions[hazard]}</p></div>}
-            {view === "hazard" && <button type="button" className="images-link" onClick={showWeatherImages}><Icon name="radar" />เรดาร์ · คาดการณ์ฝน · พายุ</button>}
+              : <div><h2>แผนที่ความเสี่ยง{itemTh(hazard)}</h2><p>{hazardDescriptions[hazard]}</p></div>}
+            {view === "hazard" && RADAR_LAYERS.includes(hazard) && <button type="button" className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar" />เรดาร์บนแผนที่{radarOn ? " · เปิด" : " · ปิด"}</button>}
+            {view === "hazard" && hazard === "rain_storm" && <button type="button" className="images-link" onClick={showWeatherImages}><Icon name="radar" />ภาพเรดาร์ · คาดการณ์ฝน · พายุ</button>}
             <button className="icon-button" onClick={() => setRevision((value) => value + 1)} disabled={layerLoading} aria-label="โหลดข้อมูลแผนที่ใหม่" title="โหลดข้อมูลแผนที่ใหม่"><Icon name="refresh" className={layerLoading ? "spinning" : ""} /></button>
           </div>
           <div className="map-canvas">
@@ -357,7 +413,8 @@ export default function Dashboard() {
               points={view === "dams" ? damPoints : view === "rivers" ? riverPoints : null}
               selectedPoint={view === "dams" ? selectedDam : selectedRiver}
               onSelectPoint={view === "dams" ? selectDamFromMap : selectRiverFromMap}
-              label={view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined} />
+              label={view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined}
+              stations={view === "hazard" ? stationLayer : null} radar={showRadar ? radar?.tiles ?? null : null} />
             <div className="map-hint"><Icon name="pin" /><span>{view === "dams" ? "แตะวงกลมเพื่อดูข้อมูลเขื่อน" : view === "rivers" ? "แตะวงกลมเพื่อดูข้อมูลสถานีวัดน้ำ" : "แตะพื้นที่เพื่อดูรายละเอียด"}</span></div>
             <button type="button" className="map-reset" onClick={() => setFocus({ lat: 13.4, lon: 100.9, zoom: 5 })}><Icon name="map" />ภาพรวมประเทศ</button>
             {view === "hazard" && <>
@@ -383,6 +440,8 @@ export default function Dashboard() {
           </div> : <div className="map-summary">
             <div className="legend-heading"><h3>ระดับความเสี่ยง</h3><span>{layer ? number.format(layer.features.length) + " อำเภอ" : "รอข้อมูล"}</span></div>
             <ul className="risk-legend">{counts.map((level) => <li key={level.id}><span className="legend-dot" style={{ background: level.color }} /><span>{level.th}</span><strong>{layer ? number.format(level.n) : "—"}</strong></li>)}</ul>
+            {hazard === "air_quality" && <div className="pm-legend"><h3>จุดสถานีวัด PM2.5 (กรมควบคุมมลพิษ) · ตัวเลขคือค่าเฉลี่ย 24 ชม.</h3><ul>{PM25_BANDS.map((b, i) => <li key={b.th}><span className="legend-dot" style={{ background: b.color }} />{b.th}<small>{i === 0 ? "0–15" : i === PM25_BANDS.length - 1 ? "> 75" : `${PM25_BANDS[i - 1].max}–${b.max}`}</small></li>)}</ul>{airStations && <p className="source-note">{number.format(airStations.length)} สถานีที่มีค่าล่าสุดไม่เกิน 6 ชม. · อำเภอที่ไม่มีสถานีใช้ค่าจากแบบจำลอง</p>}</div>}
+            {showRadar && <p className="source-note radar-note">{radar ? <>เรดาร์ฝนล่าสุด {new Date(radar.time * 1000).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })} น. · <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a> (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)</> : "ยังโหลดเรดาร์ไม่ได้"}</p>}
             <div className="data-timestamp"><Icon name="clock" /><span>ข้อมูล ณ {formatTime(layer?.meta.data_updated_at)} (เวลาไทย){pending && " · กำลังโหลดข้อมูลดาวเทียมและพยากรณ์เพิ่มเติม"}</span></div>
             {!!layer?.meta.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {layer.meta.degraded_services.join(", ")}</p>}
           </div>}
@@ -422,7 +481,8 @@ export default function Dashboard() {
               {!!area.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {area.degraded_services.join(", ")}</p>}
               <p className="source-note">อัปเดต {formatTime(area.data_updated_at)} (เวลาไทย)</p>
             </> : <div className="empty-area"><span className="empty-map-icon"><Icon name="map" width="32" height="32" /></span><h3>เริ่มจากพื้นที่ของคุณ</h3><p>แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่<br />เพื่อดูความเสี่ยงทั้ง {HAZARDS.length} ประเภท</p><button className="text-button" onClick={() => searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button></div>}
-            {!area && areaStatus === "idle" && layer && <div className="national-summary"><span className={"summary-dot " + (warningCount ? "has-warning" : "")} /><p>{warningCount ? <><strong>{number.format(warningCount)} อำเภอ</strong> อยู่ในระดับเตือนภัยหรือวิกฤต</> : "ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤตในข้อมูลชุดนี้"}<small>ภาพรวม{HAZARDS.find((h) => h.id === hazard)?.th}ทั่วประเทศ</small></p></div>}
+            {!area && areaStatus === "idle" && layer && <div className="national-summary"><span className={"summary-dot " + (warningCount ? "has-warning" : "")} /><p>{warningCount ? <><strong>{number.format(warningCount)} อำเภอ</strong> อยู่ในระดับเตือนภัยหรือวิกฤต</> : "ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤตในข้อมูลชุดนี้"}<small>ภาพรวม{itemTh(hazard)}ทั่วประเทศ</small></p></div>}
+            {!area && areaStatus === "idle" && hazard === "overview" && overviewBreakdown.length > 0 && <div className="overview-breakdown"><h3>อำเภอที่เฝ้าระวังขึ้นไป แยกตามภัยที่หนักที่สุด</h3><ul>{overviewBreakdown.map(([id, n]) => <li key={id}><button type="button" onClick={() => openItem(id)}><Icon name={id} /><span>{itemTh(id)}</span><strong>{number.format(n)}</strong><Icon name="arrow" /></button></li>)}</ul></div>}
           </section>
 
           {view === "dams" && <section ref={pointPanel} className="search-panel dam-panel" aria-label="ข้อมูลเขื่อน">

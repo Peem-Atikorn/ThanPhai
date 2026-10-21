@@ -245,6 +245,15 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Rain criteria | DMR notices alert at > 100 mm in 24 h and cite > 150 mm for severe cases (no single published standard found) |
 | Used by | scripts/build_landslide_districts.py → 02 (`landslide` hazard) |
 
+### 1.19 RainViewer — radar mosaic tiles ✅
+
+| Item | Detail |
+|---|---|
+| Frames | `https://api.rainviewer.com/public/weather-maps.json` (CORS open): `host` + `radar.past[].path` (2 h, 10-min steps) |
+| Tiles | `{host}{path}/256/{z}/{x}/{y}/2/1_1.png` (256 px, colour scheme 2 = Universal Blue, smoothed, snow) |
+| Limits (since 2026-01-01) | Max zoom 7, only Universal Blue, no nowcast, 100 requests/IP/minute; "for personal and educational use only"; availability not guaranteed; credit RainViewer with a link (requested) |
+| Used by | 01 (radar layer on the rain and cyclone maps, browser fetches directly) |
+
 ---
 
 ## 2. Map and location APIs
@@ -336,6 +345,7 @@ VAPID_PRIVATE_KEY=
 - ข้อมูลแผ่นดินไหว: กองเฝ้าระวังแผ่นดินไหว กรมอุตุนิยมวิทยา · Earthquake data: USGS
 - Disaster alerts: GDACS (UN / European Commission)
 - ข้อมูลร่องรอยแผ่นดินถล่ม: กรมทรัพยากรธรณี (CC BY)
+- Radar: RainViewer (https://www.rainviewer.com)
 - Rainfall: CHIRPS, UCSB Climate Hazards Center
 - Boundaries: OCHA HDX
 - Map data © OpenStreetMap contributors (if the OSM basemap is used)

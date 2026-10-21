@@ -472,3 +472,18 @@ def test_landslide_only_where_landslides_happened(base_service, monkeypatch):
     assert "กรมอุตุนิยมวิทยา (พยากรณ์ฝน)" in hill["sources"]
     flat = next(i for i in decisions[sena] if i["hazard"] == "landslide")
     assert flat["level"] is None and "2 จุด" in flat["notices"][0]  # 200 mm of rain, but no landslide history
+
+
+def test_fresh_pm25_stations_are_kept_for_the_map(base_service):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    now = datetime.now(timezone.utc)
+
+    def station(sid, hours_ago, value):
+        return SourceRecord(source="air4thai", variable="pm25_24h", value=value, unit="µg/m³", lat=13.7, lon=100.5, station_id=sid,
+                            observed_at=now - timedelta(hours=hours_ago), fetched_at=now, attribution="t", extra={"name_th": sid})
+
+    svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [],
+                  "air4thai": [station("a", 1, 20.0), station("b", 1, 55.0), station("old", 9, 99.0)]}, [])
+    assert [s["id"] for s in svc._last_pm25] == ["b", "a"]  # worst first; the 9-hour-old reading is dropped

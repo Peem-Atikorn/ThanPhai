@@ -214,6 +214,17 @@ Round 7 (dams, 2026-10-19):
     coordinates match DMR's own district names for 99 % of points. Rules: observed rain > 100 mm/24 h WARNING, > 150 CRITICAL (DMR notices),
     TMD forecast > 100 mm/day WATCH. Live 2026-10-22: ขนอม (นครศรีธรรมราช) 122.7 mm = WARNING. Other districts say why they are not assessed.
 
+### Round 16 — map layout (branch `feature/peem/01-map-groups`, stacked on all-landslide)
+91. 12 toolbar buttons became 6 groups with sub-tabs: ภาพรวม · น้ำ (flood, dams, rivers) · ฝนและพายุ (rain, cyclones, waves) ·
+    ไฟและฝุ่น (PM2.5, fire) · ร้อนและแล้ง (heat, drought) · ธรณีภัย (landslide, earthquake). Each group button reopens its last sub-tab; phones get 3×2.
+92. Default map is the overview (`/v1/map/layers/overview`): each district's worst level over all hazards, with the hazard that causes it; the side
+    panel lists districts at WATCH+ by hazard and links to that map. Live 2026-10-22: 6 CRITICAL, 6 WARNING, 83 WATCH (rain 66, flood 15, drought 10, fire 4).
+93. PM2.5 map shows every fresh Air4Thai station (`/v1/air/stations`, 149 live) as a dot in the PCD band colour with its value; overlapping labels
+    hide themselves (glyphs from protomaps.github.io). Before, values were only in the district card and an all-NORMAL map looked empty.
+94. Rain and cyclone maps draw the latest RainViewer radar frame over the districts (toggle "เรดาร์บนแผนที่"). RainViewer limits since 2026-01-01:
+    zoom <= 7 (MapLibre stretches beyond), one colour scheme, past 2 h only, 100 requests/IP/min, personal or educational use only — so only the latest frame, no animation.
+    Unlike drawing fixed circles around model grid points, the radar shows where rain is actually falling.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

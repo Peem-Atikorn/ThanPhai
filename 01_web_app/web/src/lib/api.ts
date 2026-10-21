@@ -14,6 +14,45 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "landslide", th: "ดินถล่ม", ready: true },
 ];
 
+/** A map layer: one hazard, or "overview" (each district's worst level over all hazards). */
+export type MapLayerId = Hazard | "overview";
+/** Everything the toolbar can show: hazard layers plus the dam and river views. */
+export type MapItem = MapLayerId | "dams" | "rivers";
+
+/** Toolbar groups: one button each; groups with several items show them as sub-tabs. */
+export const GROUPS: { id: string; th: string; icon: "shield" | "flood" | "rain_storm" | "fire" | "heat" | "landslide"; items: MapItem[] }[] = [
+  { id: "overview", th: "ภาพรวม", icon: "shield", items: ["overview"] },
+  { id: "water", th: "น้ำ", icon: "flood", items: ["flood", "dams", "rivers"] },
+  { id: "weather", th: "ฝนและพายุ", icon: "rain_storm", items: ["rain_storm", "tropical_cyclone", "marine"] },
+  { id: "smoke", th: "ไฟและฝุ่น", icon: "fire", items: ["air_quality", "fire"] },
+  { id: "hot", th: "ร้อนและแล้ง", icon: "heat", items: ["heat", "drought"] },
+  { id: "geo", th: "ธรณีภัย", icon: "landslide", items: ["landslide", "earthquake"] },
+];
+export const groupOf = (item: MapItem) => GROUPS.find((g) => g.items.includes(item))!;
+export const itemTh = (item: MapItem) =>
+  item === "overview" ? "ทุกภัย" : item === "dams" ? "เขื่อน" : item === "rivers" ? "แม่น้ำ" : HAZARDS.find((h) => h.id === item)!.th;
+
+/** Pollution Control Department PM2.5 bands (24-hour average, since 2023-06-01), with Air4Thai's colours. */
+export const PM25_BANDS: { max: number; th: string; color: string; text: string }[] = [
+  { max: 15, th: "ดีมาก", color: "#3bccff", text: "#06364a" },
+  { max: 25, th: "ดี", color: "#92d050", text: "#1f3a08" },
+  { max: 37.5, th: "ปานกลาง", color: "#ffe600", text: "#3d3500" },
+  { max: 75, th: "เริ่มมีผลต่อสุขภาพ", color: "#ffa200", text: "#3d2400" },
+  { max: Infinity, th: "มีผลต่อสุขภาพ", color: "#f04646", text: "#ffffff" },
+];
+export const pm25Band = (value: number) => PM25_BANDS.find((b) => value <= b.max)!;
+
+export interface AirStation {
+  id: string | null;
+  name_th: string | null;
+  area_th: string | null;
+  lat: number;
+  lon: number;
+  pm25: number; // 24-hour average, µg/m³
+  aqi: number | null;
+  time: string;
+}
+
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
   { id: "CRITICAL", th: "วิกฤต", color: "#d7263d" },
   { id: "WARNING", th: "เตือนภัย", color: "#f77f00" },
@@ -198,13 +237,23 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  layer: (hazard: Hazard) => get<GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } }>(`/v1/map/layers/${hazard}`),
+  layer: (hazard: MapLayerId) => get<GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } }>(`/v1/map/layers/${hazard}`),
   area: (code: string) => get<AreaHazards>(`/v1/areas/${code}/hazards`),
   dams: () => get<{ dams: Dam[]; data_updated_at: string | null }>(`/v1/dams`),
   damHistory: (id: string, series: "storage" | "released" | "inflow") => get<DamHistory>(`/v1/dams/${encodeURIComponent(id)}/history?series=${series}`),
   rivers: () => get<{ rivers: River[]; data_updated_at: string | null }>(`/v1/rivers`),
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
   media: () => get<Media>(`/v1/media`),
+  airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
+  /** Latest RainViewer radar frame as a tile URL template, or null when there is none. */
+  radar: async (): Promise<{ tiles: string; time: number } | null> => {
+    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const maps: { host: string; radar: { past: { time: number; path: string }[] } } = await res.json();
+    const last = maps.radar.past.at(-1);
+    // 256 px tiles, colour scheme 2 (Universal Blue, the only one left), smoothed, snow shown.
+    return last ? { tiles: `${maps.host}${last.path}/256/{z}/{x}/{y}/2/1_1.png`, time: last.time } : null;
+  },
   earthquakes: () => get<{ earthquakes: Earthquake[] }>(`/v1/earthquakes`),
   regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),
