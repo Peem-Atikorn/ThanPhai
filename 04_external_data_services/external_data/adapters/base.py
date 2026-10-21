@@ -11,10 +11,12 @@ BANGKOK = timezone(timedelta(hours=7), "Asia/Bangkok")
 
 # Thailand bounding box: west, south, east, north. Use the country polygon in module 05 for exact clipping.
 THAILAND_BBOX = (97.3, 5.6, 105.7, 20.5)
+# Thailand with Myanmar, Laos and Cambodia, where smoke that reaches Thailand often starts.
+REGION_BBOX = (92.0, 5.6, 108.0, 28.6)
 
 
-def in_thailand_bbox(lat: float, lon: float) -> bool:
-    west, south, east, north = THAILAND_BBOX
+def in_thailand_bbox(lat: float, lon: float, bbox: tuple = THAILAND_BBOX) -> bool:
+    west, south, east, north = bbox
     return south <= lat <= north and west <= lon <= east
 
 

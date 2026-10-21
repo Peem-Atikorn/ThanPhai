@@ -205,6 +205,8 @@ export function describeObservation(key: string, value: number | null): string |
       return `PM2.5 เฉลี่ย 24 ชม. ${value.toFixed(1)} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)`;
     case "pm25_model_24h":
       return `แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า ${value.toFixed(1)} มคก./ลบ.ม.`;
+    case "cross_border_hotspots_24h":
+      return value > 0 ? `จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. ${value} จุด (24 ชม.)` : null;
     case "spi_3":
       return `SPI-3 ${value.toFixed(2)}`;
     default:

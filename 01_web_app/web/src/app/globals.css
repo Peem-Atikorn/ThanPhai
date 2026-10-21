@@ -56,7 +56,7 @@ svg { flex-shrink: 0; }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr) 370px; align-items: start; gap: 24px; }
 .mobile-search-link { display: none; }
 .map-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; position: sticky; top: 20px; }
-.hazard-toolbar { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); padding: 8px; gap: 5px; border-bottom: 1px solid var(--line); }
+.hazard-toolbar { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); padding: 8px; gap: 5px; border-bottom: 1px solid var(--line); }
 .hazard-button { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 48px; border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 14px; }
 .hazard-button:hover { background: var(--accent-soft); color: var(--brand); }
 .hazard-button.is-active { background: var(--brand); color: white; }
@@ -214,7 +214,7 @@ h2 { font-size: 17px; font-weight: 650; }
   .page-intro p { font-size: 12px; line-height: 1.8; max-width: 34ch; }
   .dashboard-grid { display: flex; flex-direction: column; gap: 16px; }
   .map-panel, .detail-sidebar { width: 100%; }
-  .hazard-toolbar { padding: 6px; gap: 3px; }
+  .hazard-toolbar { padding: 6px; gap: 3px; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
   .hazard-button { flex-direction: column; gap: 5px; min-height: 62px; font-size: 10px; }
   .hazard-button svg { width: 21px; height: 21px; }
   .map-heading { min-height: 78px; padding: 12px 14px; }

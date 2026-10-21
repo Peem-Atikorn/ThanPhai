@@ -176,6 +176,9 @@ Round 7 (dams, 2026-10-19):
 75. Bug found live: all 928 district points in one go got Open-Meteo 429 (600/min). Points snap to the 0.4° CAMS grid: 306 calls per refresh.
 76. Bug found live: Python cannot verify air4thai.pcd.go.th (the server sends Sectigo intermediates for a Let's Encrypt certificate). The two public Let's Encrypt intermediates are bundled in the adapter; verification stays on.
 77. Agent: "ฝุ่น", "pm2.5", "หมอกควัน", "คุณภาพอากาศ" are air-quality questions now (they were fire); answers give the station or model value and N95 advice.
+78. Cross-border smoke: FIRMS is fetched once for Thailand + Myanmar, Laos and Cambodia. Hotspots in Thailand drive the fire rules as before;
+    hotspots outside Thailand within 100 km of a district centre are shown with its PM2.5 (context only, never a rule input). Live 2026-10-22: 18 districts.
+79. Hazard toolbar uses auto-fill columns so new hazard tabs fit; "ความเสี่ยงทั้ง N ประเภท" counts the tabs instead of saying 4.
 
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.

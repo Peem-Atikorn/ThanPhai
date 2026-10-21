@@ -18,6 +18,7 @@ import httpx
 from decision_engine import DecisionEngine, DecisionInput
 from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, OpenMeteoAirQuality, ThaiWaterRain24h, ThaiWaterWaterLevel,
                                     TmdNwpDailyForecast, TmdWarnings)
+from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
@@ -45,6 +46,9 @@ CHAO_PHRAYA_CHAIN = ["P.17", "N.67", "C.2", "C.13", "C.3", "C.7A", "C.35", "C.36
 MAX_LEVEL_AGE = timedelta(hours=6)
 # Air4Thai stations that stopped reporting (seen live: 12 of 173 stuck 8 h behind) are dropped the same way.
 MAX_PM25_AGE = timedelta(hours=6)
+# Fires in Myanmar, Laos and Cambodia within this distance of a district centre are shown with its PM2.5:
+# context for where the smoke may come from, not a rule input.
+CROSS_BORDER_KM = 100
 GRAPH_TTL = timedelta(minutes=15)
 DAM_HISTORY_TTL = timedelta(hours=6)
 FAILURE_TTL = timedelta(seconds=60)
@@ -194,7 +198,8 @@ class HazardService:
         adapters = {
             "thaiwater_waterlevel": ThaiWaterWaterLevel(),
             "thaiwater_rain_24h": ThaiWaterRain24h(),
-            "nasa_firms": FirmsHotspots(),
+            # One regional download: hotspots in Thailand drive the fire rules, the rest is PM2.5 context.
+            "nasa_firms": FirmsHotspots(bbox=REGION_BBOX),
             "air4thai": Air4ThaiPm25(),
         }
         async with httpx.AsyncClient(headers=USER_AGENT, follow_redirects=True) as client:
@@ -266,6 +271,16 @@ class HazardService:
 
         flood = build("thaiwater_waterlevel", HazardType.FLOOD, flood_features)
         rain = build("thaiwater_rain_24h", HazardType.RAIN_STORM, rain_features)
+        cross_border: dict[str, int] = {}
+        if records["nasa_firms"] is not None:
+            regional = records["nasa_firms"]
+            records["nasa_firms"] = [r for r in regional if in_thailand_bbox(r.lat, r.lon)]
+            status["nasa_firms"]["records"] = len(records["nasa_firms"])
+            try:
+                cross_border = self._cross_border_counts(regional)
+                status["nasa_firms"]["districts_near_cross_border_fires"] = len(cross_border)
+            except Exception:
+                log.exception("cross-border hotspot counts failed")
         if records["nasa_firms"] and self.static_cells:
             records["nasa_firms"] = self._drop_static_records(records["nasa_firms"])
         fire = build("nasa_firms", HazardType.FIRE, lambda rows: fire_features(rows, self.amphoe_codes))
@@ -297,7 +312,10 @@ class HazardService:
                 HazardType.DROUGHT: drought_obs,
                 # A station reading wins; the model fills only districts without one.
                 HazardType.AIR_QUALITY: {"pm25_24h": pm25_station,
-                                         "pm25_model_24h": air_model.get(code) if pm25_station is None else None},
+                                         "pm25_model_24h": air_model.get(code) if pm25_station is None else None,
+                                         # None when FIRMS failed, 0 when it worked and saw nothing nearby.
+                                         "cross_border_hotspots_24h": (float(cross_border.get(code, 0))
+                                                                       if records["nasa_firms"] is not None else None)},
             }
             items = []
             for hazard, obs in observations.items():
@@ -367,6 +385,29 @@ class HazardService:
             self._drought = json.loads(path.read_text(encoding="utf-8"))
             self._drought_mtime = mtime
         return self._drought
+
+    def _cross_border_counts(self, records: list) -> dict[str, int]:
+        """Hotspots outside Thailand within CROSS_BORDER_KM of each district centre (districts with none are left out)."""
+        import numpy as np
+
+        if not records:
+            return {}
+        mapped = self.mapper.assign_points([r.lat for r in records], [r.lon for r in records], nearest=False)
+        outside = [r for r, match in zip(records, mapped["match"]) if match == "outside"]
+        if not outside:
+            return {}
+        lat = np.radians([r.lat for r in outside])
+        lon = np.radians([r.lon for r in outside])
+        counts = {}
+        for code in self.amphoe_codes:
+            area = self.gazetteer.by_code[code]
+            alat, alon = math.radians(area.lat), math.radians(area.lon)
+            # Haversine distance, km.
+            h = np.sin((lat - alat) / 2) ** 2 + math.cos(alat) * np.cos(lat) * np.sin((lon - alon) / 2) ** 2
+            n = int((2 * 6371 * np.arcsin(np.sqrt(h)) <= CROSS_BORDER_KM).sum())
+            if n:
+                counts[code] = n
+        return counts
 
     def _drop_static_records(self, records: list) -> list:
         """Remove FIRMS records at known industrial heat sources, so the hotspot rule counts fires only."""

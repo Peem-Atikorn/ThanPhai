@@ -315,8 +315,33 @@ def test_pm25_station_wins_and_model_fills_districts_without_one(base_service, m
     decisions, _, status = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [],
                                          "air4thai": [station(1, 80.0), station(30, 200.0)]}, [])
     at_sena = next(i for i in decisions[sena] if i["hazard"] == "air_quality")
-    assert at_sena["level"] == "WARNING" and at_sena["observations"] == {"pm25_24h": 80.0, "pm25_model_24h": None}
+    assert at_sena["level"] == "WARNING" and at_sena["observations"] == {"pm25_24h": 80.0, "pm25_model_24h": None, "cross_border_hotspots_24h": 0.0}
     assert status["air4thai"]["stale_dropped"] == 1
     elsewhere = next(i for i in decisions[other] if i["hazard"] == "air_quality")
     assert elsewhere["level"] == "WATCH" and elsewhere["observations"]["pm25_model_24h"] == 50.0
     assert elsewhere["sources"] == ["Open-Meteo / CAMS (แบบจำลอง)"] and elsewhere["notices"]
+
+
+def test_cross_border_hotspots_are_context_for_pm25_not_fire(base_service):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    mae_sai = next(a.code for a in svc.gazetteer.resolve("อำเภอแม่สาย"))
+    nong_khai = next(a.code for a in svc.gazetteer.resolve("อำเภอเมืองหนองคาย"))
+    now = datetime.now(timezone.utc)
+
+    def hotspot(lat, lon):
+        return SourceRecord(source="nasa_firms", variable="fire_hotspot", value=5.0, unit="MW", lat=lat, lon=lon,
+                            observed_at=now, fetched_at=now, attribution="t")
+
+    # North of Vientiane (Laos) is inside the Thai bbox; Shan State (Myanmar) north of Mae Sai is outside it.
+    burning = [hotspot(18.05, 102.65) for _ in range(4)] + [hotspot(21.0, 99.6) for _ in range(3)]
+    decisions, _, status = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": burning,
+                                         "air4thai": []}, [])
+    items = {i["hazard"]: i for i in decisions[nong_khai]}
+    assert items["fire"]["observations"]["hotspots_24h"] == 0  # fires in Laos never raise Thai fire levels
+    assert items["air_quality"]["observations"]["cross_border_hotspots_24h"] == 4
+    assert items["air_quality"]["level"] is None  # context only: no PM2.5 value, no level
+    assert next(i for i in decisions[mae_sai] if i["hazard"] == "air_quality")["observations"]["cross_border_hotspots_24h"] == 3
+    far = next(c for c in svc.amphoe_codes if c.startswith("TH90"))  # Songkhla
+    assert next(i for i in decisions[far] if i["hazard"] == "air_quality")["observations"]["cross_border_hotspots_24h"] == 0

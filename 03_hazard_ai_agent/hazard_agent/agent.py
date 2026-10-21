@@ -138,6 +138,8 @@ def _reason(item: dict) -> str:
         parts.append(f"PM2.5 เฉลี่ย 24 ชม. {obs['pm25_24h']:.1f} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)")
     if obs.get("pm25_model_24h") is not None:
         parts.append(f"แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า {obs['pm25_model_24h']:.1f} มคก./ลบ.ม.")
+    if obs.get("cross_border_hotspots_24h"):
+        parts.append(f"จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. {int(obs['cross_border_hotspots_24h'])} จุด (24 ชม.)")
     if obs.get("vci") is not None:
         parts.append(f"ดัชนีความสมบูรณ์ของพืช (VCI) {obs['vci']:.0f} จาก 100 เทียบเดือนเดียวกันในอดีต")
     elif obs.get("ndvi_deficit") is not None:
