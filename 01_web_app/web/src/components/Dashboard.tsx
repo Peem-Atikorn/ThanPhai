@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, Hazard, HAZARDS, levelInfo, LEVELS, mcmPerDayToM3s, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import Icon from "@/components/Icon";
@@ -105,8 +106,10 @@ function DamDetail({ dam, onClose }: { dam: Dam; onClose: () => void }) {
   );
 }
 
-export default function Dashboard() {
-  const [hazard, setHazard] = useState<Hazard>("flood");
+export default function Dashboard({ initialQuery = "", initialHazard = "flood", initialView = "hazard", activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, onAreaChosen }: { initialQuery?: string; initialHazard?: Hazard; initialView?: View; activeHazard?: Hazard; onHazardChange?: (value: Hazard) => void; activeView?: View; onViewChange?: (value: View) => void; hideToolbar?: boolean; searchInHeader?: boolean; searchTarget?: HTMLElement | null; onAreaChosen?: () => void }) {
+  const [localHazard, setLocalHazard] = useState<Hazard>(initialHazard);
+  const hazard = activeHazard ?? localHazard;
+  const setHazard = onHazardChange ?? setLocalHazard;
   const [revision, setRevision] = useState(0);
   const [layerState, setLayerState] = useState<{ key: string; data: Layer | null; error: boolean } | null>(null);
   const layerKey = hazard + ":" + revision;
@@ -119,9 +122,9 @@ export default function Dashboard() {
   const [focus, setFocus] = useState<{ lat: number; lon: number; zoom?: number } | null>(null);
   const [outline, setOutline] = useState<AreaBoundary | null>(null);
   const outlineRequest = useRef(0);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<SearchArea[] | null>(null);
-  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
+  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "error" | "success">(initialQuery.trim() ? "loading" : "idle");
   const searchRequest = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
   const [question, setQuestion] = useState("");
@@ -129,7 +132,9 @@ export default function Dashboard() {
   const [asking, setAsking] = useState(false);
   const questionInput = useRef<HTMLInputElement>(null);
   const [dams, setDams] = useState<{ list: Dam[]; status: "loading" | "error" | "success" }>({ list: [], status: "loading" });
-  const [view, setView] = useState<View>("hazard");
+  const [localView, setLocalView] = useState<View>(initialView);
+  const view = activeView ?? localView;
+  const setView = onViewChange ?? setLocalView;
   const [rivers, setRivers] = useState<{ list: River[]; status: "loading" | "error" | "success" }>({ list: [], status: "loading" });
   const [selectedRiver, setSelectedRiver] = useState<string | null>(null);
   const [riverSort, setRiverSort] = useState<RiverSort>("chain");
@@ -234,6 +239,7 @@ export default function Dashboard() {
     }
     setResults(null);
     setSearchStatus("idle");
+    onAreaChosen?.();
   }
 
   function chooseDam(dam: Dam) {
@@ -294,6 +300,21 @@ export default function Dashboard() {
   }
   const selectRiverFromMap = useCallback((id: string) => { setSelectedRiver(id); revealPanel(); }, [revealPanel]);
 
+  useEffect(() => {
+    if (!initialQuery.trim()) return;
+    const request = ++searchRequest.current;
+    let cancelled = false;
+    api.search(initialQuery.trim()).then((found) => {
+      if (!cancelled && request === searchRequest.current) {
+        setResults(found);
+        setSearchStatus("success");
+      }
+    }).catch(() => {
+      if (!cancelled && request === searchRequest.current) setSearchStatus("error");
+    });
+    return () => { cancelled = true; };
+  }, [initialQuery]);
+
   async function onSearch(event: FormEvent) {
     event.preventDefault();
     if (!query.trim()) return;
@@ -326,16 +347,34 @@ export default function Dashboard() {
   const warningCount = counts.filter((l) => l.id === "CRITICAL" || l.id === "WARNING").reduce((sum, l) => sum + l.n, 0);
   const warnings = area?.official_warnings ?? [];
 
+  const searchPanel = (
+    <section className="search-panel">
+            <h2>พื้นที่ที่คุณอยากรู้</h2><p className="section-description" id="area-search-description">พิมพ์ชื่อจังหวัด อำเภอ หรือตำบลที่คุณสนใจ เพื่อดูความเสี่ยงและสถานการณ์ภัยในพื้นที่</p>
+            <form onSubmit={onSearch} className="search-form" role="search">
+              <label className="sr-only" htmlFor="area-search">ค้นหาพื้นที่</label>
+              <div className="input-wrap"><Icon name="search" /><input id="area-search" aria-describedby="area-search-description" ref={searchInput} placeholder="เช่น เสนา, เชียงใหม่" autoComplete="off" value={query} maxLength={120} onChange={(event) => { setQuery(event.target.value); searchRequest.current++; setResults(null); setSearchStatus("idle"); }} /></div>
+              <button className="primary-button" disabled={!query.trim() || searchStatus === "loading"}>{searchStatus === "loading" ? <span className="spinner" /> : "ค้นหา"}</button>
+            </form>
+            <div aria-live="polite">
+              {searchStatus === "loading" && <p className="search-feedback">กำลังค้นหาพื้นที่…</p>}
+              {searchStatus === "error" && <p className="search-feedback data-notice">ค้นหาไม่สำเร็จ กรุณากดค้นหาเพื่อลองอีกครั้ง</p>}
+              {results?.length === 0 && <p className="search-feedback">ไม่พบพื้นที่นี้ ลองใช้ชื่อจังหวัดหรืออำเภอเต็ม</p>}
+            </div>
+            {!!results?.length && <div className="search-results"><div className="results-heading"><span>พบ {results.length} พื้นที่</span><button className="icon-button" aria-label="ปิดผลการค้นหา" onClick={() => { setResults(null); searchInput.current?.focus(); }}><Icon name="close" /></button></div><ul>{results.map((item) => <li key={item.code}><button onClick={() => chooseArea(item)}><Icon name="pin" /><span><strong>{prefix(item.level)}{item.name_th}</strong><small>{item.parents.join(" · ") || "ประเทศไทย"}</small></span><Icon name="arrow" /></button></li>)}</ul></div>}
+          </section>
+  );
+
   return (
     <>
+      {searchInHeader && searchTarget && createPortal(searchPanel, searchTarget)}
       <div className="dashboard-grid">
-        <a className="mobile-search-link" href="#area-search"><Icon name="search" />ค้นหาจังหวัด อำเภอ หรือตำบล<Icon name="arrow" /></a>
+        {!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search" />ค้นหาจังหวัด อำเภอ หรือตำบล<Icon name="arrow" /></a>}
         <section className="map-panel" aria-label="ภาพรวมความเสี่ยง">
-          <div className="hazard-toolbar" role="group" aria-label="เลือกประเภทภัย">
+          {!hideToolbar && <div className="hazard-toolbar" role="group" aria-label="เลือกประเภทภัย">
             {HAZARDS.map((item) => { const active = view === "hazard" && hazard === item.id; return <button key={item.id} type="button" className={"hazard-button " + (active ? "is-active" : "")} aria-pressed={active} disabled={!item.ready} onClick={() => { setHazard(item.id); setView("hazard"); }}><Icon name={item.id} /><span>{item.th}</span>{!item.ready && <small>เร็ว ๆ นี้</small>}</button>; })}
             <button type="button" className={"hazard-button " + (view === "dams" ? "is-active" : "")} aria-pressed={view === "dams"} onClick={() => setView("dams")}><Icon name="dam" /><span>เขื่อน</span></button>
             <button type="button" className={"hazard-button " + (view === "rivers" ? "is-active" : "")} aria-pressed={view === "rivers"} onClick={() => { setView("rivers"); setRiverProvince(null); }}><Icon name="river" /><span>แม่น้ำ</span></button>
-          </div>
+          </div>}
           <div className="map-heading">
             {view === "dams"
               ? <div><h2>ปริมาณน้ำและการระบายน้ำของเขื่อน</h2><p>เขื่อนขนาดใหญ่ทั่วประเทศ · ขนาดวงกลมตามปริมาณน้ำในอ่าง</p></div>
@@ -383,20 +422,7 @@ export default function Dashboard() {
         </section>
 
         <aside className="detail-sidebar" aria-label="ค้นหาและดูรายละเอียดพื้นที่">
-          <section className="search-panel">
-            <h2>พื้นที่ที่คุณอยากรู้</h2><p className="section-description">ค้นหาจังหวัด อำเภอ หรือตำบล</p>
-            <form onSubmit={onSearch} className="search-form" role="search">
-              <label className="sr-only" htmlFor="area-search">ค้นหาพื้นที่</label>
-              <div className="input-wrap"><Icon name="search" /><input id="area-search" ref={searchInput} placeholder="เช่น เสนา, เชียงใหม่" autoComplete="off" value={query} maxLength={120} onChange={(event) => { setQuery(event.target.value); searchRequest.current++; setResults(null); setSearchStatus("idle"); }} /></div>
-              <button className="primary-button" disabled={!query.trim() || searchStatus === "loading"}>{searchStatus === "loading" ? <span className="spinner" /> : "ค้นหา"}</button>
-            </form>
-            <div aria-live="polite">
-              {searchStatus === "loading" && <p className="search-feedback">กำลังค้นหาพื้นที่…</p>}
-              {searchStatus === "error" && <p className="search-feedback data-notice">ค้นหาไม่สำเร็จ กรุณากดค้นหาเพื่อลองอีกครั้ง</p>}
-              {results?.length === 0 && <p className="search-feedback">ไม่พบพื้นที่นี้ ลองใช้ชื่อจังหวัดหรืออำเภอเต็ม</p>}
-            </div>
-            {!!results?.length && <div className="search-results"><div className="results-heading"><span>พบ {results.length} พื้นที่</span><button className="icon-button" aria-label="ปิดผลการค้นหา" onClick={() => { setResults(null); searchInput.current?.focus(); }}><Icon name="close" /></button></div><ul>{results.map((item) => <li key={item.code}><button onClick={() => chooseArea(item)}><Icon name="pin" /><span><strong>{prefix(item.level)}{item.name_th}</strong><small>{item.parents.join(" · ") || "ประเทศไทย"}</small></span><Icon name="arrow" /></button></li>)}</ul></div>}
-          </section>
+          {!searchInHeader && searchPanel}
 
           <section className="area-panel" aria-label="รายละเอียดพื้นที่" aria-busy={areaStatus === "loading"} hidden={view !== "hazard"}>
             {areaStatus === "loading" ? <div className="empty-area" role="status"><span className="spinner" /><h3>กำลังดูข้อมูลพื้นที่…</h3><p>รวบรวมระดับความเสี่ยงและข้อมูลล่าสุด</p></div> : areaStatus === "error" ? <div className="empty-area" role="alert"><Icon name="info" /><h3>ยังเปิดข้อมูลพื้นที่ไม่ได้</h3><p>กรุณาลองใหม่ หรือเลือกพื้นที่อื่น</p><button className="secondary-button" onClick={() => selectedCode.current && select(selectedCode.current, selected)}>ลองใหม่</button></div> : area ? <>
@@ -413,7 +439,7 @@ export default function Dashboard() {
               {areaRivers && <button type="button" className={"river-callout " + (areaRivers.over ? "" : "is-calm")} onClick={openProvinceRivers}><Icon name="river" /><span><strong>{areaRivers.over ? `สถานีวัดน้ำในจังหวัดนี้ล้นตลิ่ง ${areaRivers.over} แห่ง` : `สถานีวัดน้ำในจังหวัดนี้ ${areaRivers.count} แห่ง`}</strong><small>ดูระดับน้ำและน้ำไหลผ่านรายชั่วโมงเฉพาะจังหวัดนี้</small></span><Icon name="arrow" /></button>}
               {!!area.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {area.degraded_services.join(", ")}</p>}
               <p className="source-note">อัปเดต {formatTime(area.data_updated_at)} (เวลาไทย)</p>
-            </> : <div className="empty-area"><span className="empty-map-icon"><Icon name="map" width="32" height="32" /></span><h3>เริ่มจากพื้นที่ของคุณ</h3><p>แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่<br />เพื่อดูความเสี่ยงทั้ง 4 ประเภท</p><button className="text-button" onClick={() => searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button></div>}
+            </> : <div className="empty-area"><span className="empty-map-icon"><Icon name="map" width="32" height="32" /></span><h3>เริ่มจากพื้นที่ของคุณ</h3><p>แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่<br />เพื่อดูความเสี่ยงทั้ง 4 ประเภท</p>{!searchInHeader && <button className="text-button" onClick={() => searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button>}</div>}
             {!area && areaStatus === "idle" && layer && <div className="national-summary"><span className={"summary-dot " + (warningCount ? "has-warning" : "")} /><p>{warningCount ? <><strong>{number.format(warningCount)} อำเภอ</strong> อยู่ในระดับเตือนภัยหรือวิกฤต</> : "ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤตในข้อมูลชุดนี้"}<small>ภาพรวม{HAZARDS.find((h) => h.id === hazard)?.th}ทั่วประเทศ</small></p></div>}
           </section>
 
