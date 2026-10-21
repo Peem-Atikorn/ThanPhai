@@ -43,9 +43,13 @@ Every external API the system needs: what it gives us, how to get access, limits
 |---|---|---|---|
 | Weather warning news | `/api/WeatherWarningNews/v2/` | Official warnings: `IssueNo`, `EffectStartDate`, `EffectEndDate`, `AnnounceDate`, `TitleThai`, `HeadlineThai`, `WebUrlThai` (PDF). `Warning` is an object when there is one warning and a list when there are several. | ✅ |
 | ~~Weather warning news v1~~ | `/api/WeatherWarningNews/v1/` | **Do not use** — still answers 200 OK, but its latest item is from 2022-10-16 (stale) | ⚠️ |
-| 3-hour observations | `/api/Weather3Hours/V2/` | Station obs every 3 h (temp, humidity, rain, wind, pressure) | ✅ |
+| 3-hour observations | `/api/Weather3Hours/V2/` | Station obs every 3 h (temp, humidity, rain, wind, pressure). Real-time observations only; no historical archive. | ✅ |
 | 7-day forecast | `/api/WeatherForecast7Days/v2/` | Province-level 7-day forecast | ✅ |
 | Daily seismic events | `/api/DailySeismicEvent/v1/` | Earthquakes (out of scope, but available) | ✅ |
+
+> **Note on planned fire-model humidity feature (Module 06):**
+> Training and live inference must use the same underlying data source to prevent train/serve skew (e.g. ERA5-Land reanalysis vs NWP forecast vs surface stations exhibit distinct biases and spatial distributions).
+> Planned approach: Use Open-Meteo with matching NWP models on both sides: Historical Forecast API (`historical-forecast-api.open-meteo.com`) for training backfill and Forecast API (`api.open-meteo.com`) for live inference (using matching `models=` parameter, verifying historical model coverage back to 2021). Alternatively, if TMD surface stations are used live, the model must be trained on TMD historical surface station archives with consistent spatial interpolation (nearest station or IDW).
 
 ### 1.2 TMD NWP API (WRF model forecast) 🔑
 

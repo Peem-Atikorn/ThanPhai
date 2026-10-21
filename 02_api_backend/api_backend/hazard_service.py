@@ -452,11 +452,16 @@ class HazardService:
             log.info("no fire model at %s; fire uses rules only", path)
             return None
         try:
+            from risk_models.fire.dataset import FEATURES
             from risk_models.fire.model import FireModel
 
             model = FireModel.load(path)
             if model.clim is None or not model.amphoe_codes:
                 log.warning("fire model %s lacks climatology; retrain it", path)
+                return None
+            extra = [n for n in getattr(model, "feature_names", FEATURES) if n not in FEATURES]
+            if extra:
+                log.warning("fire model %s needs %s, which the live service does not provide yet; fire uses rules only", model.version, extra)
                 return None
             log.info("fire model %s loaded (watch>=%.3f, warning>=%.3f)", model.version, model.watch_threshold, model.warning_threshold)
             return model

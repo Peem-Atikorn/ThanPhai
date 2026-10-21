@@ -8,7 +8,7 @@ import httpx
 import numpy as np
 import pandas as pd
 
-from risk_models.fire.dataset import HISTORY_DAYS, daily_grid, features, to_table
+from risk_models.fire.dataset import FEATURES, HISTORY_DAYS, daily_grid, features, to_table
 
 NRT_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/97.3,5.6,105.7,20.5/5/{day}"
 
@@ -33,11 +33,30 @@ async def fetch_recent(key: str, today: date, days: int = HISTORY_DAYS) -> pd.Da
     return df.reset_index(drop=True)
 
 
-def predict_today(model, points: pd.DataFrame, amphoe_of_point: pd.Series, today: date) -> dict[str, dict]:
+def predict_today(
+    model,
+    points: pd.DataFrame,
+    amphoe_of_point: pd.Series,
+    today: date,
+    ndvi: np.ndarray | None = None,
+    humidity: np.ndarray | None = None,
+) -> dict[str, dict]:
     """Probability and level per district for the next 7 days, from hotspots up to `today`."""
     start = today - timedelta(days=HISTORY_DAYS - 1)
     grid = daily_grid(points, amphoe_of_point, model.amphoe_codes, start, today)
-    feats = features(grid, [c[:4] for c in model.amphoe_codes], model.clim)
+
+    expected_names = getattr(model, "feature_names", FEATURES)
+    missing = [n for n, a in (("ndvi", ndvi), ("rel_humidity", humidity)) if n in expected_names and a is None]
+    if missing:
+        raise ValueError(f"model needs {missing} but they were not provided")
+
+    feats = features(
+        grid,
+        [c[:4] for c in model.amphoe_codes],
+        model.clim,
+        ndvi=ndvi,
+        humidity=humidity,
+    )
     table = to_table(grid, feats)  # exactly one day (today) per district after the 30-day history
     probs = model.predict_proba(table)
     return {
