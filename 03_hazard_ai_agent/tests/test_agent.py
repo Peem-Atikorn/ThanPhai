@@ -241,6 +241,11 @@ def test_prepare_all_hazards_never_lists_team_steps_under_ddpm_citation():
         assert block.index("คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):") < block.index(first_team_step)
 
 
+def test_prepare_all_hazards_shows_shared_passage_once():
+    text = agent.ask("ต้องเตรียมตัวรับมือภัยพิบัติอย่างไร", NOW).text
+    assert text.count("กระเป๋าเสื้อ") <= 1
+
+
 def test_explainer_rewrites_and_keeps_facts():
     calls = []
 

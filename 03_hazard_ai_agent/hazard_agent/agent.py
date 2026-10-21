@@ -4,19 +4,15 @@ The deterministic path below works without any LLM. An LLM can later replace `un
 questions and `compose` for wording, but it must keep the same evidence and alert levels.
 """
 
-import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Callable, Protocol
 
+from decision_engine.rag import get_disaster_guidance
+from decision_engine.rag.models import format_page_ranges
 from geo_integration import Area, Gazetteer
 from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, understand
 from thanphai_shared import HazardType
-
-log = logging.getLogger("agent")
-
-from decision_engine.rag import get_disaster_guidance
-from decision_engine.rag.models import format_page_ranges
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
 HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า"}
@@ -340,6 +336,7 @@ class HazardAgent:
 
     def _prepare(self, question: str, u: Understanding, evidence: list[dict], prefix: str = "") -> AgentAnswer:
         lines = [prefix] if prefix else []
+        shown: set[str] = set()
         for hazard in u.hazards:
             lines.append(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard.value]}:")
             steps = []
@@ -352,8 +349,9 @@ class HazardAgent:
                         actual_level = ev.get("level") or ev.get("alert_level")
                         break
                 passages = get_disaster_guidance(hazard=hazard.value, alert_level=actual_level, query=question, top_k=2)
-                official = [p for p in passages if p.citation]
-                team = [p for p in passages if not p.citation]
+                official = [p for p in passages if p.citation and p.id not in shown]
+                team = [p for p in passages if not p.citation and p.id not in shown]
+                shown.update(p.id for p in official + team)
                 if actual_level:
                     official.sort(key=lambda p: (
                         0 if p.alert_levels == [actual_level.upper()] else (
