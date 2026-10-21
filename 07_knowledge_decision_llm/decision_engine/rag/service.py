@@ -62,7 +62,8 @@ def format_guidance_for_facts(passages: list[DisasterPassage]) -> str:
 
     lines = []
     if official_passages:
-        lines.append("คำแนะนำตามคู่มือราชการ (ปภ. / สธ. / กรมอุตุฯ):")
+        authorities = " / ".join(dict.fromkeys(p.authority for p in official_passages))
+        lines.append(f"คำแนะนำตามคู่มือราชการ ({authorities}):")
         for p in official_passages:
             citation_header = f"• {p.title} ({p.authority})"
             lines.append(citation_header)
@@ -78,13 +79,3 @@ def format_guidance_for_facts(passages: list[DisasterPassage]) -> str:
                 lines.append(f"  - {step}")
 
     return "\n".join(lines)
-
-
-def format_guidance_for_agent(passages: list[DisasterPassage]) -> list[str]:
-    """Extract plain action steps from retrieved passages for UI display."""
-    steps = []
-    for p in passages:
-        for s in p.procedure_steps:
-            if s not in steps:
-                steps.append(s)
-    return steps

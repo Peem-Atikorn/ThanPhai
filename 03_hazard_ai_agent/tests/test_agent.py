@@ -192,7 +192,15 @@ def test_prepare_evacuation_gets_critical_passage():
     assert answer.intent == "prepare"
     assert "อพยพ" in answer.text
     assert "เด็กและคนชรา" in answer.text or "เส้นทางที่ปลอดภัย" in answer.text
-    assert "14" in answer.text
+    assert "หน้า 13–14" in answer.text
+
+
+def test_prepare_with_area_uses_area_level():
+    answer = agent.ask("น้ำจะท่วมอำเภอเสนา ต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    assert "น้ำท่วม: วิกฤต" in answer.text  # ส่วนสถานการณ์จาก _assess ยังอยู่
+    assert "อพยพ" in answer.text  # FakeTools ให้ CRITICAL -> ต้องได้ passage อพยพ
+    assert "วาล์วก๊าซ" not in answer.text
 
 
 def test_prepare_fire_includes_prepare_th():
@@ -200,6 +208,7 @@ def test_prepare_fire_includes_prepare_th():
     assert answer.intent == "prepare"
     # Fire advice must include items from PREPARE_TH
     assert any(step in answer.text for step in ["งดเผาในที่โล่ง", "หน้ากาก N95", "1362"])
+    assert not any("แหล่ง" in line and "ปภ." in line for line in answer.text.splitlines())
 
 
 def test_prepare_drought_includes_prepare_th_and_no_gas_valve():
@@ -210,6 +219,15 @@ def test_prepare_drought_includes_prepare_th_and_no_gas_valve():
     # Drought advice must not contain gas valve shutoff
     assert "วาล์วก๊าซ" not in answer.text
     assert "ท่อแก๊ส" not in answer.text
+
+
+def test_prepare_without_rag_uses_fallback(monkeypatch):
+    import hazard_agent.agent
+    monkeypatch.setattr(hazard_agent.agent, "get_disaster_guidance", None)
+    answer = agent.ask("ต้องเตรียมตัวยังไงถ้าน้ำจะท่วม", NOW)
+    assert answer.intent == "prepare"
+    assert "ยกของมีค่า" in answer.text
+    assert "ยังไม่มีคู่มือราชการในระบบสำหรับภัยนี้ ข้อแนะนำข้างต้นเป็นคำแนะนำทั่วไปของทีมทันภัย" in answer.text
 
 
 def test_explainer_rewrites_and_keeps_facts():

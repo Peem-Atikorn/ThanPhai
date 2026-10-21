@@ -7,7 +7,6 @@ from decision_engine.rag.knowledge_data import DISASTER_KNOWLEDGE_BASE
 from decision_engine.rag.models import DisasterPassage
 from decision_engine.rag.retriever import DisasterRetriever, normalize_thai, tokenize_thai
 from decision_engine.rag.service import (
-    format_guidance_for_agent,
     format_guidance_for_facts,
     get_disaster_guidance,
 )
@@ -53,11 +52,6 @@ def test_all_passages_have_real_page_and_source_url():
         assert "หน้า" in p.citation, f"{p.id} citation must include page number"
         assert "-p" not in p.id, f"{p.id} should use semantic topic ID rather than page suffix"
 
-    # Specific check for gas shutoff passage (pages 26, 66)
-    gas_p = next(p for p in retriever.passages if p.id == "ddpm-gas-valve-shutoff")
-    assert gas_p.pages == [26, 66]
-    assert gas_p.citation == "[ปภ. คู่มือประชาชนในการเตรียมตัวให้รอดปลอดภัยพิบัติ หน้า 26, 66]"
-
 
 def test_passages_match_official_ddpm_source_pages():
     """Verify that every official passage in the knowledge base is grounded in the cited DDPM handbook pages."""
@@ -75,7 +69,6 @@ def test_passages_match_official_ddpm_source_pages():
         "ddpm-storm-watch": ["สภาพบ้านเรือน", "จัดเก็บสิ่งของ", "ตัดแต่งกิ่งไม้", "ป้ายโฆษณา", "ค้ำยัน"],
         "ddpm-storm-warning": ["หลบในอาคาร", "ป้ายโฆษณา", "เครื่องประดับ", "นั่งยอง", "รถ"],
         "ddpm-emergency-kit": ["ถุงยังชีพ", "เครื่องอุปโภคบริโภค", "บัตร", "กระเป๋าเสื้อ"],
-        "ddpm-gas-valve-shutoff": ["ปิดวาล์วถังก๊าซ", "ท่อแก๊ส", "ตัดกระแสไฟฟ้า", "ก๊าซรั่วไหล", "เปิดประตู"],
     }
 
     for p in DISASTER_KNOWLEDGE_BASE:
@@ -101,7 +94,7 @@ def test_team_recommendations_not_under_official_citation():
     # Test formatting in facts
     guidance = get_disaster_guidance(hazard="flood", alert_level="WARNING", top_k=2)
     facts_text = format_guidance_for_facts(guidance)
-    assert "คำแนะนำตามคู่มือราชการ (ปภ. / สธ. / กรมอุตุฯ):" in facts_text
+    assert "คำแนะนำตามคู่มือราชการ (ปภ.):" in facts_text
     assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in facts_text
 
     # Verify team tip is under the team header and not above the official citation
@@ -110,6 +103,12 @@ def test_team_recommendations_not_under_official_citation():
     assert "ที่มา: [ปภ." in parts[0]
     assert "ชาร์จโทรศัพท์มือถือ" in parts[1]
     assert "ทีมทันภัย" not in parts[0]
+
+
+def test_all_hazard_passages_are_not_borrowed_from_other_chapters():
+    for hazard in ("flood", "rain_storm", "fire", "drought"):
+        for p in get_disaster_guidance(hazard, alert_level="CRITICAL", query="ต้องเตรียมตัวอย่างไร"):
+            assert p.id != "ddpm-gas-valve-shutoff"
 
 
 def test_retriever_filter_by_hazard():
@@ -148,7 +147,7 @@ def test_service_get_disaster_guidance():
     assert not any(g.id == "ddpm-gas-valve-shutoff" for g in drought_guidance)
     assert not any("วาล์วก๊าซ" in step for g in drought_guidance for step in g.procedure_steps)
 
-    # Fire guidance can include applicable all-hazard passages (emergency kit, gas valve)
+    # Fire guidance can include applicable all-hazard passages (emergency kit)
     fire_guidance = get_disaster_guidance(hazard="fire", alert_level="WARNING", top_k=2)
     assert len(fire_guidance) > 0
     assert all(g.applies_to_hazard("fire") for g in fire_guidance)
@@ -161,11 +160,3 @@ def test_format_guidance_for_facts():
     assert "ที่มา:" in formatted
     assert "หน้า" in formatted
     assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in formatted
-
-
-def test_format_guidance_for_agent():
-    guidance = get_disaster_guidance(hazard="flood", alert_level="WARNING", top_k=1)
-    steps = format_guidance_for_agent(guidance)
-    assert isinstance(steps, list)
-    assert len(steps) > 0
-    assert any("น้ำ" in s or "ของมีค่า" in s for s in steps)

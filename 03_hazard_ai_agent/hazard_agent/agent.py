@@ -17,8 +17,10 @@ log = logging.getLogger("agent")
 
 try:
     from decision_engine.rag import get_disaster_guidance
+    from decision_engine.rag.models import format_page_ranges
 except ImportError as _err:
     get_disaster_guidance = None
+    format_page_ranges = None
     log.warning("decision_engine.rag not available: %s", _err)
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
@@ -176,7 +178,7 @@ class HazardAgent:
         if "ambiguous area" in u.notes and u.area.level == "tambon":
             options = " / ".join(_area_label(a, self.gazetteer) for a in u.areas[:4])
             return AgentAnswer(f"พบหลายพื้นที่ชื่อนี้: {options} หมายถึงที่ไหนครับ", "clarify", None, [h.value for h in u.hazards], notes=u.notes)
-        answer = self._assess(u)
+        answer = self._assess(u, question)
         if self.explainer and answer.intent in ("risk", "explain"):
             answer.facts = answer.text
             rewritten = self.explainer(question, answer.text)
@@ -294,7 +296,7 @@ class HazardAgent:
         days = [d for d in get(area_code) if start <= date.fromisoformat(d["date"]) < max(end, start + timedelta(days=1))]
         return [d for d in days if d.get("rain_mm") is not None and d.get("level")]
 
-    def _assess(self, u: Understanding) -> AgentAnswer:
+    def _assess(self, u: Understanding, question: str = "") -> AgentAnswer:
         area = u.area
         calls = [f"get_assessments({area.code})", "get_official_warnings()"]
         assessments = [a for a in self.tools.get_assessments(area.code) if a["hazard"] in {h.value for h in u.hazards}]
@@ -345,9 +347,9 @@ class HazardAgent:
         lines = [prefix] if prefix else []
         for hazard in u.hazards:
             lines.append(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard.value]}:")
-            steps = None
-            source_citation = None
+            steps = []
             team_steps = []
+            source_citation = None
             if get_disaster_guidance is not None:
                 actual_level = None
                 for ev in evidence:
@@ -356,48 +358,37 @@ class HazardAgent:
                         break
                 passages = get_disaster_guidance(hazard=hazard.value, alert_level=actual_level, query=question, top_k=2)
                 if passages:
-                    hazard_passages = [p for p in passages if p.hazard == hazard.value and p.authority != "ทีมทันภัย"]
-                    general_passages = [p for p in passages if p.hazard == "all" and p.authority != "ทีมทันภัย"]
-                    team_passages = [p for p in passages if p.authority == "ทีมทันภัย" or not p.citation]
+                    official = [p for p in passages if p.citation]
+                    team = [p for p in passages if not p.citation]
+                    if actual_level:
+                        official.sort(key=lambda p: (
+                            0 if p.alert_levels == [actual_level.upper()] else (
+                                1 if actual_level.upper() in [l.upper() for l in p.alert_levels] else 2
+                            )
+                        ))
+                    steps = list(dict.fromkeys(s for p in official for s in p.procedure_steps))
+                    team_steps = list(dict.fromkeys(s for p in team for s in p.procedure_steps))
+                    if not any(p.hazard == hazard.value for p in official):
+                        # ยังไม่มี passage ของภัยนี้: PREPARE_TH เป็นคำแนะนำของทีม ห้ามแสดงใต้ citation ของ ปภ.
+                        team_steps = list(dict.fromkeys([*PREPARE_TH.get(hazard.value, []), *team_steps]))
 
-                    steps = []
-                    citations = []
-                    if hazard_passages:
-                        for p in hazard_passages:
-                            for s in p.procedure_steps:
-                                if s not in steps:
-                                    steps.append(s)
-                            if p.citation and p.citation not in citations:
-                                citations.append(p.citation)
-                        for p in general_passages:
-                            for s in p.procedure_steps:
-                                if s not in steps:
-                                    steps.append(s)
-                            if p.citation and p.citation not in citations:
-                                citations.append(p.citation)
+                    by_doc: dict[str, list[int]] = {}
+                    for p in official:
+                        by_doc.setdefault(f"{p.authority} {p.title}", []).extend(p.pages)
+                    if format_page_ranges is not None:
+                        source_citation = " · ".join(f"[{doc} หน้า {format_page_ranges(pages)}]" for doc, pages in by_doc.items()) if by_doc else None
                     else:
-                        steps = list(PREPARE_TH.get(hazard.value, []))
-                        for p in general_passages:
-                            for s in p.procedure_steps:
-                                if s not in steps:
-                                    steps.append(s)
-                            if p.citation and p.citation not in citations:
-                                citations.append(p.citation)
+                        source_citation = " · ".join(f"[{doc}]" for doc in by_doc) if by_doc else None
 
-                    for p in team_passages:
-                        for s in p.procedure_steps:
-                            if s not in team_steps:
-                                team_steps.append(s)
-
-                    source_citation = " · ".join(citations) if citations else None
-            if not steps:
-                steps = PREPARE_TH[hazard.value]
-            lines.extend(f"  - {step}" for step in steps)
-            if source_citation:
-                lines.append(f"  แหล่งอ้างอิง: {source_citation}")
+            if not steps and not team_steps:
+                steps = PREPARE_TH.get(hazard.value, [])
+            if steps:
+                lines.extend(f"  - {step}" for step in steps)
+                if source_citation:
+                    lines.append(f"  แหล่งอ้างอิง: {source_citation}")
             if team_steps:
                 lines.append("  คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
                 lines.extend(f"  - {step}" for step in team_steps)
         if not any("แหล่งอ้างอิง:" in line for line in lines):
-            lines.append("แหล่งข้อมูลแนะนำ: คู่มือประชาชนในการเตรียมตัวให้รอดปลอดภัยพิบัติ (ปภ.)")
+            lines.append("ยังไม่มีคู่มือราชการในระบบสำหรับภัยนี้ ข้อแนะนำข้างต้นเป็นคำแนะนำทั่วไปของทีมทันภัย")
         return AgentAnswer("\n".join(lines), "prepare", None, [h.value for h in u.hazards], evidence, notes=u.notes)

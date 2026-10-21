@@ -125,8 +125,9 @@ class DisasterRetriever:
             # 2. Level relevance
             level_boost = 0.0
             if alert_level:
-                if alert_level.upper() in [lvl.upper() for lvl in passage.alert_levels]:
-                    level_boost = 0.35
+                matching = [lvl.upper() for lvl in passage.alert_levels]
+                if alert_level.upper() in matching:
+                    level_boost = 0.55 if len(matching) == 1 else 0.35
                 else:
                     level_boost = -0.2
 
@@ -143,7 +144,3 @@ class DisasterRetriever:
         # Sort descending by score
         scored_candidates.sort(key=lambda x: x[0], reverse=True)
         return [c[1] for c in scored_candidates[:top_k]]
-
-
-# Backward compatibility alias
-HybridDisasterRetriever = DisasterRetriever
