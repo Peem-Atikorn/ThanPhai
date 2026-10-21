@@ -4,6 +4,7 @@ import pytest
 
 from geo_integration import Area, Gazetteer
 from hazard_agent import HazardAgent, understand
+from hazard_agent.agent import HAZARD_TH, PREPARE_TH
 from hazard_agent.understanding import detect_hazards, detect_window
 from thanphai_shared import HazardType
 
@@ -162,7 +163,87 @@ def test_emergency_gets_numbers_only():
 
 def test_prepare_without_area():
     answer = agent.ask("ต้องเตรียมตัวยังไงถ้าน้ำจะท่วม", NOW)
-    assert answer.intent == "prepare" and "ยกของมีค่า" in answer.text
+    assert answer.intent == "prepare" and "ของมีค่า" in answer.text
+    assert "แหล่งอ้างอิง: [ปภ." in answer.text
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+    assert "ชาร์จโทรศัพท์มือถือ" in answer.text
+    # Verify team tip does not appear inside or before the official citation line
+    parts = answer.text.split("คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
+    assert len(parts) == 2
+    assert "แหล่งอ้างอิง: [ปภ." in parts[0]
+    assert "ชาร์จโทรศัพท์มือถือ" in parts[1]
+    assert "ทีมทันภัย" not in parts[0]
+
+
+def test_prepare_storm_gets_window_safety_tip():
+    answer = agent.ask("พายุฝนฟ้าคะนองลมแรงต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    assert "แหล่งอ้างอิง: [ปภ." in answer.text
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+    assert "หน้าต่างกระจก" in answer.text
+    parts = answer.text.split("คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
+    assert len(parts) == 2
+    assert "แหล่งอ้างอิง: [ปภ." in parts[0]
+    assert "หน้าต่างกระจก" in parts[1]
+    assert "ทีมทันภัย" not in parts[0]
+
+
+def test_prepare_evacuation_gets_critical_passage():
+    answer = agent.ask("น้ำท่วมสูงมาก ต้องอพยพอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    assert "อพยพ" in answer.text
+    assert "เด็กและคนชรา" in answer.text or "เส้นทางที่ปลอดภัย" in answer.text
+    assert "หน้า 13–14" in answer.text
+
+
+def test_prepare_with_area_uses_area_level():
+    answer = agent.ask("น้ำจะท่วมอำเภอเสนา ต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    assert "น้ำท่วม: วิกฤต" in answer.text  # ส่วนสถานการณ์จาก _assess ยังอยู่
+    assert "อพยพ" in answer.text  # FakeTools ให้ CRITICAL -> ต้องได้ passage อพยพ
+    assert "วาล์วก๊าซ" not in answer.text
+
+
+def test_prepare_fire_includes_prepare_th():
+    answer = agent.ask("ไฟป่าต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    # Fire advice must include items from PREPARE_TH
+    assert any(step in answer.text for step in ["งดเผาในที่โล่ง", "หน้ากาก N95", "1362"])
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+    assert not any("แหล่ง" in line and "ปภ." in line for line in answer.text.splitlines())
+
+
+def test_prepare_drought_includes_prepare_th_and_no_gas_valve():
+    answer = agent.ask("ภัยแล้งต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    # Drought advice must include items from PREPARE_TH
+    assert any(step in answer.text for step in ["กักเก็บน้ำสำรอง", "ใช้น้ำอย่างประหยัด", "วางแผนการเพาะปลูก"])
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+    # Drought advice must not contain gas valve shutoff
+    assert "วาล์วก๊าซ" not in answer.text
+    assert "ท่อแก๊ส" not in answer.text
+
+
+def test_prepare_without_rag_uses_fallback(monkeypatch):
+    import hazard_agent.agent
+    monkeypatch.setattr(hazard_agent.agent, "get_disaster_guidance", None)
+    answer = agent.ask("ต้องเตรียมตัวยังไงถ้าน้ำจะท่วม", NOW)
+    assert answer.intent == "prepare"
+    assert "ยกของมีค่า" in answer.text
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+
+
+def test_prepare_all_hazards_never_lists_team_steps_under_ddpm_citation():
+    text = agent.ask("อำเภอเสนา ต้องเตรียมตัวอย่างไร", NOW).text
+    for hazard in ("drought", "fire"):
+        block = text.split(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard]}:")[1].split("การเตรียมพร้อมรับ")[0]
+        first_team_step = PREPARE_TH[hazard][0]
+        assert block.index("คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):") < block.index(first_team_step)
+
+
+def test_prepare_all_hazards_shows_shared_passage_once():
+    text = agent.ask("ต้องเตรียมตัวรับมือภัยพิบัติอย่างไร", NOW).text
+    assert text.count("กระเป๋าเสื้อ") <= 1
 
 
 def test_explainer_rewrites_and_keeps_facts():

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Callable, Protocol
 
+from decision_engine.rag import get_disaster_guidance
+from decision_engine.rag.models import format_page_ranges
 from geo_integration import Area, Gazetteer
 from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, understand
 from thanphai_shared import HazardType
@@ -160,14 +162,14 @@ class HazardAgent:
             text = "ทันภัยตอบได้เฉพาะเรื่องฝนหนัก/พายุ น้ำท่วม ภัยแล้ง และไฟป่าในประเทศไทยครับ ลองถามเช่น \"น้ำจะท่วมอำเภอบางบัวทองไหม\""
             return AgentAnswer(text, u.intent, None, [])
         if u.intent == "prepare" and not u.area:
-            return self._prepare(u, [])
+            return self._prepare(question, u, [])
         if not u.area:
             text = "ไม่พบชื่อพื้นที่ในคำถาม ช่วยระบุอำเภอหรือจังหวัด เช่น \"อำเภอเสนา จังหวัดพระนครศรีอยุธยา\" ครับ"
             return AgentAnswer(text, u.intent, None, [h.value for h in u.hazards], notes=u.notes)
         if "ambiguous area" in u.notes and u.area.level == "tambon":
             options = " / ".join(_area_label(a, self.gazetteer) for a in u.areas[:4])
             return AgentAnswer(f"พบหลายพื้นที่ชื่อนี้: {options} หมายถึงที่ไหนครับ", "clarify", None, [h.value for h in u.hazards], notes=u.notes)
-        answer = self._assess(u)
+        answer = self._assess(u, question)
         if self.explainer and answer.intent in ("risk", "explain"):
             answer.facts = answer.text
             rewritten = self.explainer(question, answer.text)
@@ -285,7 +287,7 @@ class HazardAgent:
         days = [d for d in get(area_code) if start <= date.fromisoformat(d["date"]) < max(end, start + timedelta(days=1))]
         return [d for d in days if d.get("rain_mm") is not None and d.get("level")]
 
-    def _assess(self, u: Understanding) -> AgentAnswer:
+    def _assess(self, u: Understanding, question: str = "") -> AgentAnswer:
         area = u.area
         calls = [f"get_assessments({area.code})", "get_official_warnings()"]
         assessments = [a for a in self.tools.get_assessments(area.code) if a["hazard"] in {h.value for h in u.hazards}]
@@ -329,13 +331,49 @@ class HazardAgent:
         answer = AgentAnswer("\n".join(lines), u.intent, area_info,
                              [h.value for h in u.hazards], assessments + related, sources, calls, u.notes)
         if u.intent == "prepare":
-            return self._prepare(u, answer.evidence, prefix=answer.text)
+            return self._prepare(question, u, answer.evidence, prefix=answer.text)
         return answer
 
-    def _prepare(self, u: Understanding, evidence: list[dict], prefix: str = "") -> AgentAnswer:
+    def _prepare(self, question: str, u: Understanding, evidence: list[dict], prefix: str = "") -> AgentAnswer:
         lines = [prefix] if prefix else []
+        shown: set[str] = set()
         for hazard in u.hazards:
             lines.append(f"การเตรียมพร้อมรับ{HAZARD_TH[hazard.value]}:")
-            lines.extend(f"  - {step}" for step in PREPARE_TH[hazard.value])
-        lines.append("แหล่งข้อมูลแนะนำ: คู่มือเตรียมพร้อมรับมือสาธารณภัย ปภ. (จะเชื่อมกับ RAG ในโมดูล 07)")
+            steps = []
+            official, team = [], []
+            source_citation = None
+            if get_disaster_guidance is not None:
+                actual_level = None
+                for ev in evidence:
+                    if ev.get("hazard") == hazard.value:
+                        actual_level = ev.get("level") or ev.get("alert_level")
+                        break
+                passages = get_disaster_guidance(hazard=hazard.value, alert_level=actual_level, query=question, top_k=2)
+                official = [p for p in passages if p.citation and p.id not in shown]
+                team = [p for p in passages if not p.citation and p.id not in shown]
+                shown.update(p.id for p in official + team)
+                if actual_level:
+                    official.sort(key=lambda p: (
+                        0 if p.alert_levels == [actual_level.upper()] else (
+                            1 if actual_level.upper() in [l.upper() for l in p.alert_levels] else 2
+                        )
+                    ))
+                steps = list(dict.fromkeys(s for p in official for s in p.procedure_steps))
+                by_doc: dict[str, list[int]] = {}
+                for p in official:
+                    by_doc.setdefault(f"{p.authority} {p.title}", []).extend(p.pages)
+                source_citation = " · ".join(f"[{doc} หน้า {format_page_ranges(pages)}]" for doc, pages in by_doc.items()) if by_doc else None
+
+            team_steps = list(dict.fromkeys(s for p in team for s in p.procedure_steps))
+            if not any(p.hazard == hazard.value for p in official):
+                # ยังไม่มี passage ของภัยนี้: PREPARE_TH เป็นคำแนะนำของทีมเสมอ
+                team_steps = list(dict.fromkeys([*PREPARE_TH.get(hazard.value, []), *team_steps]))
+
+            if steps:
+                lines.extend(f"  - {step}" for step in steps)
+                if source_citation:
+                    lines.append(f"  แหล่งอ้างอิง: {source_citation}")
+            if team_steps:
+                lines.append("  คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
+                lines.extend(f"  - {step}" for step in team_steps)
         return AgentAnswer("\n".join(lines), "prepare", None, [h.value for h in u.hazards], evidence, notes=u.notes)

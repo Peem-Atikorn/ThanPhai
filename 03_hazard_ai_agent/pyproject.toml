@@ -2,7 +2,7 @@
 name = "thanphai-hazard-agent"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["thanphai-shared", "thanphai-geo-integration"]
+dependencies = ["thanphai-shared", "thanphai-geo-integration", "thanphai-decision"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
