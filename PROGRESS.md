@@ -182,8 +182,8 @@ Round 7 (dams, 2026-10-19):
 
 ### Round 11 — heat (branch `feature/peem/all-heat`, stacked on all-pm25)
 80. New hazard `heat` ("ความร้อนจัด"): NOAA heat index from Open-Meteo hourly temperature + humidity, highest of the next 24 h per district (0.4° grid, every 3 h).
-    TMD/BMA bands are 27 / 33 / 42 / 52 °C (เฝ้าระวัง / เตือนภัย / อันตราย / อันตรายมาก). Levels follow severity one step down: 33 WATCH, 42 WARNING, 52 CRITICAL; TMD's own label is shown next to the value.
-    Live 2026-10-22: 837 of 928 districts WATCH (max 40.3 °C) — the team should decide whether WATCH should start at 42 instead.
+    TMD/BMA bands are 27 / 33 / 42 / 52 °C (เฝ้าระวัง / เตือนภัย / อันตราย / อันตรายมาก); TMD's own label is shown next to the value.
+    WATCH at TMD's 33 made 837 of 928 districts yellow on 2026-10-22 (max 40.3 °C), so WATCH starts at NOAA "Danger" 39.4 °C; 42 WARNING, 52 CRITICAL.
 81. Open-Meteo grid adapters (PM2.5, heat) share one pacer: one batch of up to 100 points, then 12 s, so together they stay under 600 calls a minute.
 
 ## Notes

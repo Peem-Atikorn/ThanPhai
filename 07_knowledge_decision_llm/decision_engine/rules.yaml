@@ -125,9 +125,9 @@ overrides:
       level: WATCH
   heat:
     # Heat index (NOAA formula from forecast temperature and humidity), highest of the next 24 h.
-    # TMD/BMA bands: 27–32.9 เฝ้าระวัง, 33–41.9 เตือนภัย, 42–51.9 อันตราย, >= 52 อันตรายมาก. The lowest band covers
-    # almost every Thai afternoon, so levels follow severity one step down: TMD เตือนภัย -> WATCH,
-    # อันตราย -> WARNING, อันตรายมาก -> CRITICAL. The UI also shows TMD's own label next to the value.
+    # TMD/BMA bands: 27–32.9 เฝ้าระวัง, 33–41.9 เตือนภัย, 42–51.9 อันตราย, >= 52 อันตรายมาก. TMD's 33 covers almost every
+    # Thai afternoon (837 of 928 districts on an October day), so WATCH starts at NOAA's "Danger" (103 °F = 39.4 °C);
+    # WARNING and CRITICAL follow TMD อันตราย and อันตรายมาก. The UI also shows TMD's own label next to the value.
     - id: HEAT_INDEX_EXTREME_DANGER
       variable: heat_index_max_24h
       op: ">="
@@ -138,10 +138,10 @@ overrides:
       op: ">="
       threshold: 42.0
       level: WARNING
-    - id: HEAT_INDEX_EXTREME_CAUTION
+    - id: HEAT_INDEX_NOAA_DANGER
       variable: heat_index_max_24h
       op: ">="
-      threshold: 33.0
+      threshold: 39.4
       level: WATCH
 
 confidence:
