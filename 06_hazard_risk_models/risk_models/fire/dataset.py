@@ -1,7 +1,10 @@
 """Daily hotspot counts per district and the features/labels for the fire model.
 
 Target: will the district have >= 3 hotspots in the next 7 days? (the same count as the WATCH rule).
-Features use only data up to day t, so training and live prediction see the same inputs.
+Features use only data up to day t, so training and live prediction see the same inputs:
+- Multi-day composite sources (e.g. MODIS 16-day NDVI) must use composites ending on or before day t.
+- Relative humidity must represent observations actually available as of day t (e.g. from TMD daily observations),
+  never incorporating look-ahead future observations.
 """
 
 import gzip
@@ -103,10 +106,11 @@ def features(
         "doy_cos": ones * np.cos(2 * np.pi * doy / 365.25)[:, None],
         "clim": clim[months - 1],
     }
-    if ndvi is not None:
-        feats["ndvi"] = ndvi
-    if humidity is not None:
-        feats["rel_humidity"] = humidity
+    for name, arr in (("ndvi", ndvi), ("rel_humidity", humidity)):
+        if arr is not None:
+            if arr.shape != grid.counts.shape:
+                raise ValueError(f"{name} shape {arr.shape} != {grid.counts.shape}")
+            feats[name] = arr.astype(np.float32)
     return feats
 
 

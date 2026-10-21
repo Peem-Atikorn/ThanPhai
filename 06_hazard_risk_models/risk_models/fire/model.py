@@ -32,14 +32,16 @@ class FireModel:
     warning_threshold: float
     trained_years: list[int]
     version: str
-    feature_names: list[str] = field(default_factory=lambda: list(FEATURES))
     # District order and training-years climatology, needed to build the same features at prediction time.
     amphoe_codes: list[str] = field(default_factory=list)
     clim: np.ndarray | None = None
     metrics: dict = field(default_factory=dict)
+    feature_names: list[str] = field(default_factory=lambda: list(FEATURES))
 
     def predict_proba(self, table: pd.DataFrame) -> np.ndarray:
-        names = getattr(self, "feature_names", FEATURES)  # models saved before feature_names existed
+        # joblib/pickle unpickling does not run __init__, and fields using default_factory
+        # have no class attribute fallback on older saved instances, so getattr fallback is required.
+        names = getattr(self, "feature_names", FEATURES)
         return self.estimator.predict_proba(table[names])[:, 1]
 
     def level(self, p: float) -> str:

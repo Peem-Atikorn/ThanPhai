@@ -18,7 +18,16 @@ from sklearn.inspection import permutation_importance
 from geo_integration import Gazetteer
 from geo_integration.area_mapper import AreaMapper
 from risk_models.fire import static_sources
-from risk_models.fire.dataset import FEATURES, climatology, daily_grid, features, labels, load_hotspots, to_table
+from risk_models.fire.dataset import (
+    EXTENDED_FEATURES,
+    FEATURES,
+    climatology,
+    daily_grid,
+    features,
+    labels,
+    load_hotspots,
+    to_table,
+)
 from risk_models.fire.model import FireModel, Report, fit, scores, thresholds
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +35,19 @@ PROCESSED = ROOT / "data" / "processed"
 MODEL_PATH = PROCESSED / "models" / "fire_model.joblib"
 REPORT_DIR = ROOT / "06_hazard_risk_models" / "reports"
 TRAIN_YEARS, VAL_YEAR, TEST_YEAR = {2021, 2022, 2023}, 2024, 2025
+
+
+def _load_optional_grid(name: str, shape: tuple[int, int]) -> np.ndarray:
+    """Load preprocessed [days, amphoe] array or return NaNs if file not present."""
+    for ext in (".npy", ".npz"):
+        path = PROCESSED / f"{name}_daily_amphoe{ext}"
+        if path.exists():
+            arr = np.load(path)
+            if hasattr(arr, "files"):
+                arr = arr[arr.files[0]]
+            if arr.shape == shape:
+                return arr.astype(np.float32)
+    return np.full(shape, np.nan, dtype=np.float32)
 
 
 def log(msg: str, t0: float) -> None:
@@ -54,17 +76,19 @@ def main() -> None:
 
     grid = daily_grid(points, mapped["amphoe_code"], amphoe_codes, date(2021, 1, 1), date(2025, 12, 31))
     clim = climatology(grid, TRAIN_YEARS)  # training years only, so 2024/2025 never leak in
-    table = to_table(grid, features(grid, province_of, clim), labels(grid)).dropna(subset=["y"])
+    ndvi_arr = _load_optional_grid("ndvi", grid.counts.shape)
+    humidity_arr = _load_optional_grid("humidity", grid.counts.shape)
+    table = to_table(grid, features(grid, province_of, clim, ndvi=ndvi_arr, humidity=humidity_arr), labels(grid)).dropna(subset=["y"])
     year = pd.to_datetime(table["date"]).dt.year
     train, val, test = table[year.isin(TRAIN_YEARS)], table[year == VAL_YEAR], table[year == TEST_YEAR]
     log(f"rows train {len(train):,} / val {len(val):,} / test {len(test):,}", t0)
 
-    estimator = fit(train)
+    estimator = fit(train, EXTENDED_FEATURES)
     log("model fitted", t0)
-    p_val = estimator.predict_proba(val[FEATURES])[:, 1]
+    p_val = estimator.predict_proba(val[EXTENDED_FEATURES])[:, 1]
     watch, warning = thresholds(val["y"].to_numpy(), p_val)
     model = FireModel(estimator, watch, warning, sorted(TRAIN_YEARS), version=f"fire-hgb-{date.today():%Y%m%d}",
-                      amphoe_codes=amphoe_codes, clim=clim)
+                      amphoe_codes=amphoe_codes, clim=clim, feature_names=EXTENDED_FEATURES)
 
     # Baselines get the same treatment: thresholds chosen on 2024, scored on 2025.
     y_val, y_test = val["y"].to_numpy(), test["y"].to_numpy()
@@ -84,8 +108,8 @@ def main() -> None:
     log("evaluated", t0)
 
     sample = test.sample(min(100_000, len(test)), random_state=0)
-    imp = permutation_importance(estimator, sample[FEATURES], sample["y"], scoring="average_precision", n_repeats=3, random_state=0)
-    importance = dict(sorted(zip(FEATURES, np.round(imp.importances_mean, 4).tolist()), key=lambda x: -x[1]))
+    imp = permutation_importance(estimator, sample[model.feature_names], sample["y"], scoring="average_precision", n_repeats=3, random_state=0)
+    importance = dict(sorted(zip(model.feature_names, np.round(imp.importances_mean, 4).tolist()), key=lambda x: -x[1]))
 
     report = Report(
         rows={"train": len(train), "val": len(val), "test": len(test)},

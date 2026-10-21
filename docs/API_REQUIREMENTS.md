@@ -43,7 +43,7 @@ Every external API the system needs: what it gives us, how to get access, limits
 |---|---|---|---|
 | Weather warning news | `/api/WeatherWarningNews/v2/` | Official warnings: `IssueNo`, `EffectStartDate`, `EffectEndDate`, `AnnounceDate`, `TitleThai`, `HeadlineThai`, `WebUrlThai` (PDF). `Warning` is an object when there is one warning and a list when there are several. | ✅ |
 | ~~Weather warning news v1~~ | `/api/WeatherWarningNews/v1/` | **Do not use** — still answers 200 OK, but its latest item is from 2022-10-16 (stale) | ⚠️ |
-| 3-hour observations | `/api/Weather3Hours/V2/` | Station obs every 3 h (temp, humidity, rain, wind, pressure) | ✅ |
+| 3-hour observations | `/api/Weather3Hours/V2/` | Station obs every 3 h (temp, humidity, rain, wind, pressure). Used in 06 for relative humidity feature in fire risk model (daily mean up to day t, avoiding look-ahead leakage). | ✅ |
 | 7-day forecast | `/api/WeatherForecast7Days/v2/` | Province-level 7-day forecast | ✅ |
 | Daily seismic events | `/api/DailySeismicEvent/v1/` | Earthquakes (out of scope, but available) | ✅ |
 
