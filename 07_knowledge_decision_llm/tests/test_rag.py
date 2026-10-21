@@ -43,22 +43,19 @@ def test_all_passages_have_real_page_and_source_url():
             # Team recommendations must not claim government sources
             assert p.source_url == "", f"{p.id} team passage should have empty source_url"
             assert p.citation == "", f"{p.id} team passage should have empty citation"
-            assert p.page_start is None
+            assert p.pages == []
             continue
 
         # Official government publications must have valid URL and pages
         assert p.source_url.startswith("http://") or p.source_url.startswith("https://"), f"{p.id} missing url"
-        assert p.page_start is not None and p.page_start > 0, f"{p.id} missing real page_start"
-        if p.page_end is not None:
-            assert p.page_end >= p.page_start, f"{p.id} page_end < page_start"
-        assert p.page == p.page_start, f"{p.id} page property mismatch"
+        assert p.pages and all(x > 0 for x in p.pages), f"{p.id} missing real pages"
         assert p.citation.startswith("[ปภ."), f"{p.id} citation format"
         assert "หน้า" in p.citation, f"{p.id} citation must include page number"
         assert "-p" not in p.id, f"{p.id} should use semantic topic ID rather than page suffix"
 
     # Specific check for gas shutoff passage (pages 26, 66)
     gas_p = next(p for p in retriever.passages if p.id == "ddpm-gas-valve-shutoff")
-    assert gas_p.pages_str == "26, 66"
+    assert gas_p.pages == [26, 66]
     assert gas_p.citation == "[ปภ. คู่มือประชาชนในการเตรียมตัวให้รอดปลอดภัยพิบัติ หน้า 26, 66]"
 
 
@@ -85,12 +82,7 @@ def test_passages_match_official_ddpm_source_pages():
         if p.authority == "ทีมทันภัย":
             continue  # Team suggestions are verified separately
 
-        if p.id == "ddpm-gas-valve-shutoff":
-            combined_text = (ref_pages["26"] + " " + ref_pages["66"]).replace("\n", "")
-        else:
-            end_p = p.page_end or p.page_start
-            combined_text = " ".join(ref_pages.get(str(pg), "") for pg in range(p.page_start, end_p + 1)).replace("\n", "")
-
+        combined_text = " ".join(ref_pages.get(str(pg), "") for pg in p.pages).replace("\n", "")
         assert combined_text, f"No reference text extracted for {p.id}"
         terms = expected_terms_by_passage.get(p.id, [])
         for term in terms:
@@ -125,7 +117,7 @@ def test_retriever_filter_by_hazard():
     results = retriever.search(query="การเตรียมตัวรับน้ำท่วม", hazard="flood", top_k=3)
     assert len(results) > 0
     for r in results:
-        assert r.hazard in ["flood", "all"]
+        assert r.hazard == "flood"
         if r.authority != "ทีมทันภัย":
             assert r.citation.startswith("[")
 
@@ -150,6 +142,16 @@ def test_service_get_disaster_guidance():
     assert len(guidance) > 0
     assert any(g.hazard == "rain_storm" for g in guidance)
     assert any(g.authority == "ทีมทันภัย" for g in guidance)
+
+    # Drought guidance must NOT include gas valve shutoff
+    drought_guidance = get_disaster_guidance(hazard="drought", alert_level="WARNING", top_k=2)
+    assert not any(g.id == "ddpm-gas-valve-shutoff" for g in drought_guidance)
+    assert not any("วาล์วก๊าซ" in step for g in drought_guidance for step in g.procedure_steps)
+
+    # Fire guidance can include applicable all-hazard passages (emergency kit, gas valve)
+    fire_guidance = get_disaster_guidance(hazard="fire", alert_level="WARNING", top_k=2)
+    assert len(fire_guidance) > 0
+    assert all(g.applies_to_hazard("fire") for g in fire_guidance)
 
 
 def test_format_guidance_for_facts():

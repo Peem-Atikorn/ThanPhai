@@ -195,6 +195,23 @@ def test_prepare_evacuation_gets_critical_passage():
     assert "14" in answer.text
 
 
+def test_prepare_fire_includes_prepare_th():
+    answer = agent.ask("ไฟป่าต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    # Fire advice must include items from PREPARE_TH
+    assert any(step in answer.text for step in ["งดเผาในที่โล่ง", "หน้ากาก N95", "1362"])
+
+
+def test_prepare_drought_includes_prepare_th_and_no_gas_valve():
+    answer = agent.ask("ภัยแล้งต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    # Drought advice must include items from PREPARE_TH
+    assert any(step in answer.text for step in ["กักเก็บน้ำสำรอง", "ใช้น้ำอย่างประหยัด", "วางแผนการเพาะปลูก"])
+    # Drought advice must not contain gas valve shutoff
+    assert "วาล์วก๊าซ" not in answer.text
+    assert "ท่อแก๊ส" not in answer.text
+
+
 def test_explainer_rewrites_and_keeps_facts():
     calls = []
 

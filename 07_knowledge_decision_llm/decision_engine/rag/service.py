@@ -31,6 +31,14 @@ def get_disaster_guidance(
         authority="ปภ.",
         top_k=top_k,
     )
+    general_raw = retriever.search(
+        query=query,
+        hazard="all",
+        alert_level=alert_level,
+        authority="ปภ.",
+        top_k=2,
+    )
+    general = [p for p in general_raw if p.applies_to_hazard(hazard)][:1]
     if include_team_tips:
         team = retriever.search(
             query=query,
@@ -40,8 +48,8 @@ def get_disaster_guidance(
             top_k=1,
             min_score=0.01,
         )
-        return official + team
-    return official
+        return official + general + team
+    return official + general
 
 
 def format_guidance_for_facts(passages: list[DisasterPassage]) -> str:

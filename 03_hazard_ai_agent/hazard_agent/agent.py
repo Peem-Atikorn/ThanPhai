@@ -356,19 +356,39 @@ class HazardAgent:
                         break
                 passages = get_disaster_guidance(hazard=hazard.value, alert_level=actual_level, query=question, top_k=2)
                 if passages:
+                    hazard_passages = [p for p in passages if p.hazard == hazard.value and p.authority != "ทีมทันภัย"]
+                    general_passages = [p for p in passages if p.hazard == "all" and p.authority != "ทีมทันภัย"]
+                    team_passages = [p for p in passages if p.authority == "ทีมทันภัย" or not p.citation]
+
                     steps = []
                     citations = []
-                    for p in passages:
-                        if p.authority == "ทีมทันภัย" or not p.citation:
-                            for s in p.procedure_steps:
-                                if s not in team_steps:
-                                    team_steps.append(s)
-                        else:
+                    if hazard_passages:
+                        for p in hazard_passages:
                             for s in p.procedure_steps:
                                 if s not in steps:
                                     steps.append(s)
                             if p.citation and p.citation not in citations:
                                 citations.append(p.citation)
+                        for p in general_passages:
+                            for s in p.procedure_steps:
+                                if s not in steps:
+                                    steps.append(s)
+                            if p.citation and p.citation not in citations:
+                                citations.append(p.citation)
+                    else:
+                        steps = list(PREPARE_TH.get(hazard.value, []))
+                        for p in general_passages:
+                            for s in p.procedure_steps:
+                                if s not in steps:
+                                    steps.append(s)
+                            if p.citation and p.citation not in citations:
+                                citations.append(p.citation)
+
+                    for p in team_passages:
+                        for s in p.procedure_steps:
+                            if s not in team_steps:
+                                team_steps.append(s)
+
                     source_citation = " · ".join(citations) if citations else None
             if not steps:
                 steps = PREPARE_TH[hazard.value]
@@ -379,5 +399,5 @@ class HazardAgent:
                 lines.append("  คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
                 lines.extend(f"  - {step}" for step in team_steps)
         if not any("แหล่งอ้างอิง:" in line for line in lines):
-            lines.append("แหล่งข้อมูลแนะนำ: คู่มือเตรียมพร้อมรับมือสาธารณภัย ปภ. (จะเชื่อมกับ RAG ในโมดูล 07)")
+            lines.append("แหล่งข้อมูลแนะนำ: คู่มือประชาชนในการเตรียมตัวให้รอดปลอดภัยพิบัติ (ปภ.)")
         return AgentAnswer("\n".join(lines), "prepare", None, [h.value for h in u.hazards], evidence, notes=u.notes)
