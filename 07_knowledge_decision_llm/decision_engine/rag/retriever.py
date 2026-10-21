@@ -119,7 +119,7 @@ class DisasterRetriever:
 
         for idx, passage in enumerate(self.passages):
             # 1. Hard filters
-            if hazard and passage.hazard.lower() != hazard.lower():
+            if hazard and passage.hazard.lower() != hazard.lower() and passage.hazard.lower() != "all":
                 continue
             if authority and passage.authority.lower() != authority.lower():
                 continue

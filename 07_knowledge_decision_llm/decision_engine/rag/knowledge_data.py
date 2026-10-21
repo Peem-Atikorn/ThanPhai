@@ -1,4 +1,4 @@
-"""Authoritative disaster guidelines verified against official government publications.
+"""Authoritative disaster guidelines verified against official government publications and team extensions.
 
 Source document:
 - Title: คู่มือประชาชนในการเตรียมตัวให้รอดปลอดภัยพิบัติ (พิมพ์ครั้งที่ 6)
@@ -139,12 +139,12 @@ DISASTER_KNOWLEDGE_BASE: list[DisasterPassage] = [
         content="ข้อปฏิบัติเพื่อความปลอดภัยจากพายุฝนฟ้าคะนอง ลมกระโชกแรง และอันตรายจากฟ้าผ่า",
     ),
 
-    # ---------------- EMERGENCY KIT (ถุงยังชีพฉุกเฉิน - ทุกภัย) ----------------
+    # ---------------- ALL-HAZARDS (ทุกภัย: ถุงยังชีพ, ปิดวาล์วก๊าซและระบบไฟฟ้า) ----------------
     DisasterPassage(
         id="ddpm-emergency-kit",
         document_id="DDPM-ISBN-978-974-458-205-8",
         authority="ปภ.",
-        hazard="flood",
+        hazard="all",
         alert_levels=["WATCH", "WARNING"],
         title=DDPM_GUIDE_TITLE,
         section="ถุงยังชีพฉุกเฉิน...พร้อมไว้เมื่อภัยมา",
@@ -158,5 +158,54 @@ DISASTER_KNOWLEDGE_BASE: list[DisasterPassage] = [
             "เขียนชื่อ-นามสกุล ที่อยู่ และเบอร์โทรศัพท์ของสมาชิกในครอบครัว โดยเฉพาะเด็กเล็กและผู้สูงอายุใส่ไว้ในกระเป๋าเสื้อ",
         ],
         content="อุปกรณ์และสิ่งของจำเป็นในถุงยังชีพฉุกเฉินเพื่อช่วยให้สามารถดำรงชีวิตได้อย่างปลอดภัยเมื่อเกิดภัยพิบัติ",
+    ),
+    DisasterPassage(
+        id="ddpm-gas-valve-shutoff",
+        document_id="DDPM-ISBN-978-974-458-205-8",
+        authority="ปภ.",
+        hazard="all",
+        alert_levels=["CRITICAL", "WARNING"],
+        title=DDPM_GUIDE_TITLE,
+        section="การตัดกระแสไฟฟ้าและปิดวาล์วก๊าซเพื่อความปลอดภัย",
+        source_url=DDPM_GUIDE_URL,
+        page_start=26,
+        page_end=66,
+        pages_str="26, 66",
+        procedure_steps=[
+            "รีบปิดวาล์วถังก๊าซ ท่อแก๊ส และตัดกระแสไฟฟ้าโดยปิดสวิตช์ไฟหรือสับคัทเอาท์ก่อนออกจากอาคาร",
+            "ห้ามก่อประกายไฟ เช่น จุดไม้ขีดไฟ หรือสูบบุหรี่ เพราะอาจมีก๊าซรั่วไหลทำให้เกิดการระเบิดหรือเพลิงไหม้",
+            "หากพบก๊าซรั่วไหล ให้รีบปิดวาล์วถังก๊าซทันที แล้วเปิดประตูหน้าต่างทุกบานเพื่อระบายก๊าซออกสู่ภายนอก",
+        ],
+        content="ข้อปฏิบัติความปลอดภัยเกี่ยวกับก๊าซหุงต้มและระบบไฟฟ้า เพื่อป้องกันการระเบิดและเพลิงไหม้หลังเกิดเหตุหรือเมื่อต้องอพยพออกจากอาคาร",
+    ),
+
+    # ---------------- TEAM THANPHAI RECOMMENDATIONS (คำแนะนำเพิ่มเติมของทีมทันภัย) ----------------
+    DisasterPassage(
+        id="team-flood-phone-charging",
+        document_id="",
+        authority="ทีมทันภัย",
+        hazard="flood",
+        alert_levels=["WARNING", "CRITICAL", "WATCH"],
+        title="",
+        section="คำแนะนำเพิ่มเติมจากทีมทันภัย (เตรียมรับมือน้ำท่วม)",
+        source_url="",
+        procedure_steps=[
+            "ชาร์จโทรศัพท์มือถือและพาวเวอร์แบงก์ให้เต็ม เพื่อให้พร้อมติดต่อสื่อสารและติดตามสถานการณ์ภัยฉุกเฉิน",
+        ],
+        content="คำแนะนำเพิ่มเติมสำหรับประชาชนในการเตรียมตัวรับมือน้ำท่วม เมื่อเกิดน้ำท่วมหรือน้ำจะท่วม ชาร์จโทรศัพท์มือถือและพาวเวอร์แบงก์ให้เต็ม",
+    ),
+    DisasterPassage(
+        id="team-storm-shelter-glass",
+        document_id="",
+        authority="ทีมทันภัย",
+        hazard="rain_storm",
+        alert_levels=["WARNING", "CRITICAL", "WATCH"],
+        title="",
+        section="คำแนะนำเพิ่มเติมจากทีมทันภัย (เตรียมรับมือพายุและวาตภัย)",
+        source_url="",
+        procedure_steps=[
+            "อยู่ห่างจากผนังอาคารและหน้าต่างกระจก เพื่อป้องกันอันตรายจากกระจกแตกหรือสิ่งของปลิวเข้ามากระแทก",
+        ],
+        content="คำแนะนำเพิ่มเติมสำหรับประชาชนในการเตรียมตัวรับมือพายุฝนฟ้าคะนอง วาตภัย ลมแรง และข้อควรระวังเรื่องกระจกและหน้าต่าง",
     ),
 ]

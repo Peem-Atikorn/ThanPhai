@@ -163,6 +163,28 @@ def test_emergency_gets_numbers_only():
 def test_prepare_without_area():
     answer = agent.ask("ต้องเตรียมตัวยังไงถ้าน้ำจะท่วม", NOW)
     assert answer.intent == "prepare" and "ของมีค่า" in answer.text
+    assert "แหล่งอ้างอิง: [ปภ." in answer.text
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+    assert "ชาร์จโทรศัพท์มือถือ" in answer.text
+    # Verify team tip does not appear inside or before the official citation line
+    parts = answer.text.split("คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
+    assert len(parts) == 2
+    assert "แหล่งอ้างอิง: [ปภ." in parts[0]
+    assert "ชาร์จโทรศัพท์มือถือ" in parts[1]
+    assert "ทีมทันภัย" not in parts[0]
+
+
+def test_prepare_storm_gets_window_safety_tip():
+    answer = agent.ask("พายุฝนฟ้าคะนองลมแรงต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare"
+    assert "แหล่งอ้างอิง: [ปภ." in answer.text
+    assert "คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):" in answer.text
+    assert "หน้าต่างกระจก" in answer.text
+    parts = answer.text.split("คำแนะนำเพิ่มเติม (ไม่ได้มาจากคู่มือราชการ):")
+    assert len(parts) == 2
+    assert "แหล่งอ้างอิง: [ปภ." in parts[0]
+    assert "หน้าต่างกระจก" in parts[1]
+    assert "ทีมทันภัย" not in parts[0]
 
 
 def test_prepare_evacuation_gets_critical_passage():
