@@ -445,7 +445,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {damDetail ? <DamDetail dam={damDetail} onClose={() => setSelectedDam(null)} /> : <>
               <div className="area-intro"><h2>เขื่อนขนาดใหญ่ทั่วประเทศ</h2>
               <p className="section-description">แตะชื่อเขื่อนหรือวงกลมบนแผนที่ เพื่อดูว่าวันนี้ระบายน้ำเท่าไหร่</p>
-              <button type="button" className="text-button" onClick={() => searchInHeader ? onOpenAreaSearch?.() : searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button>
+
               </div>
             </>}
             {!!dams.list.length && <>
@@ -461,7 +461,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {riverDetail ? <RiverDetail river={riverDetail} onClose={() => setSelectedRiver(null)} /> : <>
               <div className="area-intro"><h2>ระดับน้ำในแม่น้ำ{riverProvince && ` · จ.${riverProvince.name}`}</h2>
               <p className="section-description">แตะสถานีเพื่อดูน้ำไหลผ่าน ระดับน้ำเทียบตลิ่ง และกราฟย้อนหลัง 3 วัน</p>
-              <button type="button" className="text-button" onClick={() => searchInHeader ? onOpenAreaSearch?.() : searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button>
+
               </div>
             </>}
             {riverProvince && <div className="filter-chip"><span>เฉพาะ จ.{riverProvince.name} · {visibleRivers.length} สถานี</span><button type="button" onClick={() => { setRiverProvince(null); setRiverSort("chain"); }}>ดูทั้งประเทศ<Icon name="close" /></button></div>}
