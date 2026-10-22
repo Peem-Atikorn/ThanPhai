@@ -37,6 +37,18 @@ def rain_features(rain: pd.DataFrame, level: str = "amphoe") -> pd.DataFrame:
     )
 
 
+def pm25_features(pm25: pd.DataFrame, level: str = "amphoe") -> pd.DataFrame:
+    """Worst PM2.5 station per area (24-hour averages)."""
+    df = _by_area(pm25, level)
+    if df.empty:
+        return pd.DataFrame(columns=["area_code", "pm25_24h", "stations"])
+    return (
+        df.groupby("area_code")
+        .agg(pm25_24h=("value", "max"), stations=("station_id", "nunique"))
+        .reset_index()
+    )
+
+
 def fire_features(hotspots: pd.DataFrame, area_codes: list[str], level: str = "amphoe") -> pd.DataFrame:
     """Hotspot count per area, with 0 for areas that have none (absence of hotspots is real data)."""
     df = _by_area(hotspots, level)

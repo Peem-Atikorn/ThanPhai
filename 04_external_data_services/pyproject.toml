@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "thanphai-shared",
     "httpx>=0.27",
+    "certifi",
     "pydantic>=2.7",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

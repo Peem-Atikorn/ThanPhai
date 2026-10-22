@@ -4,13 +4,17 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 
 from external_data.adapters import (
+    Air4ThaiPm25,
     FirmsHotspots,
+    GdacsEvents,
     OpenMeteoForecast,
     OpenMeteoRiverDischarge,
     ThaiWaterRain24h,
     ThaiWaterWaterLevel,
+    TmdEarthquakes,
     TmdWarnings,
     TmdWeather3Hours,
+    UsgsEarthquakes,
 )
 from thanphai_shared import OfficialWarning, SourceHealth, SourceRecord, redact
 
@@ -22,6 +26,10 @@ STATION_SOURCES = {
     "thaiwater_waterlevel": ThaiWaterWaterLevel,
     "nasa_firms": FirmsHotspots,
     "tmd_weather_3h": TmdWeather3Hours,
+    "air4thai": Air4ThaiPm25,
+    "tmd_earthquakes": TmdEarthquakes,
+    "usgs_earthquakes": UsgsEarthquakes,
+    "gdacs": GdacsEvents,
 }
 POINT_SOURCES = {"open_meteo_forecast": OpenMeteoForecast, "open_meteo_flood": OpenMeteoRiverDischarge}
 HEADERS = {"User-Agent": "ThanPhai/0.1 (student project)"}

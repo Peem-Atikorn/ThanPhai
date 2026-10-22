@@ -86,9 +86,9 @@ let browser, socket;
   await evaluate('document.querySelector(".journey-search-dialog").close()');
   fs.mkdirSync(output, {recursive:true});
   const captured = [];
-  for (const category of ['flood','rain_storm','fire','drought','dams','rivers']) {
+  for (const category of ['overview','water','weather','smoke','hot','geo']) {
     await evaluate(`document.querySelector('[data-category="${category}"]').click()`);
-    await until(`document.querySelector('.journey-live-shell').dataset.activeCategory === '${category}'`);
+    await until(`!!document.querySelector('.journey-category-button.is-active[data-category="${category}"]')`);
     await evaluate('Promise.all([...document.images].filter(i=>!i.complete).map(i=>new Promise(r=>{i.onload=r;i.onerror=r;setTimeout(r,3000)}))).then(()=>true)');
     await sleep(800);
     await evaluate('window.scrollTo(0,0)');
@@ -111,7 +111,7 @@ let browser, socket;
   fs.writeFileSync(path.join(output,'rivers-mobile.png'),Buffer.from(data,'base64'));
   const sections = captured.map(c=>`### ${c}\n\n![${c}](${c}.png)`).join('\n\n');
   fs.writeFileSync(path.join(output,'README.md'),`# PR screenshots\n\nCaptured from ${url.href} at ${new Date().toISOString()}. Actual running app and data; no API/map stubs. Desktop viewport: 1440 × 1100, full-page capture up to 6000 px high.\n\n${sections}\n\n### Mobile\n\n![Mobile](rivers-mobile.png)\n`);
-  console.log('PASS: six categories, white panel bodies, both search entries, and viewport overflow checks.');
+  console.log('PASS: six map groups, white panel bodies, both search entries, and viewport overflow checks.');
   console.log('Screenshots saved to: ' + output);
   await send('Browser.close').catch(()=>{});
 })().catch(error => { console.error(error.message); process.exitCode=1; }).finally(() => { socket?.close(); if (browser && browser.exitCode == null) browser.kill(); });

@@ -13,7 +13,18 @@ HAZARD_WORDS = {
     HazardType.FLOOD: ("น้ำท่วม", "ท่วม", "น้ำล้น", "ล้นตลิ่ง", "น้ำป่า", "flood"),
     HazardType.RAIN_STORM: ("ฝนตก", "ฝนหนัก", "ฝน", "พายุ", "ลมแรง", "rain", "storm"),
     HazardType.DROUGHT: ("ภัยแล้ง", "แล้ง", "ขาดน้ำ", "ฝนทิ้งช่วง", "drought"),
-    HazardType.FIRE: ("ไฟป่า", "ไฟไหม้", "เผา", "หมอกควัน", "ฝุ่น", "pm2.5", "fire", "smoke", "haze"),
+    HazardType.FIRE: ("ไฟป่า", "ไฟไหม้", "เผา", "fire"),
+    # Smoke and haze are what people breathe, so they are air-quality questions.
+    HazardType.AIR_QUALITY: ("ฝุ่น", "pm2.5", "pm 2.5", "pm25", "หมอกควัน", "คุณภาพอากาศ", "มลพิษทางอากาศ", "aqi",
+                             "air quality", "smoke", "haze"),
+    HazardType.HEAT: ("ร้อนจัด", "อากาศร้อน", "ร้อนมาก", "ดัชนีความร้อน", "ฮีตสโตรก", "ฮีทสโตรก", "ลมแดด", "heat stroke",
+                      "heatstroke", "heat index", "heat wave", "heatwave"),
+    HazardType.EARTHQUAKE: ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "aftershock", "earthquake", "quake", "seismic"),
+    HazardType.MARINE: ("คลื่นลมแรง", "คลื่นสูง", "คลื่นทะเล", "ออกเรือ", "เดินเรือ", "ลงเรือ", "ทะเล", "high waves",
+                             "rough sea"),
+    HazardType.TROPICAL_CYCLONE: ("ไต้ฝุ่น", "พายุโซนร้อน", "ดีเปรสชัน", "พายุหมุน", "ไซโคลน", "typhoon", "cyclone",
+                                  "tropical storm"),
+    HazardType.LANDSLIDE: ("ดินถล่ม", "ดินสไลด์", "โคลนถล่ม", "ภูเขาถล่ม", "landslide", "mudslide"),
 }
 DAM_WORDS = ("เขื่อน", "อ่างเก็บน้ำ", "ปริมาณน้ำในอ่าง", "dam", "reservoir")
 # Questions about river flow are always river questions; river and bank words only when no area is named
@@ -60,6 +71,9 @@ def detect_hazards(text: str) -> list[HazardType]:
     # "ฝน" alone is rain; "ฝนทิ้งช่วง" is drought, not rain.
     if HazardType.DROUGHT in found and "ฝนทิ้งช่วง" in lowered and not any(w in lowered for w in ("ฝนตก", "ฝนหนัก", "พายุ")):
         found.remove(HazardType.RAIN_STORM)
+    # "ไต้ฝุ่น" (typhoon) contains "ฝุ่น" (dust): count dust only if it appears outside the word typhoon.
+    if HazardType.AIR_QUALITY in found and not any(w in lowered.replace("ไต้ฝุ่น", "") for w in HAZARD_WORDS[HazardType.AIR_QUALITY]):
+        found.remove(HazardType.AIR_QUALITY)
     return found
 
 

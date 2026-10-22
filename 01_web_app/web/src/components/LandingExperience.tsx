@@ -3,14 +3,35 @@
 import { useRef, useState } from "react";
 import Dashboard from "@/components/Dashboard";
 import Icon from "@/components/Icon";
-import { HAZARDS, type Hazard } from "@/lib/api";
+import { groupOf, GROUPS, itemTh, type MapItem, type MapLayerId } from "@/lib/api";
 
 type MapView = "hazard" | "dams" | "rivers";
 
 export default function LandingExperience() {
-  const [hazard, setHazard] = useState<Hazard>("flood");
-  const [view, setView] = useState<MapView>("hazard");
+  const [hazard, setHazardState] = useState<MapLayerId>("overview");
+  const [view, setViewState] = useState<MapView>("hazard");
   const [riverViewRequest, setRiverViewRequest] = useState(0);
+  // The last item opened in each group (here or in the dashboard's sub-tabs), so the group button goes back there.
+  const lastInGroup = useRef<Record<string, MapItem>>({});
+  const currentItem: MapItem = view === "hazard" ? hazard : view;
+  const currentGroup = groupOf(currentItem);
+
+  function setHazard(value: MapLayerId) {
+    lastInGroup.current[groupOf(value).id] = value;
+    setHazardState(value);
+  }
+
+  function setView(value: MapView) {
+    if (value !== "hazard") lastInGroup.current[groupOf(value).id] = value;
+    setViewState(value);
+  }
+
+  function openGroup(group: (typeof GROUPS)[number]) {
+    const item = lastInGroup.current[group.id] ?? group.items[0];
+    if (item === "dams") setView("dams");
+    else if (item === "rivers") { setRiverViewRequest((value) => value + 1); setView("rivers"); }
+    else { setHazard(item); setView("hazard"); }
+  }
   const guide = useRef<HTMLDialogElement>(null);
   const searchDialog = useRef<HTMLDialogElement>(null);
   const [searchTarget, setSearchTarget] = useState<HTMLDivElement | null>(null);
@@ -31,7 +52,7 @@ export default function LandingExperience() {
   }
 
   return (
-    <div className="app-shell journey-shell journey-live-shell" data-active-category={view === "hazard" ? hazard : view}>
+    <div className="app-shell journey-shell journey-live-shell" data-active-category={currentItem}>
       <a className="skip-link" href="#risk-map">ข้ามไปยังแผนที่ความเสี่ยง</a>
       <section className="journey-hero" id="home" aria-labelledby="hero-title">
         <header className="journey-header">
@@ -43,12 +64,10 @@ export default function LandingExperience() {
         </header>
         <div className="journey-bottom">
           <div className="journey-category-bar" role="group" aria-label="เลือกประเภทข้อมูลบนแผนที่">
-            {HAZARDS.map((item) => {
-              const active = view === "hazard" && hazard === item.id;
-              return <button key={item.id} data-category={item.id} className={"journey-category-button" + (active ? " is-active" : "")} type="button" aria-pressed={active} aria-controls="risk-map" disabled={!item.ready} onClick={() => { setHazard(item.id); setView("hazard"); }}><Icon name={item.id} /><span><strong>{item.th}</strong><small>ความเสี่ยงรายพื้นที่</small></span></button>;
+            {GROUPS.map((group) => {
+              const active = group.id === currentGroup.id;
+              return <button key={group.id} data-category={group.id} className={"journey-category-button" + (active ? " is-active" : "")} type="button" aria-pressed={active} aria-controls="risk-map" onClick={() => openGroup(group)}><Icon name={group.icon} /><span><strong>{group.th}</strong><small>{group.items.map(itemTh).join(" · ")}</small></span></button>;
             })}
-            <button data-category="dams" className={"journey-category-button" + (view === "dams" ? " is-active" : "")} type="button" aria-pressed={view === "dams"} aria-controls="risk-map" onClick={() => setView("dams")}><Icon name="dam" /><span><strong>เขื่อน</strong><small>สถานการณ์น้ำในอ่าง</small></span></button>
-            <button data-category="rivers" className={"journey-category-button" + (view === "rivers" ? " is-active" : "")} type="button" aria-pressed={view === "rivers"} aria-controls="risk-map" onClick={() => { setRiverViewRequest((value) => value + 1); setView("rivers"); }}><Icon name="river" /><span><strong>แม่น้ำ</strong><small>ระดับน้ำและการไหล</small></span></button>
           </div>
           <main className="main-content journey-dashboard journey-hero-dashboard" id="risk-map" tabIndex={-1}>
             <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} onAreaChosen={finishAreaSearch} onOpenAreaSearch={focusAreaSearch} riverViewRequest={riverViewRequest} /> <button className="text-button" type="button" onClick={() => guide.current?.showModal()}>วิธีใช้งานทันภัย <Icon name="arrow" /></button>
@@ -63,7 +82,7 @@ export default function LandingExperience() {
       <dialog className="journey-guide-dialog" ref={guide} aria-labelledby="guide-title">
         <button className="journey-dialog-close" type="button" aria-label="ปิดคำแนะนำ" onClick={() => guide.current?.close()}><Icon name="close" /></button>
         <span className="journey-section-label">A LITTLE KNOWLEDGE. MORE CONFIDENCE.</span><h2 id="guide-title">เริ่มต้นใช้งานทันภัย</h2><p>สำรวจข้อมูลใกล้ตัว เพื่อเตรียมพร้อมอย่างเข้าใจ</p>
-        <ol><li><strong>ค้นหาพื้นที่ของคุณ</strong><p>กด “ค้นหาพื้นที่” ในกล่องข้อมูลข้างแผนที่ พิมพ์ชื่อจังหวัด อำเภอ หรือตำบล แล้วเลือกจากผลการค้นหาในหน้าต่างค้นหา</p></li><li><strong>เลือกสิ่งที่อยากรู้</strong><p>ดูความเสี่ยงฝนและพายุ น้ำท่วม ภัยแล้ง ไฟป่า หรือเปลี่ยนเป็นมุมมองเขื่อนและแม่น้ำ</p></li><li><strong>อ่านข้อมูลพร้อมแหล่งอ้างอิง</strong><p>ตรวจเวลาปรับปรุงข้อมูลและข้อจำกัดทุกครั้ง หากข้อมูลไม่พร้อม ระบบจะแสดงสถานะตามจริง</p></li></ol>
+        <ol><li><strong>ค้นหาพื้นที่ของคุณ</strong><p>กด “ค้นหาพื้นที่” ในกล่องข้อมูลข้างแผนที่ พิมพ์ชื่อจังหวัด อำเภอ หรือตำบล แล้วเลือกจากผลการค้นหาในหน้าต่างค้นหา</p></li><li><strong>เลือกสิ่งที่อยากรู้</strong><p>เลือกกลุ่มภัยด้านบนแผนที่ เช่น น้ำ ฝนและพายุ ไฟและฝุ่น แล้วเลือกภัยย่อยในกลุ่ม เช่น เขื่อน แม่น้ำ หรือฝุ่น PM2.5</p></li><li><strong>อ่านข้อมูลพร้อมแหล่งอ้างอิง</strong><p>ตรวจเวลาปรับปรุงข้อมูลและข้อจำกัดทุกครั้ง หากข้อมูลไม่พร้อม ระบบจะแสดงสถานะตามจริง</p></li></ol>
         <p className="journey-guide-notice"><Icon name="info" /> ทันภัยเป็นเครื่องมือประกอบการตัดสินใจ โปรดยึดประกาศเตือนจากหน่วยงานทางการเป็นหลัก</p><button className="journey-primary" type="button" onClick={() => { guide.current?.close(); scrollToMap(); }}>เริ่มสำรวจ <Icon name="arrow" /></button>
       </dialog>
     </div>

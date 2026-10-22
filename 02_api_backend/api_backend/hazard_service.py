@@ -16,14 +16,17 @@ import geopandas as gpd
 import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
-from external_data.adapters import FirmsHotspots, ThaiWaterRain24h, ThaiWaterWaterLevel, TmdNwpDailyForecast, TmdWarnings
+from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsCyclones, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex, OpenMeteoMarine,
+                                    ThaiWaterRain24h, ThaiWaterWaterLevel, TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings,
+                                    UsgsEarthquakes, merge_quakes)
+from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
 from geo_integration import Gazetteer
 from geo_integration.area_mapper import AreaMapper
-from geo_integration.features import fire_features, flood_features, rain_features
+from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import AlertLevel, HazardType
 
 BANGKOK = timezone(timedelta(hours=7), "Asia/Bangkok")
@@ -42,6 +45,19 @@ CHAO_PHRAYA_CHAIN = ["P.17", "N.67", "C.2", "C.13", "C.3", "C.7A", "C.35", "C.36
 # Water-level readings older than this are dropped: a gauge that stopped reporting (seen live: BKC002,
 # last reading the day before, still "over the bank") must not keep a district at WARNING.
 MAX_LEVEL_AGE = timedelta(hours=6)
+# Air4Thai stations that stopped reporting (seen live: 12 of 173 stuck 8 h behind) are dropped the same way.
+MAX_PM25_AGE = timedelta(hours=6)
+# Fires in Myanmar, Laos and Cambodia within this distance of a district centre are shown with its PM2.5:
+# context for where the smoke may come from, not a rule input.
+CROSS_BORDER_KM = 100
+# Earthquakes count for district levels for a day; the list endpoint shows a week.
+QUAKE_WINDOW = timedelta(hours=24)
+QUAKE_LIST_WINDOW = timedelta(days=7)
+# A cyclone this close (current position or forecast track) is mentioned on the district card even when its
+# wind areas do not reach the district.
+CYCLONE_NOTICE_KM = 800
+# Districts with at least this many past landslides (DMR inventory 1989-2019) get landslide checks.
+LANDSLIDE_MIN_TRACES = 10
 GRAPH_TTL = timedelta(minutes=15)
 DAM_HISTORY_TTL = timedelta(hours=6)
 FAILURE_TTL = timedelta(seconds=60)
@@ -53,6 +69,21 @@ SOURCES = {
     HazardType.RAIN_STORM: ["ThaiWater (สสน.)"],
     HazardType.FIRE: ["NASA FIRMS"],
     HazardType.DROUGHT: [],
+    HazardType.AIR_QUALITY: ["กรมควบคุมมลพิษ (Air4Thai)"],
+    HazardType.HEAT: ["Open-Meteo (แบบจำลองพยากรณ์อากาศ)"],
+    HazardType.EARTHQUAKE: ["กรมอุตุนิยมวิทยา (กองเฝ้าระวังแผ่นดินไหว)", "USGS"],
+    HazardType.MARINE: ["Open-Meteo Marine (แบบจำลองคลื่น)"],
+    HazardType.TROPICAL_CYCLONE: ["GDACS (UN/EU)"],
+    HazardType.LANDSLIDE: ["กรมทรัพยากรธรณี (ร่องรอยดินถล่ม)", "ThaiWater (สสน.)"],
+}
+# Open-Meteo forecasts per district, each on its own clock: (adapter, refresh interval, where to sample).
+# "centres" = district centres; "offshore" = points at sea next to each district (see geo_integration.coast).
+# Each refresh costs ~300 calls of Open-Meteo's free 10,000 a day (see OpenMeteoGrid): ~4,800 a day in all.
+GRID_MODELS = {
+    # CAMS runs twice a day.
+    "air_model": (OpenMeteoAirQuality, timedelta(hours=6), "centres"),
+    "heat_model": (OpenMeteoHeatIndex, timedelta(hours=3), "centres"),
+    "marine_model": (OpenMeteoMarine, timedelta(hours=6), "offshore"),
 }
 # Map layer: coarser than the 50 m web layer, enough for a whole-country view.
 MAP_SIMPLIFY_DEGREES = 0.004
@@ -94,6 +125,9 @@ class HazardService:
         self.dams: list[dict] = []  # 35 large dams, refreshed with the live data
         self.rivers: list[dict] = []  # river stations with a flow gauge or over their bank
         self.media: dict | None = None  # radar, rain-forecast, storm and wave images
+        self.quakes: list[dict] = []  # TMD + USGS, last 7 days, newest first
+        self.pm25_stations: list[dict] = []  # fresh Air4Thai readings, for station points on the map
+        self.regional_events: list[dict] = []  # GDACS events around South-East Asia
         self._graph_cache: dict[tuple, tuple[datetime, dict]] = {}
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._boundaries: dict[str, dict] = {}  # area outlines, read on first request
@@ -118,6 +152,14 @@ class HazardService:
         self.fire_ttl = timedelta(hours=3)
         self.fire_predictions: dict[str, dict] = {}
         self.fire_updated_at: datetime | None = None
+        # GRID_MODELS results: name -> area code -> record (value and extra).
+        self.grid: dict[str, dict] = {name: {} for name in GRID_MODELS}
+        self.grid_updated_at: dict[str, datetime | None] = {name: None for name in GRID_MODELS}
+        self._offshore: list[tuple[str, float, float]] | None = None  # built on the first marine refresh
+        self._last_quakes: list[dict] | None = None
+        self._last_pm25: list[dict] | None = None
+        # Past landslides per district, from scripts/build_landslide_districts.py; optional.
+        self.landslide_traces = self._load_landslide_traces()
         self._geometry = self._load_map_geometry()
 
     def _load_map_geometry(self) -> dict[str, dict]:
@@ -130,7 +172,8 @@ class HazardService:
     @property
     def inputs_pending(self) -> list[str]:
         """Slow inputs still loading for the first time (after a restart), so clients can check back soon."""
-        slow = {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at}
+        slow = {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at,
+                **self.grid_updated_at}
         return [name for name, updated in slow.items()
                 if updated is None and name in self._jobs and not self._jobs[name].done()]
 
@@ -150,7 +193,7 @@ class HazardService:
             results, warnings_result = await self._fetch()
             media = results.pop("thaiwater_media", None)
             raw = (results, warnings_result)
-            # Mapping ~5,000 points and deciding 928 x 3 hazards is CPU work; run it off the event loop
+            # Mapping ~5,000 points and deciding 928 x 5 hazards is CPU work; run it off the event loop
             # so other requests are not blocked while it runs.
             decisions, warnings, status = await asyncio.to_thread(self._process, *raw)
             dams = raw[0].get("thaiwater_dams")
@@ -161,8 +204,15 @@ class HazardService:
                 self.rivers = self._river_rows(self.fresh_levels(levels))
             if media is not None and not isinstance(media, Exception):
                 self.media = media
+            gdacs = results.get("gdacs")
+            if gdacs is not None and not isinstance(gdacs, Exception):
+                self.regional_events = self._regional_rows(gdacs)
             # Swap everything at once so readers never see a half-updated state.
             self.decisions = decisions
+            if self._last_quakes is not None:
+                self.quakes = self._last_quakes
+            if self._last_pm25 is not None:
+                self.pm25_stations = self._last_pm25
             if warnings is not None:
                 self.warnings = warnings  # keep the last good warnings if TMD failed this time
             # Merge, not replace: the forecast refresh writes its own entry on a different schedule.
@@ -184,7 +234,13 @@ class HazardService:
         adapters = {
             "thaiwater_waterlevel": ThaiWaterWaterLevel(),
             "thaiwater_rain_24h": ThaiWaterRain24h(),
-            "nasa_firms": FirmsHotspots(),
+            # One regional download: hotspots in Thailand drive the fire rules, the rest is PM2.5 context.
+            "nasa_firms": FirmsHotspots(bbox=REGION_BBOX),
+            "air4thai": Air4ThaiPm25(),
+            "tmd_earthquakes": TmdEarthquakes(),
+            "usgs_earthquakes": UsgsEarthquakes(days=7),
+            "gdacs": GdacsEvents(),
+            "gdacs_cyclones": GdacsCyclones(),
         }
         async with httpx.AsyncClient(headers=USER_AGENT, follow_redirects=True) as client:
             results = await asyncio.gather(*(a.run(client) for a in adapters.values()), self._fetch_main_bundle(client),
@@ -229,10 +285,21 @@ class HazardService:
             records["thaiwater_waterlevel"] = fresh or None
             if not fresh:
                 status["thaiwater_waterlevel"] = {"ok": False, "error": "stale", "checked_at": now}
+        if records["air4thai"]:
+            fresh_pm25 = self.fresh_levels(records["air4thai"], max_age=MAX_PM25_AGE)
+            status["air4thai"]["stale_dropped"] = len(records["air4thai"]) - len(fresh_pm25)
+            records["air4thai"] = fresh_pm25 or None
+            if not fresh_pm25:
+                status["air4thai"] = {"ok": False, "error": "stale", "checked_at": now}
         degraded = {
             HazardType.FLOOD: [] if records["thaiwater_waterlevel"] is not None else ["ThaiWater water level"],
             HazardType.RAIN_STORM: [] if records["thaiwater_rain_24h"] is not None else ["ThaiWater rain"],
             HazardType.FIRE: [] if records["nasa_firms"] is not None else ["NASA FIRMS"],
+            HazardType.AIR_QUALITY: [] if records["air4thai"] is not None else ["Air4Thai"],
+            HazardType.EARTHQUAKE: [name for name, source in (("TMD earthquakes", "tmd_earthquakes"), ("USGS", "usgs_earthquakes"))
+                                    if records.get(source) is None],
+            HazardType.TROPICAL_CYCLONE: [] if records.get("gdacs_cyclones") is not None else ["GDACS"],
+            HazardType.LANDSLIDE: [] if records["thaiwater_rain_24h"] is not None else ["ThaiWater rain"],
         }
         def build(source: str, hazard: HazardType, make):
             """One hazard's features. A failure here degrades that hazard only, never the whole refresh."""
@@ -248,9 +315,26 @@ class HazardService:
 
         flood = build("thaiwater_waterlevel", HazardType.FLOOD, flood_features)
         rain = build("thaiwater_rain_24h", HazardType.RAIN_STORM, rain_features)
+        cross_border: dict[str, int] = {}
+        if records["nasa_firms"] is not None:
+            regional = records["nasa_firms"]
+            records["nasa_firms"] = [r for r in regional if in_thailand_bbox(r.lat, r.lon)]
+            status["nasa_firms"]["records"] = len(records["nasa_firms"])
+            try:
+                cross_border = self._cross_border_counts(regional)
+                status["nasa_firms"]["districts_near_cross_border_fires"] = len(cross_border)
+            except Exception:
+                log.exception("cross-border hotspot counts failed")
         if records["nasa_firms"] and self.static_cells:
             records["nasa_firms"] = self._drop_static_records(records["nasa_firms"])
         fire = build("nasa_firms", HazardType.FIRE, lambda rows: fire_features(rows, self.amphoe_codes))
+        pm25 = build("air4thai", HazardType.AIR_QUALITY, pm25_features)
+        self._last_pm25 = None if records["air4thai"] is None else sorted((
+            {"id": r.station_id, "name_th": r.extra.get("name_th"), "area_th": r.extra.get("area_th"), "lat": r.lat, "lon": r.lon,
+             "pm25": r.value, "aqi": r.extra.get("aqi"), "time": r.observed_at.isoformat()}
+            for r in records["air4thai"] if r.lat is not None and r.lon is not None), key=lambda s: -s["pm25"])
+        quakes = self._quake_shaking(records.get("tmd_earthquakes"), records.get("usgs_earthquakes"))
+        cyclones = self._cyclone_exposure(records.get("gdacs_cyclones"))
 
         def value(frame, column: str, code: str) -> float | None:
             return _clean(frame[column].get(code)) if frame is not None and not frame.empty else None
@@ -258,6 +342,10 @@ class HazardService:
         # Snapshots: background refreshes may swap these dicts while decisions are built.
         satellite = dict(self.satellite_cells)
         fire_pred = dict(self.fire_predictions)
+        forecasts = dict(self.forecasts)
+        air_model = {code: r.value for code, r in self.grid["air_model"].items()}
+        heat = dict(self.grid["heat_model"])
+        marine = dict(self.grid["marine_model"])
         drought = self._current_drought()
         decisions: dict[str, list[dict]] = {}
         for code in self.amphoe_codes:
@@ -268,12 +356,31 @@ class HazardService:
             # Water is dark in near-infrared, so flooded fields have low NDVI and would read as drought.
             flooded = bool(sat and sat["cells"] > 0) or (above_bank is not None and above_bank > 0)
             drought_obs, drought_note = self._vegetation_observations(veg, flooded)
+            pm25_station = value(pm25, "pm25_24h", code)
             observations = {
                 HazardType.FLOOD: {"above_bank_m": above_bank,
                                    "satellite_flood_cells_7d": float(sat["cells"]) if sat else None},
                 HazardType.RAIN_STORM: {"rain_24h": value(rain, "rain_24h", code)},
                 HazardType.FIRE: {"hotspots_24h": value(fire, "hotspots_24h", code)},
                 HazardType.DROUGHT: drought_obs,
+                # A station reading wins; the model fills only districts without one.
+                HazardType.AIR_QUALITY: {"pm25_24h": pm25_station,
+                                         "pm25_model_24h": air_model.get(code) if pm25_station is None else None,
+                                         # None when FIRMS failed, 0 when it worked and saw nothing nearby.
+                                         "cross_border_hotspots_24h": (float(cross_border.get(code, 0))
+                                                                       if records["nasa_firms"] is not None else None)},
+                HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
+                # Inland districts have no sea: no value, and the card says why.
+                HazardType.MARINE: {"wave_height_max_24h": marine[code].value if code in marine else None},
+                HazardType.LANDSLIDE: self._landslide_observations(code, value(rain, "rain_24h", code), forecasts),
+                # 0 = GDACS works and no storm wind area reaches the district; None = GDACS failed.
+                HazardType.TROPICAL_CYCLONE: ({"cyclone_wind_kmh": None} if cyclones is None else
+                                              {k: v for k, v in cyclones.get(code, {"cyclone_wind_kmh": 0.0}).items()
+                                               if not k.startswith("_")}),
+                # No earthquake in the last day = not felt (MMI 1); None only when both feeds failed.
+                HazardType.EARTHQUAKE: ({"quake_mmi_24h": None} if quakes is None else
+                                        {k: v for k, v in quakes[code].items() if not k.startswith("_")} if code in quakes
+                                        else {"quake_mmi_24h": 1.0}),
             }
             items = []
             for hazard, obs in observations.items():
@@ -297,6 +404,30 @@ class HazardService:
                     sources.append(f"NASA MODIS NDVI ({drought['month']})")
                     if drought_note:
                         notices.append(drought_note)
+                if hazard == HazardType.HEAT and code in heat:
+                    peak = heat[code].extra
+                    notices.append(f"ค่าคาดการณ์จากแบบจำลอง ช่วงร้อนสุด {peak['peak_time'][11:16]} น. "
+                                   f"อุณหภูมิ {peak['temperature_c']:.0f}°C ความชื้น {peak['humidity_pct']:.0f}%")
+                if hazard == HazardType.MARINE:
+                    if code in marine:
+                        notices.append(f"คลื่นสูงสุดคาดว่าราว {marine[code].extra['peak_time'][11:16]} น. (ค่าจากแบบจำลอง)")
+                    elif self.grid_updated_at["marine_model"] is not None:
+                        notices = ["อำเภอนี้ไม่ติดทะเล"]
+                if hazard == HazardType.LANDSLIDE:
+                    traces = self.landslide_traces.get(code, 0) if self.landslide_traces is not None else None
+                    if traces is None:
+                        notices.append("ยังไม่มีข้อมูลพื้นที่เสี่ยงดินถล่ม (รัน scripts/build_landslide_districts.py)")
+                    elif traces < LANDSLIDE_MIN_TRACES:
+                        notices = [f"ไม่ใช่พื้นที่ที่เคยเกิดดินถล่มบ่อย (พบร่องรอย {traces} จุด) จึงไม่ประเมินดินถล่ม"]
+                    elif obs.get("landslide_forecast_rain_24h") is not None:
+                        sources.append("กรมอุตุนิยมวิทยา (พยากรณ์ฝน)")
+                if hazard == HazardType.TROPICAL_CYCLONE and cyclones and code in cyclones:
+                    notices.append(self._cyclone_notice(cyclones[code]))
+                if hazard == HazardType.EARTHQUAKE and quakes and code in quakes:
+                    notices.append(self._quake_notice(quakes[code]))
+                if obs.get("pm25_model_24h") is not None:
+                    sources = ["Open-Meteo / CAMS (แบบจำลอง)"]
+                    notices.append("ไม่มีสถานีวัดฝุ่นในอำเภอนี้ ใช้ค่าคาดการณ์จากแบบจำลองเฉลี่ย 24 ชม. ข้างหน้า")
                 items.append({
                     "hazard": hazard.value,
                     "level": d.level.name if d.level is not None else None,
@@ -341,6 +472,148 @@ class HazardService:
             self._drought_mtime = mtime
         return self._drought
 
+    def _quake_shaking(self, tmd: list | None, usgs: list | None) -> dict[str, dict] | None:
+        """Strongest expected shaking per district from the last day's earthquakes; None when both feeds failed.
+
+        Also keeps the week's merged list for /v1/earthquakes (swapped in by refresh()).
+        """
+        from risk_models.earthquake import mmi_label_th, shaking_at
+
+        self._last_quakes = None
+        if tmd is None and usgs is None:
+            return None
+        now = datetime.now(timezone.utc)
+        merged = sorted(merge_quakes(tmd or [], usgs or []), key=lambda r: r.observed_at, reverse=True)
+        week = [r for r in merged if now - r.observed_at <= QUAKE_LIST_WINDOW]
+        self._last_quakes = [{
+            "id": r.station_id, "time": r.observed_at.isoformat(), "magnitude": r.value, "lat": r.lat, "lon": r.lon,
+            "depth_km": r.extra.get("depth_km"), "place_th": r.extra.get("place_th"), "where_th": r.extra.get("where_th"),
+            "place": r.extra.get("place"), "url": r.extra.get("url"), "tsunami": r.extra.get("tsunami", False),
+            "source": "กรมอุตุนิยมวิทยา" if r.source == "tmd_earthquakes" else "USGS",
+        } for r in week]
+        recent = [r for r in week if now - r.observed_at <= QUAKE_WINDOW]
+        out: dict[str, dict] = {}
+        for code in self.amphoe_codes:
+            area = self.gazetteer.by_code[code]
+            best = None
+            for r in recent:
+                value, km = shaking_at(area.lat, area.lon, r.lat, r.lon, r.value, r.extra.get("depth_km"))
+                if best is None or value > best[0]:
+                    best = (value, km, r)
+            if best is None or best[0] < 2:
+                continue  # nothing felt here (MMI 1): no quake details, so far-away small quakes do not clutter answers
+            value, km, r = best
+            out[code] = {"quake_mmi_24h": round(value, 1), "quake_magnitude": r.value, "quake_distance_km": round(km),
+                         "_label": mmi_label_th(value), "_place": r.extra.get("place_th") or r.extra.get("place") or "",
+                         "_time": r.observed_at}
+        return out
+
+    def _load_landslide_traces(self) -> dict[str, int] | None:
+        path = self.data_dir / "landslide_districts.json"
+        if not path.exists():
+            log.info("no %s; landslide checks are off", path)
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))["districts"]
+
+    def _landslide_observations(self, code: str, rain_24h: float | None, forecasts: dict) -> dict:
+        """Rain inputs for landslide rules, only in districts with enough past landslides (else no level)."""
+        traces = (self.landslide_traces or {}).get(code, 0)
+        if traces < LANDSLIDE_MIN_TRACES:
+            return {"landslide_rain_24h": None, "landslide_forecast_rain_24h": None}
+        # TMD forecasts are per province; the wettest of the next days counts.
+        days = forecasts.get(code) or forecasts.get(code[:4]) or []
+        rain_ahead = max((d["rain_mm"] for d in days if d.get("rain_mm") is not None), default=None)
+        return {"landslide_rain_24h": rain_24h, "landslide_forecast_rain_24h": rain_ahead, "landslide_traces": float(traces)}
+
+    def _cyclone_exposure(self, records: list | None) -> dict[str, dict] | None:
+        """Per district: strongest GDACS wind area over its centre and distance to the nearest track point now or ahead.
+
+        Districts with neither (no storm within CYCLONE_NOTICE_KM) are left out; None when GDACS failed.
+        """
+        from shapely.geometry import Point, shape
+        from shapely.prepared import prep
+
+        from risk_models.earthquake import distance_km
+
+        if records is None:
+            return None
+        now = datetime.now(timezone.utc)
+        areas = [(r.value, r.valid_time, r.extra["event"], prep(shape(r.extra["geometry"])))
+                 for r in records if r.variable == "cyclone_wind_area"]
+        # The latest analysed position (6 h old at most) and every forecast point.
+        track = [r for r in records if r.variable == "cyclone_track_point" and r.valid_time and r.valid_time >= now - timedelta(hours=6)]
+        out: dict[str, dict] = {}
+        for code in self.amphoe_codes:
+            area = self.gazetteer.by_code[code]
+            centre = Point(area.lon, area.lat)
+            hits = [(wind, when, event) for wind, when, event, geom in areas if geom.contains(centre)]
+            near = min(((distance_km(area.lat, area.lon, r.lat, r.lon), r) for r in track), default=None, key=lambda x: x[0])
+            if not hits and (near is None or near[0] > CYCLONE_NOTICE_KM):
+                continue
+            row: dict = {"cyclone_wind_kmh": 0.0}
+            if hits:
+                wind, when, event = max(hits, key=lambda h: (h[0], -(h[1].timestamp() if h[1] else 0)))
+                # Earliest time a wind area of that strength reaches the district.
+                first = min((h[1] for h in hits if h[0] == wind and h[1]), default=None)
+                row.update({"cyclone_wind_kmh": wind, "_event": event, "_time": first})
+            if near is not None:
+                row.update({"cyclone_distance_km": round(near[0]), "_near_event": near[1].extra["event"],
+                            "_near_time": near[1].valid_time})
+            out[code] = row
+        return out
+
+    @staticmethod
+    def _cyclone_notice(c: dict) -> str:
+        if c["cyclone_wind_kmh"] > 0:
+            when = f" ราว {c['_time'].astimezone(BANGKOK).strftime('%d/%m %H:%M')} น." if c.get("_time") else ""
+            return f"พายุ {c['_event']}: อยู่ในรัศมีลมแรง {c['cyclone_wind_kmh']:.0f} กม./ชม. ขึ้นไป{when} (GDACS รวมเส้นทางคาดการณ์)"
+        when = c["_near_time"].astimezone(BANGKOK).strftime("%d/%m %H:%M")
+        return f"พายุ {c['_near_event']} เข้าใกล้ที่สุดราว {c['cyclone_distance_km']} กม. ช่วง {when} น. (เส้นทางคาดการณ์ของ GDACS)"
+
+    @staticmethod
+    def _quake_notice(q: dict) -> str:
+        when = q["_time"].astimezone(BANGKOK).strftime("%d/%m %H:%M")
+        return (f"แผ่นดินไหวขนาด {q['quake_magnitude']:.1f} {q['_place']} ห่างราว {q['quake_distance_km']} กม. "
+                f"เมื่อ {when} น. ประเมินแรงสั่นที่นี่ระดับ {q['quake_mmi_24h']:.0f} ({q['_label']})")
+
+    @staticmethod
+    def _regional_rows(records) -> list[dict]:
+        rows = [{"id": r.station_id, "type": r.extra["event_type"], "type_th": r.extra["type_th"], "name": r.extra["name"],
+                 "alert": r.extra["alert"], "alert_th": r.extra["alert_th"], "countries": r.extra["countries"],
+                 "severity_text": r.extra["severity_text"], "from": r.extra["from"], "to": r.observed_at.isoformat(),
+                 "current": r.extra["current"], "lat": r.lat, "lon": r.lon, "url": r.extra["url"]} for r in records]
+        order = {"Red": 0, "Orange": 1, "Green": 2}
+        rows.sort(key=lambda e: e["to"], reverse=True)  # newest first within each group below
+        return sorted(rows, key=lambda e: (not e["current"], order.get(e["alert"], 3)))
+
+    def _offshore_points(self) -> list[tuple[str, float, float]]:
+        from geo_integration.coast import offshore_points
+
+        return offshore_points(gpd.read_file(self.data_dir / "admin_areas_web.gpkg", layer="amphoe"))
+
+    def _cross_border_counts(self, records: list) -> dict[str, int]:
+        """Hotspots outside Thailand within CROSS_BORDER_KM of each district centre (districts with none are left out)."""
+        import numpy as np
+
+        if not records:
+            return {}
+        mapped = self.mapper.assign_points([r.lat for r in records], [r.lon for r in records], nearest=False)
+        outside = [r for r, match in zip(records, mapped["match"]) if match == "outside"]
+        if not outside:
+            return {}
+        lat = np.radians([r.lat for r in outside])
+        lon = np.radians([r.lon for r in outside])
+        counts = {}
+        for code in self.amphoe_codes:
+            area = self.gazetteer.by_code[code]
+            alat, alon = math.radians(area.lat), math.radians(area.lon)
+            # Haversine distance, km.
+            h = np.sin((lat - alat) / 2) ** 2 + math.cos(alat) * np.cos(lat) * np.sin((lon - alon) / 2) ** 2
+            n = int((2 * 6371 * np.arcsin(np.sqrt(h)) <= CROSS_BORDER_KM).sum())
+            if n:
+                counts[code] = n
+        return counts
+
     def _drop_static_records(self, records: list) -> list:
         """Remove FIRMS records at known industrial heat sources, so the hotspot rule counts fires only."""
         import pandas as pd
@@ -377,6 +650,37 @@ class HazardService:
             self.source_status[name] = {"ok": False, "error": type(exc).__name__, "checked_at": now.isoformat(),
                                         "next_try_after": (now + RETRY_AFTER_FAILURE).isoformat()}
             log.warning("%s refresh failed, next try in %s: %s: %s", name, RETRY_AFTER_FAILURE, type(exc).__name__, exc)
+
+    # --- Open-Meteo forecasts per district (GRID_MODELS) -------------------------------------
+
+    def grid_stale(self, name: str) -> bool:
+        updated = self.grid_updated_at[name]
+        return updated is None or datetime.now(timezone.utc) - updated > GRID_MODELS[name][1]
+
+    def refresh_grids_in_background(self) -> None:
+        for name in GRID_MODELS:
+            self._start_job(name, lambda name=name: self.refresh_grid(name), self.grid_stale(name))
+
+    async def refresh_grid(self, name: str) -> None:
+        adapter_class, _, where = GRID_MODELS[name]
+        if where == "offshore":
+            if self._offshore is None:
+                self._offshore = await asyncio.to_thread(self._offshore_points)
+            points = self._offshore
+        else:
+            points = [(a.code, a.lat, a.lon) for a in self.gazetteer.areas if a.level == "amphoe"]
+        async with httpx.AsyncClient(headers=USER_AGENT) as client:
+            records = await adapter_class(points).run(client)
+        # A district can have several points (offshore): keep its highest value.
+        best: dict[str, object] = {}
+        for r in records:
+            code = r.extra["area_code"]
+            if code not in best or r.value > best[code].value:
+                best[code] = r
+        self.grid[name] = best
+        self.grid_updated_at[name] = now = datetime.now(timezone.utc)
+        self.source_status[name] = {"ok": True, "records": len(records), "checked_at": now.isoformat()}
+        self._inputs_changed = True  # rebuild decisions with the new forecast on the next request
 
     # --- forecast (TMD NWP) ---------------------------------------------------------------
 
@@ -538,9 +842,9 @@ class HazardService:
         return sorted(rows, key=lambda d: -(d["storage_percent"] or 0))
 
     @staticmethod
-    def fresh_levels(records, now: datetime | None = None) -> list:
+    def fresh_levels(records, now: datetime | None = None, max_age: timedelta = MAX_LEVEL_AGE) -> list:
         now = now or datetime.now(timezone.utc)
-        return [r for r in records if r.observed_at is not None and now - r.observed_at <= MAX_LEVEL_AGE]
+        return [r for r in records if r.observed_at is not None and now - r.observed_at <= max_age]
 
     @staticmethod
     def river_status(above_bank: float | None) -> tuple[str, str]:
@@ -675,6 +979,22 @@ class HazardService:
 
     def get_official_warnings(self) -> list[dict]:
         return self.warnings
+
+    def overview_layer(self) -> dict:
+        """Each district's worst level over all hazards, which hazard it is, and how many hazards are WATCH or above."""
+        order = {None: -1, "NORMAL": 0, "WATCH": 1, "WARNING": 2, "CRITICAL": 3}
+        features = []
+        for code, geometry in self._geometry.items():
+            items = self.decisions.get(code, [])
+            worst = max(items, key=lambda i: order[i["level"]], default=None)
+            area = self.gazetteer.by_code[code]
+            features.append({"type": "Feature", "geometry": geometry, "properties": {
+                "code": code, "name_th": area.name_th, "province_th": self.gazetteer.by_code[area.parent_code].name_th,
+                "level": worst["level"] if worst else None,
+                "worst_hazard": worst["hazard"] if worst and worst["level"] not in (None, "NORMAL") else None,
+                "hazards_at_risk": sum(1 for i in items if order[i["level"]] >= 1),
+            }})
+        return {"type": "FeatureCollection", "features": features}
 
     def map_layer(self, hazard: str) -> dict:
         features = []

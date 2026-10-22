@@ -16,6 +16,7 @@ HAZARD_KEYWORDS = {
     HazardType.FLOOD: ("น้ำท่วม", "น้ำป่า", "น้ำล้นตลิ่ง", "ฝนตกหนักถึงหนักมาก"),
     HazardType.DROUGHT: ("ภัยแล้ง", "ฝนทิ้งช่วง"),
     HazardType.FIRE: ("ไฟป่า", "หมอกควัน"),
+    HazardType.AIR_QUALITY: ("หมอกควัน", "ฝุ่นละออง", "PM2.5"),
 }
 
 

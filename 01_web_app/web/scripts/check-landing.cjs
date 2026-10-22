@@ -13,6 +13,7 @@ const hooks = {
   useMemo(fn) { current.cursor++; return fn(); },
   useCallback(fn) { current.cursor++; return fn; },
   useEffect() { current.cursor++; },
+  useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) { return (getServerSnapshot ?? getSnapshot)(); },
 };
 const jsx = (type, props) => ({ type, props: props || {} });
 const cache = {};
@@ -96,9 +97,16 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   searchDialog.props.ref.current = { showModal() { opened++; } };
   headerSearch.props.onClick();
   assert.equal(opened, 2, 'header search button opens the search dialog');
-  const riverButton = nodes(tree).find(n => n.props['data-category'] === 'rivers');
-  riverButton.props.onClick(); tree = landing.render();
-  assert.equal(nodes(tree).find(n => n.type === Dashboard).props.riverViewRequest, 1, 'top button emits explicit river reset request');
+  const groups = nodes(tree).filter(n => n.type === 'button' && /journey-category-button/.test(n.props.className || ''));
+  assert.deepEqual(groups.map(n => n.props['data-category']), lib.GROUPS.map(g => g.id), 'top bar shows every map group');
+  // Opening rivers from the dashboard's sub-tabs makes the water group return there, with a fresh nationwide list.
+  nodes(tree).find(n => n.type === Dashboard).props.onViewChange('rivers'); tree = landing.render();
+  nodes(tree).find(n => n.props['data-category'] === 'overview').props.onClick(); tree = landing.render();
+  assert.equal(nodes(tree).find(n => n.type === Dashboard).props.activeView, 'hazard', 'overview group opens the overview map');
+  nodes(tree).find(n => n.props['data-category'] === 'water').props.onClick(); tree = landing.render();
+  const dashboard = nodes(tree).find(n => n.type === Dashboard).props;
+  assert.equal(dashboard.activeView, 'rivers', 'water group returns to the last opened item');
+  assert.equal(dashboard.riverViewRequest, 1, 'top button emits explicit river reset request');
   const source = fs.readFileSync(path.join(root, 'src/components/Dashboard.tsx'), 'utf8');
   for (const unused of ['initialQuery', 'initialHazard', 'initialView']) assert(!source.includes(unused), 'unused prop removed: ' + unused);
   assert(!content(tree).includes('ผลการค้นหาในแดชบอร์ด'), 'guide describes current dialog flow');

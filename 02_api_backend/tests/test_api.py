@@ -26,6 +26,8 @@ def client():
     svc.decisions[sena] = [item("flood", "CRITICAL", above_bank_m=2.11), item("fire", "NORMAL", hotspots_24h=0)]
     svc.warnings = [{"title": "ฝนตกหนักถึงหนักมากบริเวณประเทศไทย", "hazards": ["rain_storm", "flood"]}]
     svc.updated_at = datetime.now(timezone.utc)
+    # Fresh forecasts, so requests do not start real Open-Meteo jobs in the background.
+    svc.grid_updated_at = {name: svc.updated_at for name in svc.grid_updated_at}
     svc.source_status = {"thaiwater_waterlevel": {"ok": True}, "nasa_firms": {"ok": False}}
     main.service, main.agent = svc, HazardAgent(svc.gazetteer, svc)
     return TestClient(main.app), svc, sena
@@ -228,3 +230,22 @@ def test_graph_requests_are_shared_and_failures_remembered(client, monkeypatch):
     assert c.get("/v1/rivers/2744/graph").status_code == 502
     assert c.get("/v1/rivers/2744/graph").status_code == 502
     assert calls == [2744]  # the second click is answered from the remembered failure
+
+
+def test_overview_layer_takes_each_districts_worst_hazard(client):
+    c, _, sena = client
+    layer = c.get("/v1/map/layers/overview").json()
+    props = {f["properties"]["code"]: f["properties"] for f in layer["features"]}
+    assert props[sena]["level"] == "CRITICAL" and props[sena]["worst_hazard"] == "flood"
+    assert props[sena]["hazards_at_risk"] == 1
+    other = next(p for code, p in props.items() if code != sena)
+    assert other["level"] == "NORMAL" and other["worst_hazard"] is None
+    assert c.get("/v1/map/layers/not_a_hazard").status_code == 404
+
+
+def test_air_stations_endpoint(client):
+    c, svc, _ = client
+    svc.pm25_stations = [{"id": "1t", "name_th": "ทดสอบ", "area_th": "", "lat": 13.7, "lon": 100.5, "pm25": 42.0, "aqi": 90.0,
+                          "time": "2026-10-22T03:00:00+07:00"}]
+    body = c.get("/v1/air/stations").json()
+    assert body["stations"][0]["pm25"] == 42.0 and "data_updated_at" in body

@@ -169,6 +169,67 @@ Round 7 (dams, 2026-10-19):
 71. API-hammering check: idle page = 3 requests per load (layer, dams, rivers), then nothing until the 10-min refresh. On-demand graphs/histories now share one upstream call per key while loading and remember a ThaiWater failure for 60 s (repeated clicks no longer re-call it).
 72. Bug: each auto-refresh blanked the map for a moment (layer reset to null while loading); the last layer of the same hazard stays until the new one arrives.
 
+### Round 10 — PM2.5 (branch `feature/peem/all-pm25`)
+73. New hazard `air_quality` (5th tab "ฝุ่น PM2.5"). Air4Thai (PCD) 24-hour PM2.5 at ~170 stations, worst station per district;
+    rules use PCD bands: >= 37.6 WATCH, >= 75.1 WARNING (PCD has no higher band, so no CRITICAL). Readings older than 6 h are dropped (27 of 170 on 2026-10-22 03:00).
+74. Districts without a station (815 of 928) use the Open-Meteo CAMS forecast (mean of the next 24 h); the model alone gives at most WATCH. Refreshed every 6 h.
+75. Bug found live: all 928 district points in one go got Open-Meteo 429 (600/min). Points snap to the 0.4° CAMS grid: 306 calls per refresh.
+76. Bug found live: Python cannot verify air4thai.pcd.go.th (the server sends Sectigo intermediates for a Let's Encrypt certificate). The two public Let's Encrypt intermediates are bundled in the adapter; verification stays on.
+77. Agent: "ฝุ่น", "pm2.5", "หมอกควัน", "คุณภาพอากาศ" are air-quality questions now (they were fire); answers give the station or model value and N95 advice.
+78. Cross-border smoke: FIRMS is fetched once for Thailand + Myanmar, Laos and Cambodia. Hotspots in Thailand drive the fire rules as before;
+    hotspots outside Thailand within 100 km of a district centre are shown with its PM2.5 (context only, never a rule input). Live 2026-10-22: 18 districts.
+79. Hazard toolbar uses auto-fill columns so new hazard tabs fit; "ความเสี่ยงทั้ง N ประเภท" counts the tabs instead of saying 4.
+
+### Round 11 — heat (branch `feature/peem/all-heat`, stacked on all-pm25)
+80. New hazard `heat` ("ความร้อนจัด"): NOAA heat index from Open-Meteo hourly temperature + humidity, highest of the next 24 h per district (0.4° grid, every 3 h).
+    TMD/BMA bands are 27 / 33 / 42 / 52 °C (เฝ้าระวัง / เตือนภัย / อันตราย / อันตรายมาก); TMD's own label is shown next to the value.
+    WATCH at TMD's 33 made 837 of 928 districts yellow on 2026-10-22 (max 40.3 °C), so WATCH starts at NOAA "Danger" 39.4 °C; 42 WARNING, 52 CRITICAL.
+81. Open-Meteo grid adapters (PM2.5, heat) share one pacer: one batch of up to 100 points, then 12 s, so together they stay under 600 calls a minute.
+
+### Round 12 — earthquakes and GDACS (branch `feature/peem/all-earthquake`, stacked on all-heat)
+82. New hazard `earthquake`: TMD earthquake RSS (small local events with Thai place text) + USGS M >= 3.5 in 88–112°E, 2°S–30°N; the same event in both
+    (within 90 s and 100 km) keeps TMD's record. Expected shaking per district centre: Allen, Wald & Worden (2012) MMI, hypocentral form (OpenQuake coefficients).
+    Rules: MMI >= 4 WATCH, >= 6 WARNING, >= 7 CRITICAL, from quakes of the last 24 h. Limits: point source (large quakes underestimated near the fault), no soil effect (Bangkok clay).
+83. `/v1/earthquakes` (7 days, newest first) and `/v1/regional-events` (GDACS earthquakes, cyclones and floods in 88–135°E, 11°S–30°N); both listed under the earthquake map.
+84. Bug found live: GDACS stops at 100 events when several types are asked together (cyclones were cut off), and `fromdate` filters on the start date
+    (CHAMPI started before the window). Now one call per type, cyclones and floods looking back 30 days; an empty result is HTTP 204 with no body.
+
+### Round 13 — waves (branch `feature/peem/all-marine`, stacked on all-earthquake)
+85. New hazard `marine` ("คลื่นลมแรง"): highest wave height of the next 24 h from Open-Meteo Marine at up to 3 points 5–20 km offshore of each district
+    (`geo_integration.coast.offshore_points`; land cells return null, which is how land borders drop out). Live 2026-10-22: 148 coastal districts.
+    Rules: >= 2 m WATCH (TMD: small boats stay ashore), >= 3 m WARNING, >= 4 m CRITICAL (WMO "very rough"). Inland districts show "อำเภอนี้ไม่ติดทะเล".
+86. Bug: offline API tests started real Open-Meteo jobs through `fresh_service()` (12 s pacing showed up as 11 s per test, 2:46 in all).
+    Test services now mark the forecasts fresh; backend suite back to ~22 s and no network.
+
+### Round 14 — tropical cyclones (branch `feature/peem/all-tropical-cyclone`, stacked on all-marine)
+87. New hazard `tropical_cyclone`: for each current GDACS cyclone in 88–135°E, 11°S–30°N, its wind areas (`WindRadii`: Green >= 63, Orange >= 93,
+    Red >= 119 km/h, one set per forecast time) are tested against district centres; the strongest covering area sets the level (63 WATCH, 93 WARNING, 119 CRITICAL).
+    Districts within 800 km of the current position or forecast track also get the closest distance and time as a notice. Live 2026-10-22: CHAMPI-26 (red) is ~2,500 km away, all NORMAL.
+88. Bug: "ไต้ฝุ่น" (typhoon) contains "ฝุ่น" (dust), so typhoon questions were also read as PM2.5 questions. Dust words now count only outside "ไต้ฝุ่น".
+89. The earthquake tab's GDACS list also shows under the cyclone tab (without the earthquake list).
+
+### Round 15 — landslides (branch `feature/peem/all-landslide`, stacked on all-tropical-cyclone)
+90. New hazard `landslide`: only in districts with >= 10 past landslides in DMR's inventory (ร่องรอยแผ่นดินถล่ม 1989–2019, 56,177 points, CC BY):
+    227 of 928. `make landslide` (scripts/build_landslide_districts.py) writes data/processed/landslide_districts.json; the inventory's UTM 47N
+    coordinates match DMR's own district names for 99 % of points. Rules: observed rain > 100 mm/24 h WARNING, > 150 CRITICAL (DMR notices),
+    TMD forecast > 100 mm/day WATCH. Live 2026-10-22: ขนอม (นครศรีธรรมราช) 122.7 mm = WARNING. Other districts say why they are not assessed.
+
+### Round 16 — map layout (branch `feature/peem/01-map-groups`, stacked on all-landslide)
+91. 12 toolbar buttons became 6 groups with sub-tabs: ภาพรวม · น้ำ (flood, dams, rivers) · ฝนและพายุ (rain, cyclones, waves) ·
+    ไฟและฝุ่น (PM2.5, fire) · ร้อนและแล้ง (heat, drought) · ธรณีภัย (landslide, earthquake). Each group button reopens its last sub-tab; phones get 3×2.
+92. Default map is the overview (`/v1/map/layers/overview`): each district's worst level over all hazards, with the hazard that causes it; the side
+    panel lists districts at WATCH+ by hazard and links to that map. Live 2026-10-22: 6 CRITICAL, 6 WARNING, 83 WATCH (rain 66, flood 15, drought 10, fire 4).
+93. PM2.5 map shows every fresh Air4Thai station (`/v1/air/stations`, 149 live) as a dot in the PCD band colour with its value; overlapping labels
+    hide themselves (glyphs from protomaps.github.io). Before, values were only in the district card and an all-NORMAL map looked empty.
+94. Rain and cyclone maps draw the latest RainViewer radar frame over the districts (toggle "เรดาร์บนแผนที่"). RainViewer limits since 2026-01-01:
+    zoom <= 7 (MapLibre stretches beyond), one colour scheme, past 2 h only, 100 requests/IP/min, personal or educational use only — so only the latest frame, no animation.
+    Unlike drawing fixed circles around model grid points, the radar shows where rain is actually falling.
+95. PM2.5 stations close together merge into one circle that shows their **highest** value (size = number of stations); tapping it zooms in.
+    A count of stations (as another team's map does for incidents) would read like a PM2.5 value, and hiding overlapping labels could hide the worst station.
+96. "แผนที่กลางคืน": the same OSM tiles with brightness inverted (light labels on dark). CARTO dark tiles were tried first: since 2026 they show "API KEY REQUIRED".
+    "เฉพาะที่เสี่ยง": districts below WATCH are not filled. Both are remembered per browser (useSyncExternalStore over localStorage, memory if blocked).
+97. Bug caught in the browser: MapLibre only accepts ["zoom"] at the top of an interpolate; a zoom interpolate inside "case" dropped the whole station layer.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

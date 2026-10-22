@@ -1,4 +1,4 @@
-export type Hazard = "flood" | "rain_storm" | "fire" | "drought";
+export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone" | "landslide";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
@@ -6,7 +6,52 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "rain_storm", th: "ฝนหนัก/พายุ", ready: true },
   { id: "fire", th: "ไฟป่า/ไฟหญ้า", ready: true },
   { id: "drought", th: "ภัยแล้ง", ready: true },
+  { id: "air_quality", th: "ฝุ่น PM2.5", ready: true },
+  { id: "heat", th: "ความร้อนจัด", ready: true },
+  { id: "earthquake", th: "แผ่นดินไหว", ready: true },
+  { id: "marine", th: "คลื่นลมแรง", ready: true },
+  { id: "tropical_cyclone", th: "พายุหมุนเขตร้อน", ready: true },
+  { id: "landslide", th: "ดินถล่ม", ready: true },
 ];
+
+/** A map layer: one hazard, or "overview" (each district's worst level over all hazards). */
+export type MapLayerId = Hazard | "overview";
+/** Everything the toolbar can show: hazard layers plus the dam and river views. */
+export type MapItem = MapLayerId | "dams" | "rivers";
+
+/** Toolbar groups: one button each; groups with several items show them as sub-tabs. */
+export const GROUPS: { id: string; th: string; icon: "shield" | "flood" | "rain_storm" | "fire" | "heat" | "landslide"; items: MapItem[] }[] = [
+  { id: "overview", th: "ภาพรวม", icon: "shield", items: ["overview"] },
+  { id: "water", th: "น้ำ", icon: "flood", items: ["flood", "dams", "rivers"] },
+  { id: "weather", th: "ฝนและพายุ", icon: "rain_storm", items: ["rain_storm", "tropical_cyclone", "marine"] },
+  { id: "smoke", th: "ไฟและฝุ่น", icon: "fire", items: ["air_quality", "fire"] },
+  { id: "hot", th: "ร้อนและแล้ง", icon: "heat", items: ["heat", "drought"] },
+  { id: "geo", th: "ธรณีภัย", icon: "landslide", items: ["landslide", "earthquake"] },
+];
+export const groupOf = (item: MapItem) => GROUPS.find((g) => g.items.includes(item))!;
+export const itemTh = (item: MapItem) =>
+  item === "overview" ? "ทุกภัย" : item === "dams" ? "เขื่อน" : item === "rivers" ? "แม่น้ำ" : HAZARDS.find((h) => h.id === item)!.th;
+
+/** Pollution Control Department PM2.5 bands (24-hour average, since 2023-06-01), with Air4Thai's colours. */
+export const PM25_BANDS: { max: number; th: string; color: string; text: string }[] = [
+  { max: 15, th: "ดีมาก", color: "#3bccff", text: "#06364a" },
+  { max: 25, th: "ดี", color: "#92d050", text: "#1f3a08" },
+  { max: 37.5, th: "ปานกลาง", color: "#ffe600", text: "#3d3500" },
+  { max: 75, th: "เริ่มมีผลต่อสุขภาพ", color: "#ffa200", text: "#3d2400" },
+  { max: Infinity, th: "มีผลต่อสุขภาพ", color: "#f04646", text: "#ffffff" },
+];
+export const pm25Band = (value: number) => PM25_BANDS.find((b) => value <= b.max)!;
+
+export interface AirStation {
+  id: string | null;
+  name_th: string | null;
+  area_th: string | null;
+  lat: number;
+  lon: number;
+  pm25: number; // 24-hour average, µg/m³
+  aqi: number | null;
+  time: string;
+}
 
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
   { id: "CRITICAL", th: "วิกฤต", color: "#d7263d" },
@@ -131,6 +176,38 @@ export interface Media {
   data_updated_at: string | null;
 }
 
+export interface Earthquake {
+  id: string | null;
+  time: string;
+  magnitude: number;
+  lat: number;
+  lon: number;
+  depth_km: number | null;
+  place_th: string | null; // TMD: country or province
+  where_th: string | null; // TMD: direction and distance from a Thai district
+  place: string | null; // USGS, English
+  url: string | null;
+  tsunami: boolean;
+  source: string;
+}
+
+export interface RegionalEvent {
+  id: string;
+  type: string;
+  type_th: string;
+  name: string | null;
+  alert: "Green" | "Orange" | "Red" | null;
+  alert_th: string | null;
+  countries: string | null;
+  severity_text: string | null;
+  from: string | null;
+  to: string;
+  current: boolean;
+  lat: number;
+  lon: number;
+  url: string | null;
+}
+
 export interface AreaHazards {
   area: { code: string; level: string; name_th: string; name_en: string; parents: string[] };
   assessments: Assessment[];
@@ -160,13 +237,25 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  layer: (hazard: Hazard) => get<GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } }>(`/v1/map/layers/${hazard}`),
+  layer: (hazard: MapLayerId) => get<GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } }>(`/v1/map/layers/${hazard}`),
   area: (code: string) => get<AreaHazards>(`/v1/areas/${code}/hazards`),
   dams: () => get<{ dams: Dam[]; data_updated_at: string | null }>(`/v1/dams`),
   damHistory: (id: string, series: "storage" | "released" | "inflow") => get<DamHistory>(`/v1/dams/${encodeURIComponent(id)}/history?series=${series}`),
   rivers: () => get<{ rivers: River[]; data_updated_at: string | null }>(`/v1/rivers`),
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
   media: () => get<Media>(`/v1/media`),
+  airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
+  /** Latest RainViewer radar frame as a tile URL template, or null when there is none. */
+  radar: async (): Promise<{ tiles: string; time: number } | null> => {
+    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const maps: { host: string; radar: { past: { time: number; path: string }[] } } = await res.json();
+    const last = maps.radar.past.at(-1);
+    // 256 px tiles, colour scheme 2 (Universal Blue, the only one left), smoothed, snow shown.
+    return last ? { tiles: `${maps.host}${last.path}/256/{z}/{x}/{y}/2/1_1.png`, time: last.time } : null;
+  },
+  earthquakes: () => get<{ earthquakes: Earthquake[] }>(`/v1/earthquakes`),
+  regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),
   search: (q: string) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }[]>(`/v1/areas/search?q=${encodeURIComponent(q)}`),
   ask: async (question: string): Promise<AskAnswer> => {
@@ -179,6 +268,14 @@ export const api = {
     return res.json();
   },
 };
+
+/** TMD/BMA heat-index band, shown next to the value (alert levels come from the backend rules). */
+export function tmdHeatLabel(heatIndex: number): string {
+  if (heatIndex >= 52) return "อันตรายมาก";
+  if (heatIndex >= 42) return "อันตราย";
+  if (heatIndex >= 33) return "เตือนภัย";
+  return heatIndex >= 27 ? "เฝ้าระวัง" : "ปกติ";
+}
 
 export function describeObservation(key: string, value: number | null): string | null {
   if (value === null || value === undefined) return null;
@@ -200,6 +297,32 @@ export function describeObservation(key: string, value: number | null): string |
       return `ดัชนีความสมบูรณ์ของพืช (VCI) ${value.toFixed(0)} จาก 100`;
     case "ndvi_deficit":
       return value < 0.05 ? "พืชพรรณเขียวใกล้เคียงปกติของเดือนนี้ (NDVI)" : `NDVI ต่ำกว่าปกติ ${value.toFixed(2)}`;
+    case "pm25_24h":
+      return `PM2.5 เฉลี่ย 24 ชม. ${value.toFixed(1)} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)`;
+    case "pm25_model_24h":
+      return `แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า ${value.toFixed(1)} มคก./ลบ.ม.`;
+    case "heat_index_max_24h":
+      return `ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(1)}°C (เกณฑ์กรมอุตุฯ: ${tmdHeatLabel(value)})`;
+    case "quake_mmi_24h":
+      return value <= 1 ? "ไม่มีแผ่นดินไหวที่รู้สึกได้ใน 24 ชม." : `ประเมินแรงสั่นระดับ ${value.toFixed(0)} (มาตราเมอร์คัลลี)`;
+    case "quake_magnitude":
+      return `แผ่นดินไหวขนาด ${value.toFixed(1)}`;
+    case "quake_distance_km":
+      return `ห่างราว ${value.toFixed(0)} กม.`;
+    case "wave_height_max_24h":
+      return `คลื่นสูงสุดใน 24 ชม. ข้างหน้าราว ${value.toFixed(1)} ม.`;
+    case "cyclone_wind_kmh":
+      return value > 0 ? `อยู่ในรัศมีลมแรงของพายุ ${value.toFixed(0)} กม./ชม. ขึ้นไป (รวมเส้นทางคาดการณ์)` : "ไม่อยู่ในรัศมีลมแรงของพายุ";
+    case "cyclone_distance_km":
+      return `พายุเข้าใกล้ที่สุดราว ${value.toFixed(0)} กม.`;
+    case "landslide_traces":
+      return `พื้นที่เคยเกิดดินถล่ม (พบร่องรอย ${value.toFixed(0)} จุด)`;
+    case "landslide_rain_24h":
+      return `ฝน 24 ชม. สูงสุด ${value.toFixed(1)} มม.`;
+    case "landslide_forecast_rain_24h":
+      return `พยากรณ์ฝนรายวันสูงสุด ${value.toFixed(1)} มม.`;
+    case "cross_border_hotspots_24h":
+      return value > 0 ? `จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. ${value} จุด (24 ชม.)` : null;
     case "spi_3":
       return `SPI-3 ${value.toFixed(2)}`;
     default:

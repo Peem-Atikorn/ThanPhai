@@ -42,7 +42,14 @@ agent = HazardAgent(GAZ, FakeTools())
 @pytest.mark.parametrize(
     ("text", "hazards"),
     [("น้ำจะท่วมไหม", [HazardType.FLOOD]), ("ฝนตกหนักไหม", [HazardType.RAIN_STORM]),
-     ("ฝนทิ้งช่วงจะแล้งไหม", [HazardType.DROUGHT]), ("ฝุ่นควันไฟป่า", [HazardType.FIRE]),
+     ("ฝนทิ้งช่วงจะแล้งไหม", [HazardType.DROUGHT]), ("ฝุ่นควันไฟป่า", [HazardType.FIRE, HazardType.AIR_QUALITY]),
+     ("ค่าฝุ่น pm2.5 วันนี้", [HazardType.AIR_QUALITY]), ("หมอกควันหนาไหม", [HazardType.AIR_QUALITY]),
+     ("วันนี้อากาศร้อนจัดไหม", [HazardType.HEAT]), ("ระวังฮีตสโตรก", [HazardType.HEAT]),
+     ("เมื่อกี้แผ่นดินไหวไหม", [HazardType.EARTHQUAKE]),
+     ("พรุ่งนี้ออกเรือได้ไหม", [HazardType.MARINE]),
+     ("พายุไต้ฝุ่นจะเข้าไทยไหม", [HazardType.RAIN_STORM, HazardType.TROPICAL_CYCLONE]),
+     ("ไต้ฝุ่นมาแล้วฝุ่นก็ยังเยอะ", [HazardType.AIR_QUALITY, HazardType.TROPICAL_CYCLONE]),
+     ("บ้านอยู่เชิงเขา กลัวดินถล่ม", [HazardType.LANDSLIDE]), ("rainy season", [HazardType.RAIN_STORM]),
      ("Will it flood?", [HazardType.FLOOD])],
 )
 def test_detect_hazards(text, hazards):

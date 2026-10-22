@@ -1,7 +1,7 @@
 PY ?= .venv/Scripts/python
 MODULES = 02_api_backend 03_hazard_ai_agent 04_external_data_services 05_geo_data_integration 06_hazard_risk_models 07_knowledge_decision_llm 08_alert_feedback_monitoring
 
-.PHONY: setup data test test-live snapshot ndvi fire-model api web up down logs
+.PHONY: setup data test test-live snapshot ndvi fire-model landslide api web up down logs
 
 setup:
 	python -m venv .venv
@@ -26,6 +26,10 @@ snapshot:
 # Monthly: MODIS NDVI -> drought VCI (needs EARTHDATA_TOKEN and pip install -e "06_hazard_risk_models[ndvi]")
 ndvi:
 	$(PY) scripts/build_ndvi_vci.py
+
+# Rarely (DMR updates the inventory every ~5 years): past landslides per district
+landslide:
+	$(PY) scripts/build_landslide_districts.py
 
 # Yearly: retrain the fire model on FIRMS history (needs FIRMS_MAP_KEY)
 fire-model:

@@ -122,8 +122,19 @@
 .journey-category-button[data-category="drought"], .journey-live-shell[data-active-category="drought"] { --category-color: #8A6A32; --category-tint: #F3EEDD; }
 .journey-category-button[data-category="dams"], .journey-live-shell[data-active-category="dams"] { --category-color: #3D7567; --category-tint: #E5EFEA; }
 .journey-category-button[data-category="rivers"], .journey-live-shell[data-active-category="rivers"] { --category-color: #287785; --category-tint: #E2EFF1; }
+.journey-live-shell[data-active-category="air_quality"] { --category-color: #6C6A5E; --category-tint: #EFEEE8; }
+.journey-live-shell[data-active-category="heat"] { --category-color: #A8552B; --category-tint: #F6E8DF; }
+.journey-live-shell[data-active-category="earthquake"], .journey-live-shell[data-active-category="landslide"] { --category-color: #6B5A45; --category-tint: #EFEAE2; }
+.journey-live-shell[data-active-category="marine"], .journey-live-shell[data-active-category="tropical_cyclone"] { --category-color: #2E6478; --category-tint: #E3EDF1; }
+/* The category bar shows map groups; each group takes the color of its first item. */
+.journey-category-button[data-category="overview"], .journey-live-shell[data-active-category="overview"] { --category-color: #244C5B; --category-tint: #E5EEF3; }
+.journey-category-button[data-category="water"] { --category-color: #2F6685; --category-tint: #E5EEF3; }
+.journey-category-button[data-category="weather"] { --category-color: #655B83; --category-tint: #ECE9F2; }
+.journey-category-button[data-category="smoke"] { --category-color: #6C6A5E; --category-tint: #EFEEE8; }
+.journey-category-button[data-category="hot"] { --category-color: #A8552B; --category-tint: #F6E8DF; }
+.journey-category-button[data-category="geo"] { --category-color: #6B5A45; --category-tint: #EFEAE2; }
 .journey-category-button { display: flex; align-items: center; justify-content: center; gap: 11px; min-height: 60px; min-width: 0; padding: 10px 12px; border: 0; border-radius: 999px; background: transparent; color: #344b49; text-align: left; transition: background-color .18s ease, color .18s ease, box-shadow .18s ease; }
-.journey-category-button:hover:not(:disabled) { background: var(--category-tint); color: var(--category-color); }
+.journey-category-button:hover:not(:disabled, .is-active) { background: var(--category-tint); color: var(--category-color); }
 
 .journey-category-button.is-active small { color: #fff; }
 .journey-category-button:focus-visible { outline: 3px solid var(--category-color); outline-offset: 3px; }

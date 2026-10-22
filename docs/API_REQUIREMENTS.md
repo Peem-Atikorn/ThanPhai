@@ -131,7 +131,7 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Design rule | Fetch history **once** and cache it (`data/cache/`). Refresh only recent months. For history of all 77 provinces, use **CHIRPS** files (1.9) instead of Open-Meteo. Retry 429 after 65 s. |
 | Terms | Free for **non-commercial** use (student project qualifies). Commercial use needs a paid plan. |
 | License | CC BY 4.0 — credit "Weather data by Open-Meteo.com" |
-| Used by | 04 (fallback forecast), 05/06 (history and features), 06 (flood: river discharge) |
+| Used by | 04 (fallback forecast), 05/06 (history and features), 06 (flood: river discharge), 02 (heat index: hourly temperature + humidity per 0.4° cell every 3 h, ~306 calls) |
 
 ### 1.7 DDPM — กรมป้องกันและบรรเทาสาธารณภัย 📄
 
@@ -177,6 +177,82 @@ The keyless South-East Asia file (~1.8 MB/24 h) is enough for the MVP. Filter to
 | Data | Admin levels 0–3 (country, province, amphoe, tambon) with P-codes, Thai and English names |
 | License | Check the dataset page ⚠️ (HDX COD-AB is usually CC BY-IGO) |
 | Used by | 05 (area table), 01 (map), 03 (gazetteer) |
+
+### 1.12 Air4Thai — PM2.5 stations (กรมควบคุมมลพิษ) ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://air4thai.pcd.go.th/services/getNewAQI_JSON.php` (all stations, latest hour) |
+| Auth | None |
+| Data | ~173 stations (`GROUND`, `BKK`, `MOBILE`); `AQILast.PM25.value` = 24-hour average PM2.5 (µg/m³), `-1` = no reading; date and time in Thai local time |
+| Quirks | Some stations lag many hours (27 of 170 were over 6 h old on 2026-10-22 03:00), so readings older than 6 h are dropped. The server sends the wrong intermediate certificates; Python needs the Let's Encrypt `YR1` + `Root YR` intermediates (bundled in `adapters/air4thai.py`, valid to 2028-09-02). |
+| Thresholds | PCD PM2.5 bands since 2023-06-01: 0–15 very good, 15.1–25 good, 25.1–37.5 moderate, 37.6–75 starts to affect health, ≥ 75.1 affects health |
+| Used by | 04, 02 (`air_quality` hazard) |
+
+### 1.13 Open-Meteo Air Quality — CAMS PM2.5 forecast ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=..&longitude=..&hourly=pm2_5` (comma-separated coordinates return a list) |
+| Auth and limits | None; same Open-Meteo limits as 1.6, and **each coordinate counts as a call**. 928 district points in one go got 429 on 2026-10-22, so points snap to the 0.4° CAMS grid (306 calls) and refresh every 6 h |
+| Use | Only for districts without an Air4Thai station; the model alone gives at most WATCH |
+| License | CC BY 4.0 — credit "Air quality data by Open-Meteo.com / CAMS" |
+
+### 1.14 TMD earthquakes — กองเฝ้าระวังแผ่นดินไหว ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://earthquake.tmd.go.th/feed/rss_tmd.xml` (latest ~10 events, RSS with `geo:` and `tmd:` namespaces) |
+| Auth | None |
+| Data | `geo:lat`, `geo:long`, `tmd:depth` (km), `tmd:magnitude`, `tmd:time` (UTC, "2026-10-21 13:57:50 UTC"), `title` (country/province, Thai + English), `comments` (direction and distance from a Thai district) |
+| Note | Lists small events near Thailand (M 1–3) that USGS does not |
+
+### 1.15 USGS earthquakes ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=..&minmagnitude=3.5&minlatitude=-2&maxlatitude=30&minlongitude=88&maxlongitude=112` |
+| Auth | None (public domain) |
+| Data | GeoJSON; `mag`, `time` (ms since epoch, UTC), `place`, `tsunami`, geometry `[lon, lat, depth_km]` |
+
+### 1.16 GDACS — UN/EU disaster alerts ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC&fromdate=..&todate=..&alertlevel=green;orange;red` |
+| Auth | None |
+| Quirks | Several types in one call stop at 100 events worldwide, so ThanPhai asks one type at a time. `fromdate` filters on the event's **start**, so long cyclones and floods need a 30-day look-back. No events = HTTP 204 with an empty body. Dates have no zone (UTC). |
+| Data | `eventtype` (EQ, TC, FL, ...), `name`, `alertlevel` (Green/Orange/Red = GDACS impact estimate, not a ThanPhai level), `country`, `severitydata`, `iscurrent`, report URL |
+| Geometry | `https://www.gdacs.org/gdacsapi/api/polygons/getgeometry?eventtype=TC&eventid=..&episodeid=..` (~0.5 MB): `featuretype` `WindRadii` polygons per forecast time with `Class` Poly_Green / Poly_Orange / Poly_Red (>= 39 / 58 / 74 mph) and `polygonlabel` "22/10 06:00"; `PointRadii` track points as small circles labelled "14/10 12:00 UTC"; `polygondate` = issue time |
+| Used by | 02 (`/v1/regional-events`, `tropical_cyclone` hazard) |
+
+### 1.17 Open-Meteo Marine — wave forecast ✅
+
+| Item | Detail |
+|---|---|
+| Endpoint | `https://marine-api.open-meteo.com/v1/marine?latitude=..&longitude=..&hourly=wave_height` (comma-separated coordinates) |
+| Auth and limits | None; Open-Meteo limits (1.6), each coordinate counts. ~300 points 5–20 km offshore, snapped to 0.1°, every 6 h |
+| Quirk | Land cells return `null` for every hour; that is how coastal districts are told apart from land borders |
+| License | CC BY 4.0 — credit "Marine data by Open-Meteo.com" |
+
+### 1.18 DMR landslide data — กรมทรัพยากรธรณี ✅
+
+| Item | Detail |
+|---|---|
+| Catalogue | CKAN `https://data.dmr.go.th/api/3/action/package_search?q=landslide` (CC BY) |
+| Used | `landslide_inventory_map` (ร่องรอยแผ่นดินถล่ม 1989–2019): CSV with `utm_e`, `utm_n` (zone 47N for the whole country), `tambon`, `district`, `province` |
+| Also available | `landslide_susceptibility` (CSV without geometry, SHP as .rar, ArcGIS MapServer `gisportal.dmr.go.th/arcgis/rest/services/HAZARD/LANDSLIDE_SUSCEPTIBILITY/MapServer`), safe areas, slope-monitoring rain gauges |
+| Rain criteria | DMR notices alert at > 100 mm in 24 h and cite > 150 mm for severe cases (no single published standard found) |
+| Used by | scripts/build_landslide_districts.py → 02 (`landslide` hazard) |
+
+### 1.19 RainViewer — radar mosaic tiles ✅
+
+| Item | Detail |
+|---|---|
+| Frames | `https://api.rainviewer.com/public/weather-maps.json` (CORS open): `host` + `radar.past[].path` (2 h, 10-min steps) |
+| Tiles | `{host}{path}/256/{z}/{x}/{y}/2/1_1.png` (256 px, colour scheme 2 = Universal Blue, smoothed, snow) |
+| Limits (since 2026-01-01) | Max zoom 7, only Universal Blue, no nowcast, 100 requests/IP/minute; "for personal and educational use only"; availability not guaranteed; credit RainViewer with a link (requested) |
+| Used by | 01 (radar layer on the rain and cyclone maps, browser fetches directly) |
 
 ---
 
@@ -264,6 +340,12 @@ VAPID_PRIVATE_KEY=
 - ข้อมูลภาพถ่ายดาวเทียมและน้ำท่วม: GISTDA
 - Fire data: NASA FIRMS
 - Weather data by Open-Meteo.com (CC BY 4.0)
+- ข้อมูลคุณภาพอากาศ: กรมควบคุมมลพิษ (Air4Thai)
+- Air quality data by Open-Meteo.com / CAMS (CC BY 4.0)
+- ข้อมูลแผ่นดินไหว: กองเฝ้าระวังแผ่นดินไหว กรมอุตุนิยมวิทยา · Earthquake data: USGS
+- Disaster alerts: GDACS (UN / European Commission)
+- ข้อมูลร่องรอยแผ่นดินถล่ม: กรมทรัพยากรธรณี (CC BY)
+- Radar: RainViewer (https://www.rainviewer.com)
 - Rainfall: CHIRPS, UCSB Climate Hazards Center
 - Boundaries: OCHA HDX
 - Map data © OpenStreetMap contributors (if the OSM basemap is used)

@@ -81,6 +81,7 @@ async def fresh_service() -> HazardService:
         service.refresh_satellite_in_background()
     if service.fire_stale:
         service.refresh_fire_in_background()
+    service.refresh_grids_in_background()
     return service
 
 
@@ -150,22 +151,25 @@ _layer_cache: dict[tuple, tuple[bytes, bytes]] = {}
 
 
 @app.get("/v1/map/layers/{hazard}")
-async def map_layer(hazard: HazardType, request: Request) -> Response:
+async def map_layer(hazard: str, request: Request) -> Response:
+    """One hazard's level per district, or "overview": each district's worst level over all hazards."""
+    if hazard != "overview" and hazard not in {h.value for h in HazardType}:
+        raise HTTPException(404, "unknown hazard")
     svc = await fresh_service()
     m = meta(svc)
-    key = (hazard.value, m["data_updated_at"], tuple(m["degraded_services"]), tuple(m["inputs_pending"]))
+    key = (hazard, m["data_updated_at"], tuple(m["degraded_services"]), tuple(m["inputs_pending"]))
     cached = _layer_cache.get(key)
     if cached is None:
         # ~1.2 MB of GeoJSON. FastAPI's encoder took ~285 ms and GZipMiddleware another ~140 ms on the
         # event loop for every request. Encode and compress once per data version, in a thread.
-        layer = {**svc.map_layer(hazard.value), "meta": m}
+        layer = {**(svc.overview_layer() if hazard == "overview" else svc.map_layer(hazard)), "meta": m}
 
         def encode() -> tuple[bytes, bytes]:
             raw = json.dumps(layer, ensure_ascii=False).encode()
             return raw, gzip.compress(raw, compresslevel=6)
 
         cached = await asyncio.to_thread(encode)
-        if len(_layer_cache) >= 8:  # old data versions are never asked for again
+        if len(_layer_cache) >= 24:  # 11 layers per data version; old versions are never asked for again
             _layer_cache.clear()
         _layer_cache[key] = cached
     raw, compressed = cached
@@ -214,6 +218,27 @@ async def river_graph(station_id: str, days: int = Query(3, ge=1, le=7)) -> dict
     if graph is None:
         raise HTTPException(404, f"unknown station {station_id}")
     return {"station_id": station_id, **graph}
+
+
+@app.get("/v1/air/stations")
+async def air_stations() -> dict:
+    """Air4Thai stations with a current PM2.5 reading (24-hour average), worst first."""
+    svc = await fresh_service()
+    return {"stations": svc.pm25_stations, **meta(svc)}
+
+
+@app.get("/v1/earthquakes")
+async def earthquakes() -> dict:
+    """Earthquakes of the last 7 days around Thailand (TMD, plus USGS for events TMD does not list), newest first."""
+    svc = await fresh_service()
+    return {"earthquakes": svc.quakes, **meta(svc)}
+
+
+@app.get("/v1/regional-events")
+async def regional_events() -> dict:
+    """GDACS earthquakes, tropical cyclones and floods around South-East Asia (last 7 days), current and red first."""
+    svc = await fresh_service()
+    return {"events": svc.regional_events, **meta(svc)}
 
 
 @app.get("/v1/media")

@@ -15,7 +15,7 @@ from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, und
 from thanphai_shared import HazardType
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
-HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า"}
+HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5", "heat": "ความร้อนจัด", "earthquake": "แผ่นดินไหว", "marine": "คลื่นลมแรง", "tropical_cyclone": "พายุหมุนเขตร้อน", "landslide": "ดินถล่ม"}
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
@@ -24,7 +24,30 @@ PREPARE_TH = {
     "rain_storm": ["หลีกเลี่ยงการเดินทางช่วงฝนตกหนัก", "อยู่ห่างจากต้นไม้ใหญ่และป้ายโฆษณา", "ระวังน้ำป่าไหลหลากหากอยู่ใกล้ภูเขาหรือลำห้วย"],
     "drought": ["กักเก็บน้ำสำรองและใช้น้ำอย่างประหยัด", "ติดตามประกาศพื้นที่ประสบภัยแล้งจาก ปภ.", "วางแผนการเพาะปลูกตามปริมาณน้ำที่มี"],
     "fire": ["งดเผาในที่โล่ง", "ปิดประตูหน้าต่างเมื่อมีควัน และใช้หน้ากาก N95", "แจ้ง 1362 (กรมอุทยานฯ) เมื่อพบไฟป่า"],
+    "air_quality": ["ลดกิจกรรมกลางแจ้ง โดยเฉพาะเด็ก ผู้สูงอายุ หญิงตั้งครรภ์ และผู้มีโรคหัวใจหรือทางเดินหายใจ",
+                    "สวมหน้ากาก N95 เมื่อออกนอกอาคาร", "ปิดประตูหน้าต่าง และใช้เครื่องฟอกอากาศถ้ามี"],
+    "heat": ["ดื่มน้ำบ่อย ๆ แม้ไม่กระหายน้ำ", "เลี่ยงงานหนักกลางแจ้งช่วง 11.00–15.00 น. และพักในที่ร่ม",
+             "ดูแลเด็ก ผู้สูงอายุ และผู้มีโรคประจำตัว หากตัวร้อนจัด ซึม หรือหมดสติ โทร 1669"],
+    "earthquake": ["ขณะสั่น: หมอบ ป้องกันศีรษะ และหลบใต้โต๊ะที่แข็งแรง อยู่ห่างจากกระจกและของที่อาจตกใส่",
+                   "ห้ามใช้ลิฟต์ ออกจากอาคารทางบันไดเมื่อหยุดสั่น", "ระวังอาฟเตอร์ช็อก และตรวจรอยร้าวของอาคารก่อนกลับเข้าไป"],
+    "marine": ["เรือเล็กงดออกจากฝั่งเมื่อคลื่นสูง 2 เมตรขึ้นไป", "งดเล่นน้ำทะเลเมื่อมีธงแดงหรือคลื่นแรง",
+               "ติดตามประกาศของกรมอุตุนิยมวิทยาและกรมเจ้าท่าก่อนออกเรือ"],
+    "tropical_cyclone": ["เก็บหรือยึดสิ่งของนอกบ้านที่ลมพัดปลิวได้ และเตรียมไฟฉาย น้ำดื่ม อาหาร", "เรือทุกขนาดงดออกจากฝั่งในเส้นทางพายุ",
+                         "ติดตามประกาศเตือนพายุของกรมอุตุนิยมวิทยาและคำสั่งอพยพของ ปภ."],
+    "landslide": ["สังเกตสัญญาณเตือน: น้ำในลำห้วยขุ่นข้นผิดปกติ ดินแยก ต้นไม้เอียง หรือได้ยินเสียงดังจากภูเขา",
+                  "เมื่อฝนตกหนักต่อเนื่อง ให้ออกจากบ้านที่อยู่ติดเชิงเขาหรือทางน้ำไหล", "ติดตามประกาศของกรมทรัพยากรธรณีและ ปภ. และเตรียมเส้นทางอพยพ"],
 }
+
+
+def tmd_heat_label(heat_index: float) -> str:
+    """TMD/BMA heat-index band (display only; alert levels come from rules.yaml)."""
+    if heat_index >= 52:
+        return "อันตรายมาก"
+    if heat_index >= 42:
+        return "อันตราย"
+    if heat_index >= 33:
+        return "เตือนภัย"
+    return "เฝ้าระวัง" if heat_index >= 27 else "ปกติ"
 
 
 class HazardTools(Protocol):
@@ -132,6 +155,33 @@ def _reason(item: dict) -> str:
         parts.append(f"จุดความร้อน 24 ชม. {int(obs['hotspots_24h'])} จุด")
     if obs.get("fire_probability_7d") is not None:
         parts.append(f"แบบจำลองประเมินโอกาสเกิดไฟใน 7 วัน {obs['fire_probability_7d'] * 100:.0f}%")
+    if obs.get("pm25_24h") is not None:
+        parts.append(f"PM2.5 เฉลี่ย 24 ชม. {obs['pm25_24h']:.1f} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)")
+    if obs.get("pm25_model_24h") is not None:
+        parts.append(f"แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า {obs['pm25_model_24h']:.1f} มคก./ลบ.ม.")
+    if obs.get("heat_index_max_24h") is not None:
+        hi = obs["heat_index_max_24h"]
+        parts.append(f"ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า {hi:.1f}°C (เกณฑ์กรมอุตุฯ: {tmd_heat_label(hi)})")
+    if obs.get("quake_mmi_24h") is not None:
+        if obs.get("quake_magnitude") is not None:
+            parts.append(f"แผ่นดินไหวขนาด {obs['quake_magnitude']:.1f} ห่างราว {obs['quake_distance_km']:.0f} กม. "
+                         f"ประเมินแรงสั่นที่นี่ระดับ {obs['quake_mmi_24h']:.0f} (มาตราเมอร์คัลลี)")
+        else:
+            parts.append("ไม่มีแผ่นดินไหวใน 24 ชม. ที่ผ่านมา")
+    if obs.get("wave_height_max_24h") is not None:
+        parts.append(f"คลื่นสูงสุดใน 24 ชม. ข้างหน้าราว {obs['wave_height_max_24h']:.1f} เมตร")
+    if obs.get("cyclone_wind_kmh"):
+        parts.append(f"อยู่ในรัศมีลมแรงของพายุ {obs['cyclone_wind_kmh']:.0f} กม./ชม. ขึ้นไป (รวมเส้นทางคาดการณ์)")
+    if obs.get("cyclone_distance_km") is not None:
+        parts.append(f"พายุหมุนเขตร้อนเข้าใกล้ที่สุดราว {obs['cyclone_distance_km']:.0f} กม.")
+    if obs.get("landslide_traces") is not None:
+        parts.append(f"พื้นที่เคยเกิดดินถล่ม (พบร่องรอย {obs['landslide_traces']:.0f} จุด)")
+        if obs.get("landslide_rain_24h") is not None:
+            parts.append(f"ฝน 24 ชม. สูงสุด {obs['landslide_rain_24h']:.1f} มม.")
+        if obs.get("landslide_forecast_rain_24h") is not None:
+            parts.append(f"พยากรณ์ฝนรายวันสูงสุด {obs['landslide_forecast_rain_24h']:.1f} มม.")
+    if obs.get("cross_border_hotspots_24h"):
+        parts.append(f"จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. {int(obs['cross_border_hotspots_24h'])} จุด (24 ชม.)")
     if obs.get("vci") is not None:
         parts.append(f"ดัชนีความสมบูรณ์ของพืช (VCI) {obs['vci']:.0f} จาก 100 เทียบเดือนเดียวกันในอดีต")
     elif obs.get("ndvi_deficit") is not None:
