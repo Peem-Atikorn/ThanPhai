@@ -236,7 +236,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     select(code);
   }, [select]);
 
-fix: restore hazard area search behavior  function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearch = false) {
+function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearch = false) {
     selectedCode.current = item.code;
     select(item.code, item.level === "province" ? null : item.level === "tambon" ? item.code.slice(0, 6) : item.code);
     setView("hazard");
