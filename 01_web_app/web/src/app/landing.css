@@ -1,0 +1,323 @@
+/* ThanPhai landing: editorial typography, a coastal hero and soft floating panels. */
+.journey-shell { --background: #f6f5f1; --foreground: #222b2c; --brand: #244c5b; --brand-hover: #173a48; --muted: #65716f; --line: #e3e4df; background: var(--background); }
+.journey-shell a { text-decoration: none; }
+.journey-hero { position: relative; isolation: isolate; margin: 8px; padding: 22px 28px 24px; border: 1px solid #fff9; border-radius: 28px; overflow: clip; background: #dbe5e8; }
+.journey-hero::before { position: absolute; z-index: -2; inset: 0; content: ""; background: url('/images/thanphai-chaophraya.webp') center 43% / cover no-repeat; }
+.journey-hero::after { position: absolute; z-index: -1; inset: 0; content: ""; background: linear-gradient(90deg, rgb(250 245 232 / .72), rgb(251 245 233 / .22) 51%, transparent 76%), linear-gradient(0deg, rgb(240 236 226 / .85), transparent 35%); }
+.journey-header { max-width: 1640px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.journey-brand { display: inline-flex; align-items: center; gap: 10px; color: #152e34; flex-shrink: 0; font-size: 23px; font-weight: 750; line-height: 1.1; }
+.journey-brand-mark { display: grid; place-items: center; width: 42px; height: 44px; border: 1px solid #23454c; border-radius: 14px 14px 20px 20px; }
+.journey-brand small { display: block; margin-top: 6px; font: 11px/1.2 Arial, sans-serif; letter-spacing: .28em; }
+.journey-top-cta { display: flex; align-items: center; gap: 24px; border-radius: 999px; background: var(--category-color, #244c5b); color: #fff; font-size: 12px; padding: 5px 5px 5px 22px; white-space: nowrap; }
+.journey-top-cta > span { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 50%; background: #fff; color: var(--category-color, #244c5b); }
+.journey-primary { display: inline-flex; align-items: center; justify-content: center; gap: 28px; border: 0; min-height: 48px; border-radius: 999px; background: #263939; color: #fff; padding: 12px 22px; font-size: 13px; font-weight: 500; }
+.journey-primary:hover { background: #3e5854; }
+.journey-photo-note { position: static; display: block; text-align: right; margin: 8px 10px 0; font-size: 11px; color: #fff; text-shadow: 0 1px 4px #000; }
+.journey-bottom { max-width: 1536px; margin: auto; }
+
+.journey-story-play { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #fffe; color: #244c5b; }
+
+.journey-section-label { display: block; font: 11px/1.5 Arial, sans-serif; letter-spacing: .22em; color: #596b64; }
+.journey-footer { margin-top: 24px; padding-top: 22px; padding-bottom: 24px; background: #eeefe9; }
+.journey-footer-brand { display: inline-flex; gap: 8px; align-items: center; color: #2c4941; font-size: 18px; font-weight: 650; }
+.journey-footer-brand span { margin-left: 8px; font: 8px Arial, sans-serif; letter-spacing: .25em; font-weight: 400; }
+.journey-footer > p { flex-basis: 100%; }
+.journey-guide-dialog { position: fixed; max-width: 590px; width: calc(100% - 32px); max-height: calc(100dvh - 48px); margin: auto; overflow-y: auto; border: 1px solid #e0e5dc; border-radius: 26px; padding: 40px; background: #fcfbf7; color: #263b36; box-shadow: 0 24px 80px #0f302c4d; }
+.journey-guide-dialog::backdrop { background: #1233327a; backdrop-filter: blur(7px); }
+.journey-dialog-close { position: absolute; right: 16px; top: 16px; display: grid; place-items: center; min-height: 40px; min-width: 40px; border: 1px solid #dce1d7; border-radius: 50%; background: transparent; }
+.journey-guide-dialog h2 { font-size: 27px; font-weight: 550; margin: 16px 0 5px; }
+.journey-guide-dialog > p { color: #68776d; }
+.journey-guide-dialog ol { padding-left: 22px; margin: 26px 0; }
+.journey-guide-dialog li { margin-bottom: 18px; padding-left: 5px; }
+.journey-guide-dialog li p { color: #69766c; font-size: 13px; margin-top: 5px; }
+.journey-guide-notice { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border-radius: 12px; background: #edf0e6; font-size: 12px; }
+.journey-guide-dialog .journey-primary { margin-top: 22px; }
+
+@media (max-width: 1200px) {
+  .journey-hero { padding: 20px; }
+  .journey-header { gap: 16px; }
+  .journey-top-cta { gap: 12px; padding-left: 16px; }
+}
+@media (max-width: 950px) {
+  .journey-top-cta { font-size: 11px; gap: 10px; }
+
+  .journey-photo-note { bottom: 340px; }
+}
+@media (max-width: 760px) {
+  .journey-hero { margin: 5px; padding: 18px; border-radius: 24px; }
+  .journey-brand { font-size: 21px; }
+  .journey-brand-mark { width: 37px; height: 40px; }
+  .journey-primary { font-size: 12px; gap: 16px; padding: 10px 18px; }
+
+  .journey-photo-note { bottom: auto; top: 390px; right: 22px; max-width: 150px; text-align: right; font-size: 11px; }
+  .journey-hero::before { background-position: 60% top; background-size: auto 640px; background-color: #cfdbda; }
+  .journey-hero::after { background: linear-gradient(90deg, #faf4e9c4, #faf4e933 80%), linear-gradient(0deg, #e4e6e0 25%, transparent 72%); }
+  .journey-guide-dialog { padding: 36px 24px 26px; }
+  .journey-guide-dialog .journey-section-label { max-width: 220px; }
+}
+@media (max-width: 380px) {
+  .journey-hero { padding: 16px 12px; }
+  .journey-primary { font-size: 11px; padding: 10px 13px; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .journey-shell *, .journey-shell *::before, .journey-shell *::after { transition: none !important; animation: none !important; } }
+
+/* The six map categories now occupy the original floating search capsule. */
+.journey-category-button > svg { width: 23px; height: 23px; }
+.journey-category-button > span { min-width: 0; }
+.journey-category-button strong { display: block; font-size: 13px; font-weight: 600; line-height: 1.6; }
+.journey-category-button small { display: block; font-size: 11px; line-height: 1.6; color: #596b64; }
+.journey-category-button.is-active, .journey-category-button.is-active:hover { background: #244c5b; color: #fff; box-shadow: inset 0 1px 2px #ffffff40; }
+@media (max-width: 1100px) {
+  .journey-category-button { gap: 7px; padding: 10px 7px; }
+  .journey-category-button strong { font-size: 11px; }
+  .journey-category-button small { font-size: 11px; }
+}
+@media (max-width: 950px) {
+  .journey-category-button { min-height: 58px; }
+  .journey-category-button strong { font-size: 13px; }
+  .journey-category-button small { font-size: 11px; }
+}
+@media (max-width: 520px) {
+  .journey-category-button { justify-content: flex-start; gap: 10px; padding: 10px 12px; border-radius: 18px; }
+  .journey-category-button strong { font-size: 12px; }
+  .journey-category-button small { font-size: 11px; }
+}
+
+/* Place the working map and its complete sidebar in the hero, replacing the large introduction. */
+.journey-live-shell .journey-bottom { margin-top: 32px; }
+.journey-live-shell .journey-hero-dashboard { max-width: none; margin: 0; padding: 0; scroll-margin-top: 18px; }
+
+.journey-live-shell .journey-photo-note { position: static; display: block; margin: 14px 8px 0; max-width: none; text-align: right; color: #50665f; text-shadow: none; }
+.journey-search-dialog { position: fixed; top: 90px; left: 50%; right: auto; bottom: auto; transform: translateX(-50%); width: 480px; max-width: calc(100vw - 28px); max-height: calc(100dvh - 120px); overflow-y: auto; margin: 0; padding: 10px; border: 1px solid #ffffffd9; border-radius: 24px; background: #fafbf6; color: #263d37; box-shadow: 0 18px 70px #163b3940; }
+.journey-search-dialog::backdrop { background: #163b392e; backdrop-filter: blur(3px); }
+.journey-search-dialog .search-panel { border: 0; border-radius: 16px; padding: 22px; background: transparent; }
+.journey-search-dialog .search-panel h2 { padding-right: 34px; font-size: 21px; }
+.journey-search-dialog .search-form { margin-top: 18px; }
+.journey-search-dialog .search-results ul { max-height: min(42dvh, 330px); overflow-y: auto; }
+.journey-search-dialog .input-wrap input { font-size: 16px; }
+.journey-search-dialog .journey-dialog-close { top: 14px; right: 14px; z-index: 1; }
+@media (max-width: 760px) {
+  .journey-live-shell .journey-bottom { margin-top: 22px; }
+  .journey-search-dialog { top: 76px; max-height: calc(100dvh - 100px); padding: 6px; border-radius: 22px; }
+  .journey-search-dialog .search-panel { padding: 22px 15px 18px; }
+}
+
+/* The single Thai message replaces the top navigation on every screen. */
+.journey-header-message { flex: 1; min-width: 0; margin: 0; padding: 6px 12px; }
+.journey-live-shell .journey-header-message h1 { font-family: var(--font-noto-thai), sans-serif; font-size: clamp(24px, 2.5vw, 38px); font-weight: 600; line-height: 1.65; letter-spacing: -.025em; margin-top: 8px; text-wrap: balance; }
+.journey-header-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+@media (max-width: 1100px) {
+  .journey-header { display: grid; grid-template-columns: 1fr auto; gap: 14px; }
+  .journey-header-actions { display: flex; grid-column: 2; grid-row: 1; }
+  .journey-header-message { grid-column: 1 / -1; grid-row: 2; padding: 8px 0 0; }
+}
+@media (max-width: 760px) {
+  .journey-live-shell .journey-header-message h1 { font-size: clamp(22px, 5.6vw, 30px); line-height: 1.75; }
+}
+
+/* Muted category colors for hover and selected map layers. */
+.journey-category-button[data-category="flood"], .journey-live-shell[data-active-category="flood"] { --category-color: #2F6685; --category-tint: #E5EEF3; }
+.journey-category-button[data-category="rain_storm"], .journey-live-shell[data-active-category="rain_storm"] { --category-color: #655B83; --category-tint: #ECE9F2; }
+.journey-category-button[data-category="fire"], .journey-live-shell[data-active-category="fire"] { --category-color: #B6533A; --category-tint: #F7E9E3; }
+.journey-category-button[data-category="drought"], .journey-live-shell[data-active-category="drought"] { --category-color: #8A6A32; --category-tint: #F3EEDD; }
+.journey-category-button[data-category="dams"], .journey-live-shell[data-active-category="dams"] { --category-color: #3D7567; --category-tint: #E5EFEA; }
+.journey-category-button[data-category="rivers"], .journey-live-shell[data-active-category="rivers"] { --category-color: #287785; --category-tint: #E2EFF1; }
+.journey-category-button { display: flex; align-items: center; justify-content: center; gap: 11px; min-height: 60px; min-width: 0; padding: 10px 12px; border: 0; border-radius: 999px; background: transparent; color: #344b49; text-align: left; transition: background-color .18s ease, color .18s ease, box-shadow .18s ease; }
+.journey-category-button:hover:not(:disabled) { background: var(--category-tint); color: var(--category-color); }
+
+.journey-category-button.is-active small { color: #fff; }
+.journey-category-button:focus-visible { outline: 3px solid var(--category-color); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .journey-category-button { transition: none; } }
+
+/* Category colors belong to panel headers and borders; all data uses opaque white. */
+.journey-dashboard :is(.map-panel, .search-panel, .area-panel, .assistant-panel) {
+  --surface: #fff;
+  --foreground: #172b3d;
+  --muted: #596b7a;
+  --brand: #173c53;
+  --line: #e1e7ed;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--category-color);
+  border-radius: 24px;
+  box-shadow: 0 14px 36px #203d3912, 0 3px 8px #203d390a;
+}
+.journey-dashboard :is(.area-panel, .assistant-panel, .dam-panel) { border-top-width: 4px; padding: 24px; }
+.journey-dashboard .map-heading { min-height: 88px; padding: 20px 24px; background: var(--category-color); color: #fff; }
+.journey-dashboard .map-heading h2 { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.6; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.journey-dashboard .map-heading-copy { flex: 1; min-width: 0; }
+.journey-dashboard .map-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; flex-shrink: 0; }
+.journey-dashboard .map-heading p { margin-top: 5px; color: #fff; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.journey-dashboard .map-heading .icon-button { color: #fff; }
+.journey-dashboard .map-heading .icon-button:hover { background: #ffffff26; }
+.journey-dashboard .map-heading .images-link { color: #173c53; }
+.journey-dashboard .map-summary { padding: 20px 24px; }
+.journey-dashboard .map-loading { color: #172b3d; background: #e6edf0; }
+.journey-dashboard .risk-legend { gap: 8px; }
+.journey-dashboard .risk-legend li { padding: 12px 10px; border: 1px solid #e1e7ed; border-radius: 14px; background: #f5f8fa; }
+.journey-dashboard .risk-legend strong { font-size: 23px; margin-top: 3px; }
+.journey-dashboard .empty-area { padding: 20px 0 18px; }
+.journey-dashboard .area-intro { text-align: left; }
+.journey-dashboard .area-intro h2 { margin: 0; color: var(--foreground); font-size: 18px; font-weight: 700; line-height: 1.6; overflow-wrap: anywhere; }
+.journey-dashboard .area-intro .section-description { margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.85; }
+.journey-dashboard .area-intro .text-button { margin-top: 12px; }
+.journey-dashboard .empty-map-icon { width: 72px; height: 72px; border: 1px solid #e1e7ed; border-radius: 22px; color: var(--category-color); background: var(--category-tint); }
+.journey-dashboard :is(.assistant-icon, .area-icon) { border: 1px solid #e1e7ed; border-radius: 13px; color: var(--category-color); background: #fff; }
+.journey-dashboard .ask-input { padding: 6px; border: 1px solid #cbd5df; border-radius: 14px; background: #fff; }
+.journey-dashboard .ask-input:focus-within { outline: 2px solid #287ab0; outline-offset: 2px; }
+.journey-dashboard .question-suggestions { gap: 7px; margin-top: 14px; }
+.journey-dashboard .question-suggestions button { border: 1px solid #e1e7ed; border-radius: 12px; background: #f5f8fa; color: #3b535b; }
+.journey-dashboard .question-suggestions button:hover { background: #eaf2f6; color: #173c53; }
+@media (max-width: 600px) {
+  .journey-dashboard :is(.map-panel, .area-panel, .assistant-panel, .dam-panel) { border-radius: 20px; }
+  .journey-dashboard :is(.map-heading, .map-summary, .area-panel, .assistant-panel, .dam-panel) { padding: 18px 16px; }
+  .journey-dashboard .map-heading h2 { font-size: 16px; }
+  .journey-dashboard .map-heading { flex-wrap: wrap; }
+  .journey-dashboard .map-heading-copy { flex-basis: 100%; }
+  .journey-dashboard .map-heading-actions { width: 100%; }
+  .journey-dashboard .map-heading .images-link { margin-left: 0; margin-right: auto; }
+  .journey-dashboard .risk-legend { gap: 5px; }
+  .journey-dashboard .risk-legend li { gap: 5px; padding: 9px 5px; border-radius: 10px; font-size: 10px; }
+  .journey-dashboard .risk-legend strong { font-size: 20px; padding-left: 0; }
+}
+
+/* Area search dialog help text. */
+.journey-search-dialog .section-description { line-height: 1.85; margin-top: 8px; }
+@media (max-width: 420px) {
+  .journey-header { gap: 10px 8px; }
+  .journey-brand { font-size: 18px; gap: 7px; }
+  .journey-brand-mark { width: 32px; height: 36px; }
+}
+
+/* AI Bangkok flood illustration, separate from current situation data. */
+.journey-live-shell[data-active-category="flood"] .journey-hero::before {
+  background-image: url('/images/thanphai-bangkok-flood.webp');
+  background-position: center center;
+  background-size: cover;
+}
+.journey-live-shell[data-active-category="flood"] .journey-hero::after {
+  background: linear-gradient(180deg, #edf3f5cc 0%, #edf3f566 22%, #e5eef30d 52%, #e5eef3a6 100%);
+}
+@media (max-width: 760px) {
+  .journey-live-shell[data-active-category="flood"] .journey-hero::before { background-position: 42% top; }
+}
+
+/* Generated Bangkok monsoon scene, with visible rain and a muted violet palette. */
+.journey-live-shell[data-active-category="rain_storm"] .journey-hero::before {
+  background-image: url('/images/thanphai-bangkok-storm.webp');
+  background-position: center center;
+  background-size: cover;
+}
+.journey-live-shell[data-active-category="rain_storm"] .journey-hero::after {
+  background: linear-gradient(180deg, #f0eef5b3 0%, #f0eef54d 22%, #ece9f20d 52%, #ece9f299 100%);
+}
+.journey-live-shell[data-active-category="rain_storm"] .journey-header-message h1 { color: #203e37; text-shadow: 0 1px 12px #ffffff80; }
+.journey-live-shell[data-active-category="rain_storm"] .journey-brand { color: #152e34; text-shadow: none; }
+.journey-live-shell[data-active-category="rain_storm"] .journey-brand-mark { border-color: #23454c; background: #ffffff40; }
+.journey-live-shell[data-active-category="rain_storm"] .journey-photo-note { color: #203e37; text-shadow: 0 1px 5px #ffffff80; }
+@media (max-width: 760px) {
+  .journey-live-shell[data-active-category="rain_storm"] .journey-hero::before { background-position: 62% top; }
+}
+
+/* AI Chao Phraya illustration, coordinated with the river category. */
+.journey-live-shell[data-active-category="rivers"] .journey-hero::before {
+  background-image: url('/images/thanphai-chaophraya.webp');
+  background-position: center center;
+  background-size: cover;
+}
+.journey-live-shell[data-active-category="rivers"] .journey-hero::after {
+  background: linear-gradient(180deg, #f2f6f1b3 0%, #f2f6f14d 22%, #e2eff10d 52%, #e2eff199 100%);
+}
+.journey-live-shell[data-active-category="rivers"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #173c48; }
+@media (max-width: 760px) {
+  .journey-live-shell[data-active-category="rivers"] .journey-hero::before { background-position: 75% top; }
+}
+
+/* AI illustration inspired by Bhumibol Dam, with a distinct asset URL. */
+.journey-live-shell[data-active-category="dams"] .journey-hero::before {
+  background-image: url('/images/thanphai-bhumibol.webp');
+  background-position: center center;
+  background-size: cover;
+}
+.journey-live-shell[data-active-category="dams"] .journey-hero::after {
+  background: linear-gradient(180deg, #f3f6edb3 0%, #f3f6ed4d 22%, #e5efea0d 52%, #e5efea99 100%);
+}
+.journey-live-shell[data-active-category="dams"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #173f38; }
+@media (max-width: 760px) {
+  .journey-live-shell[data-active-category="dams"] .journey-hero::before { background-position: 75% top; }
+}
+
+/* Generated dry-season Thai landscape, coordinated with the drought palette. */
+.journey-live-shell[data-active-category="drought"] .journey-hero::before {
+  background-image: url('/images/thanphai-drought.webp');
+  background-position: center center;
+  background-size: cover;
+}
+.journey-live-shell[data-active-category="drought"] .journey-hero::after {
+  background: linear-gradient(180deg, #f8f3e6c2 0%, #f8f3e659 22%, #f3eedd0d 52%, #f3eedd99 100%);
+}
+.journey-live-shell[data-active-category="drought"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #493820; }
+@media (max-width: 760px) {
+  .journey-live-shell[data-active-category="drought"] .journey-hero::before { background-position: 70% top; }
+}
+
+/* Approved wildfire image, scoped to the fire category. */
+.journey-live-shell[data-active-category="fire"] .journey-hero::before {
+  background-image: url('/images/thanphai-fire.webp');
+  background-position: 60% center;
+  background-size: cover;
+}
+.journey-live-shell[data-active-category="fire"] .journey-hero::after { background: linear-gradient(180deg, #15283930, transparent 32%, #15283912); }
+.journey-live-shell[data-active-category="fire"] .journey-header-message h1 { color: #fff; text-shadow: 0 2px 6px #132638cc, 0 4px 18px #13263880; }
+.journey-live-shell[data-active-category="fire"] .journey-brand { color: #fff; text-shadow: 0 2px 6px #132638cc; }
+.journey-live-shell[data-active-category="fire"] .journey-brand-mark { border-color: #ffffffb3; background: #15283940; }
+.journey-live-shell[data-active-category="fire"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #132638; }
+@media (max-width: 760px) {
+  .journey-live-shell[data-active-category="fire"] .journey-hero::before { background-position: 72% top; }
+}
+.journey-category-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); align-items: center; gap: 5px; max-width: 1180px; margin: 0 auto 24px; padding: 8px; border: 7px solid #ffffff7a; background: #f8f7f2; background-clip: padding-box; border-radius: 999px; box-shadow: 0 10px 40px #31454a1f; }
+@media (max-width: 950px) { .journey-category-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 28px; border-width: 5px; } }
+@media (max-width: 520px) { .journey-category-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 7px; border-radius: 24px; } }
+
+/* ThanPhai flood assistant mascot */
+.assistant-heading--flood {
+  min-height: 112px;
+  gap: 12px;
+  align-items: center;
+}
+.assistant-heading--flood > .assistant-icon { display: none; }
+.assistant-heading--flood > div { flex: 1; min-width: 0; }
+.assistant-heading--flood h2 { overflow-wrap: anywhere; }
+.assistant-heading--flood p { line-height: 1.8; }
+.flood-assistant-mascot {
+  display: block;
+  flex: 0 0 104px;
+  width: 104px;
+  height: 113px;
+  background: url('/images/thanphai-flood-assistant.png') center / contain no-repeat;
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  .assistant-heading--flood { min-height: 96px; gap: 8px; }
+  .flood-assistant-mascot { flex-basis: 88px; width: 88px; height: 96px; }
+}
+/* End ThanPhai flood assistant mascot */
+
+/* Keep the image disclaimer readable over every category illustration. */
+.journey-live-shell[data-active-category] .journey-photo-note {
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin-left: auto;
+  padding: 6px 10px;
+  border: 1px solid #ffffffb3;
+  border-radius: 999px;
+  background: #fffffff2;
+  color: #263d37;
+  text-shadow: none;
+}
+
+/* Keep category search available in the header, including narrow screens. */
+.journey-search-icon { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--category-color, #244c5b); border-radius: 999px; background: #fffffff0; color: var(--category-color, #244c5b); font: inherit; font-size: 13px; font-weight: 650; line-height: 1.4; white-space: nowrap; cursor: pointer; }
+.journey-search-icon:hover { background: var(--category-tint, #e5eef3); }
+.journey-search-icon:focus-visible { outline: 3px solid var(--category-color, #244c5b); outline-offset: 3px; }
+@media (max-width: 520px) { .journey-live-shell .journey-top-cta { display: none; } .journey-search-icon { padding-inline: 12px; font-size: 12px; } }

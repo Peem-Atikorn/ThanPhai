@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, Hazard, HAZARDS, levelInfo, LEVELS, mcmPerDayToM3s, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import Icon from "@/components/Icon";
@@ -21,6 +22,12 @@ const hazardDescriptions: Record<Hazard, string> = {
   rain_storm: "ปริมาณฝนและสภาพอากาศรายพื้นที่",
   fire: "จุดความร้อนและโอกาสเกิดไฟในพื้นที่",
   drought: "ความแห้งแล้งและความสมบูรณ์ของพืชพรรณ",
+};
+const areaIntroductions: Record<Hazard, { title: string; description: string }> = {
+  flood: { title: "ความเสี่ยงน้ำท่วมในพื้นที่ของคุณ", description: "แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่ เพื่อดูระดับความเสี่ยงน้ำท่วมและข้อมูลระดับน้ำ" },
+  rain_storm: { title: "ฝนหนักและพายุในพื้นที่ของคุณ", description: "แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่ เพื่อดูความเสี่ยงฝนหนักและพายุ พร้อมพยากรณ์ฝน" },
+  fire: { title: "ความเสี่ยงไฟป่าในพื้นที่ของคุณ", description: "แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่ เพื่อดูจุดความร้อนและความเสี่ยงไฟป่า" },
+  drought: { title: "ความเสี่ยงภัยแล้งในพื้นที่ของคุณ", description: "แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่ เพื่อดูความเสี่ยงภัยแล้งและข้อมูลความแห้งแล้ง" },
 };
 
 function formatTime(iso: string | null | undefined) {
@@ -105,8 +112,10 @@ function DamDetail({ dam, onClose }: { dam: Dam; onClose: () => void }) {
   );
 }
 
-export default function Dashboard() {
-  const [hazard, setHazard] = useState<Hazard>("flood");
+export default function Dashboard({ activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, onAreaChosen, onOpenAreaSearch, riverViewRequest = 0 }: { activeHazard?: Hazard; onHazardChange?: (value: Hazard) => void; activeView?: View; onViewChange?: (value: View) => void; hideToolbar?: boolean; searchInHeader?: boolean; searchTarget?: HTMLElement | null; onAreaChosen?: () => void; onOpenAreaSearch?: () => void; riverViewRequest?: number }) {
+  const [localHazard, setLocalHazard] = useState<Hazard>("flood");
+  const hazard = activeHazard ?? localHazard;
+  const setHazard = onHazardChange ?? setLocalHazard;
   const [revision, setRevision] = useState(0);
   const [layerState, setLayerState] = useState<{ key: string; data: Layer | null; error: boolean } | null>(null);
   const layerKey = hazard + ":" + revision;
@@ -129,12 +138,20 @@ export default function Dashboard() {
   const [asking, setAsking] = useState(false);
   const questionInput = useRef<HTMLInputElement>(null);
   const [dams, setDams] = useState<{ list: Dam[]; status: "loading" | "error" | "success" }>({ list: [], status: "loading" });
-  const [view, setView] = useState<View>("hazard");
+  const [localView, setLocalView] = useState<View>("hazard");
+  const view = activeView ?? localView;
+  const setView = onViewChange ?? setLocalView;
   const [rivers, setRivers] = useState<{ list: River[]; status: "loading" | "error" | "success" }>({ list: [], status: "loading" });
   const [selectedRiver, setSelectedRiver] = useState<string | null>(null);
   const [riverSort, setRiverSort] = useState<RiverSort>("chain");
   // Set when the river view is opened from a province's card: list and map show that province only.
-  const [riverProvince, setRiverProvince] = useState<{ code: string; name: string } | null>(null);
+  // A category click requests the nationwide list, even when rivers is already active.
+  // Scope a province shortcut to that request so resets happen in the same render.
+  const [riverFilter, setRiverFilter] = useState<{ request: number; province: { code: string; name: string } | null } | null>(null);
+  const riverProvince = riverFilter?.request === riverViewRequest ? riverFilter.province : null;
+  function setRiverProvince(province: { code: string; name: string } | null) {
+    setRiverFilter({ request: riverViewRequest, province });
+  }
   const visibleRivers = useMemo(() => riverProvince ? rivers.list.filter((r) => r.province_code === riverProvince.code) : rivers.list,
     [rivers.list, riverProvince]);
   const [selectedDam, setSelectedDam] = useState<string | null>(null);
@@ -219,9 +236,10 @@ export default function Dashboard() {
     select(code);
   }, [select]);
 
-  function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>) {
+  function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearch = false) {
     selectedCode.current = item.code;
     select(item.code, item.level === "province" ? null : item.level === "tambon" ? item.code.slice(0, 6) : item.code);
+    setView("hazard");
     // Provinces and sub-districts get their own outline, and the map fits to it; districts use the map's selection.
     const request = ++outlineRequest.current;
     setOutline(null);
@@ -234,6 +252,7 @@ export default function Dashboard() {
     }
     setResults(null);
     setSearchStatus("idle");
+    if (fromSearch) onAreaChosen?.();
   }
 
   function chooseDam(dam: Dam) {
@@ -326,24 +345,43 @@ export default function Dashboard() {
   const warningCount = counts.filter((l) => l.id === "CRITICAL" || l.id === "WARNING").reduce((sum, l) => sum + l.n, 0);
   const warnings = area?.official_warnings ?? [];
 
+  const searchPanel = (
+    <section className="search-panel">
+            <h2>พื้นที่ที่คุณอยากรู้</h2><p className="section-description" id="area-search-description">พิมพ์ชื่อจังหวัด อำเภอ หรือตำบลที่คุณสนใจ เพื่อดูความเสี่ยงและสถานการณ์ภัยในพื้นที่</p>
+            <form onSubmit={onSearch} className="search-form" role="search">
+              <label className="sr-only" htmlFor="area-search">ค้นหาพื้นที่</label>
+              <div className="input-wrap"><Icon name="search" /><input id="area-search" aria-describedby="area-search-description" ref={searchInput} placeholder="เช่น เสนา, เชียงใหม่" autoComplete="off" value={query} maxLength={120} onChange={(event) => { setQuery(event.target.value); searchRequest.current++; setResults(null); setSearchStatus("idle"); }} /></div>
+              <button className="primary-button" disabled={!query.trim() || searchStatus === "loading"}>{searchStatus === "loading" ? <span className="spinner" /> : "ค้นหา"}</button>
+            </form>
+            <div aria-live="polite">
+              {searchStatus === "loading" && <p className="search-feedback">กำลังค้นหาพื้นที่…</p>}
+              {searchStatus === "error" && <p className="search-feedback data-notice">ค้นหาไม่สำเร็จ กรุณากดค้นหาเพื่อลองอีกครั้ง</p>}
+              {results?.length === 0 && <p className="search-feedback">ไม่พบพื้นที่นี้ ลองใช้ชื่อจังหวัดหรืออำเภอเต็ม</p>}
+            </div>
+            {!!results?.length && <div className="search-results"><div className="results-heading"><span>พบ {results.length} พื้นที่</span><button className="icon-button" aria-label="ปิดผลการค้นหา" onClick={() => { setResults(null); searchInput.current?.focus(); }}><Icon name="close" /></button></div><ul>{results.map((item) => <li key={item.code}><button onClick={() => chooseArea(item, true)}><Icon name="pin" /><span><strong>{prefix(item.level)}{item.name_th}</strong><small>{item.parents.join(" · ") || "ประเทศไทย"}</small></span><Icon name="arrow" /></button></li>)}</ul></div>}
+          </section>
+  );
+
   return (
     <>
+      {searchInHeader && searchTarget && createPortal(searchPanel, searchTarget)}
       <div className="dashboard-grid">
-        <a className="mobile-search-link" href="#area-search"><Icon name="search" />ค้นหาจังหวัด อำเภอ หรือตำบล<Icon name="arrow" /></a>
+        {!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search" />ค้นหาจังหวัด อำเภอ หรือตำบล<Icon name="arrow" /></a>}
         <section className="map-panel" aria-label="ภาพรวมความเสี่ยง">
-          <div className="hazard-toolbar" role="group" aria-label="เลือกประเภทภัย">
+          {!hideToolbar && <div className="hazard-toolbar" role="group" aria-label="เลือกประเภทภัย">
             {HAZARDS.map((item) => { const active = view === "hazard" && hazard === item.id; return <button key={item.id} type="button" className={"hazard-button " + (active ? "is-active" : "")} aria-pressed={active} disabled={!item.ready} onClick={() => { setHazard(item.id); setView("hazard"); }}><Icon name={item.id} /><span>{item.th}</span>{!item.ready && <small>เร็ว ๆ นี้</small>}</button>; })}
             <button type="button" className={"hazard-button " + (view === "dams" ? "is-active" : "")} aria-pressed={view === "dams"} onClick={() => setView("dams")}><Icon name="dam" /><span>เขื่อน</span></button>
             <button type="button" className={"hazard-button " + (view === "rivers" ? "is-active" : "")} aria-pressed={view === "rivers"} onClick={() => { setView("rivers"); setRiverProvince(null); }}><Icon name="river" /><span>แม่น้ำ</span></button>
-          </div>
+          </div>}
           <div className="map-heading">
-            {view === "dams"
-              ? <div><h2>ปริมาณน้ำและการระบายน้ำของเขื่อน</h2><p>เขื่อนขนาดใหญ่ทั่วประเทศ · ขนาดวงกลมตามปริมาณน้ำในอ่าง</p></div>
-              : view === "rivers"
-              ? <div><h2>ระดับน้ำและน้ำไหลผ่านในแม่น้ำ</h2><p>สถานีวัดน้ำรายชั่วโมง · ขนาดวงกลมตามปริมาณน้ำไหลผ่าน</p></div>
-              : <div><h2>แผนที่ความเสี่ยง{HAZARDS.find((h) => h.id === hazard)?.th}</h2><p>{hazardDescriptions[hazard]}</p></div>}
+            <div className="map-heading-copy">
+              <h2>{view === "dams" ? "แผนที่ปริมาณน้ำในเขื่อน" : view === "rivers" ? "แผนที่ระดับน้ำในแม่น้ำ" : `แผนที่ความเสี่ยง${HAZARDS.find((h) => h.id === hazard)?.th}`}</h2>
+              <p>{view === "dams" ? "ปริมาณน้ำและการระบายน้ำของเขื่อนขนาดใหญ่ทั่วประเทศ" : view === "rivers" ? "ระดับน้ำเทียบตลิ่งและปริมาณน้ำไหลผ่านจากสถานีวัดน้ำ" : hazardDescriptions[hazard]}</p>
+            </div>
+            <div className="map-heading-actions">
             {view === "hazard" && <button type="button" className="images-link" onClick={showWeatherImages}><Icon name="radar" />เรดาร์ · คาดการณ์ฝน · พายุ</button>}
             <button className="icon-button" onClick={() => setRevision((value) => value + 1)} disabled={layerLoading} aria-label="โหลดข้อมูลแผนที่ใหม่" title="โหลดข้อมูลแผนที่ใหม่"><Icon name="refresh" className={layerLoading ? "spinning" : ""} /></button>
+            </div>
           </div>
           <div className="map-canvas">
             <HazardMap data={layer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={view === "hazard" ? "hazard" : "points"}
@@ -383,20 +421,7 @@ export default function Dashboard() {
         </section>
 
         <aside className="detail-sidebar" aria-label="ค้นหาและดูรายละเอียดพื้นที่">
-          <section className="search-panel">
-            <h2>พื้นที่ที่คุณอยากรู้</h2><p className="section-description">ค้นหาจังหวัด อำเภอ หรือตำบล</p>
-            <form onSubmit={onSearch} className="search-form" role="search">
-              <label className="sr-only" htmlFor="area-search">ค้นหาพื้นที่</label>
-              <div className="input-wrap"><Icon name="search" /><input id="area-search" ref={searchInput} placeholder="เช่น เสนา, เชียงใหม่" autoComplete="off" value={query} maxLength={120} onChange={(event) => { setQuery(event.target.value); searchRequest.current++; setResults(null); setSearchStatus("idle"); }} /></div>
-              <button className="primary-button" disabled={!query.trim() || searchStatus === "loading"}>{searchStatus === "loading" ? <span className="spinner" /> : "ค้นหา"}</button>
-            </form>
-            <div aria-live="polite">
-              {searchStatus === "loading" && <p className="search-feedback">กำลังค้นหาพื้นที่…</p>}
-              {searchStatus === "error" && <p className="search-feedback data-notice">ค้นหาไม่สำเร็จ กรุณากดค้นหาเพื่อลองอีกครั้ง</p>}
-              {results?.length === 0 && <p className="search-feedback">ไม่พบพื้นที่นี้ ลองใช้ชื่อจังหวัดหรืออำเภอเต็ม</p>}
-            </div>
-            {!!results?.length && <div className="search-results"><div className="results-heading"><span>พบ {results.length} พื้นที่</span><button className="icon-button" aria-label="ปิดผลการค้นหา" onClick={() => { setResults(null); searchInput.current?.focus(); }}><Icon name="close" /></button></div><ul>{results.map((item) => <li key={item.code}><button onClick={() => chooseArea(item)}><Icon name="pin" /><span><strong>{prefix(item.level)}{item.name_th}</strong><small>{item.parents.join(" · ") || "ประเทศไทย"}</small></span><Icon name="arrow" /></button></li>)}</ul></div>}
-          </section>
+          {!searchInHeader && searchPanel}
 
           <section className="area-panel" aria-label="รายละเอียดพื้นที่" aria-busy={areaStatus === "loading"} hidden={view !== "hazard"}>
             {areaStatus === "loading" ? <div className="empty-area" role="status"><span className="spinner" /><h3>กำลังดูข้อมูลพื้นที่…</h3><p>รวบรวมระดับความเสี่ยงและข้อมูลล่าสุด</p></div> : areaStatus === "error" ? <div className="empty-area" role="alert"><Icon name="info" /><h3>ยังเปิดข้อมูลพื้นที่ไม่ได้</h3><p>กรุณาลองใหม่ หรือเลือกพื้นที่อื่น</p><button className="secondary-button" onClick={() => selectedCode.current && select(selectedCode.current, selected)}>ลองใหม่</button></div> : area ? <>
@@ -413,14 +438,15 @@ export default function Dashboard() {
               {areaRivers && <button type="button" className={"river-callout " + (areaRivers.over ? "" : "is-calm")} onClick={openProvinceRivers}><Icon name="river" /><span><strong>{areaRivers.over ? `สถานีวัดน้ำในจังหวัดนี้ล้นตลิ่ง ${areaRivers.over} แห่ง` : `สถานีวัดน้ำในจังหวัดนี้ ${areaRivers.count} แห่ง`}</strong><small>ดูระดับน้ำและน้ำไหลผ่านรายชั่วโมงเฉพาะจังหวัดนี้</small></span><Icon name="arrow" /></button>}
               {!!area.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {area.degraded_services.join(", ")}</p>}
               <p className="source-note">อัปเดต {formatTime(area.data_updated_at)} (เวลาไทย)</p>
-            </> : <div className="empty-area"><span className="empty-map-icon"><Icon name="map" width="32" height="32" /></span><h3>เริ่มจากพื้นที่ของคุณ</h3><p>แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่<br />เพื่อดูความเสี่ยงทั้ง 4 ประเภท</p><button className="text-button" onClick={() => searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button></div>}
+            </> : <div className="area-intro"><h2>{areaIntroductions[hazard].title}</h2><p className="section-description">{areaIntroductions[hazard].description}</p><button type="button" className="text-button" onClick={() => searchInHeader ? onOpenAreaSearch?.() : searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button></div>}
             {!area && areaStatus === "idle" && layer && <div className="national-summary"><span className={"summary-dot " + (warningCount ? "has-warning" : "")} /><p>{warningCount ? <><strong>{number.format(warningCount)} อำเภอ</strong> อยู่ในระดับเตือนภัยหรือวิกฤต</> : "ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤตในข้อมูลชุดนี้"}<small>ภาพรวม{HAZARDS.find((h) => h.id === hazard)?.th}ทั่วประเทศ</small></p></div>}
           </section>
 
           {view === "dams" && <section ref={pointPanel} className="search-panel dam-panel" aria-label="ข้อมูลเขื่อน">
             {damDetail ? <DamDetail dam={damDetail} onClose={() => setSelectedDam(null)} /> : <>
-              <h2>เขื่อนขนาดใหญ่ทั่วประเทศ</h2>
+              <div className="area-intro"><h2>เขื่อนขนาดใหญ่ทั่วประเทศ</h2>
               <p className="section-description">แตะชื่อเขื่อนหรือวงกลมบนแผนที่ เพื่อดูว่าวันนี้ระบายน้ำเท่าไหร่</p>
+              </div>
             </>}
             {!!dams.list.length && <>
               <div className="dam-sort" role="group" aria-label="เรียงรายชื่อเขื่อน">
@@ -433,8 +459,9 @@ export default function Dashboard() {
 
           {view === "rivers" && <section ref={pointPanel} className="search-panel dam-panel" aria-label="ข้อมูลแม่น้ำ">
             {riverDetail ? <RiverDetail river={riverDetail} onClose={() => setSelectedRiver(null)} /> : <>
-              <h2>ระดับน้ำในแม่น้ำ{riverProvince && ` · จ.${riverProvince.name}`}</h2>
+              <div className="area-intro"><h2>ระดับน้ำในแม่น้ำ{riverProvince && ` · จ.${riverProvince.name}`}</h2>
               <p className="section-description">แตะสถานีเพื่อดูน้ำไหลผ่าน ระดับน้ำเทียบตลิ่ง และกราฟย้อนหลัง 3 วัน</p>
+              </div>
             </>}
             {riverProvince && <div className="filter-chip"><span>เฉพาะ จ.{riverProvince.name} · {visibleRivers.length} สถานี</span><button type="button" onClick={() => { setRiverProvince(null); setRiverSort("chain"); }}>ดูทั้งประเทศ<Icon name="close" /></button></div>}
             {!!rivers.list.length && <>
@@ -450,7 +477,9 @@ export default function Dashboard() {
           </section>}
 
           <section className="assistant-panel">
-            <div className="assistant-heading"><span className="assistant-icon"><Icon name="chat" /></span><div><h2>ถามทันภัย</h2><p>ช่วยอ่านข้อมูลความเสี่ยงให้เข้าใจง่าย</p></div></div>
+            <div className={"assistant-heading" + (view === "hazard" && hazard === "flood" ? " assistant-heading--flood" : "")}><span className="assistant-icon"><Icon name="chat" /></span><div><h2>ถามทันภัย</h2><p>ช่วยอ่านข้อมูลความเสี่ยงให้เข้าใจง่าย</p></div>
+              {view === "hazard" && hazard === "flood" && <span className="flood-assistant-mascot" aria-hidden="true" />}
+            </div>
             <form onSubmit={onAsk}><label htmlFor="ask">อยากรู้สถานการณ์เรื่องไหน?</label><div className="ask-input"><input id="ask" ref={questionInput} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="เช่น น้ำจะท่วมอำเภอเสนาไหม" maxLength={500} /><button className="primary-button" disabled={asking || !question.trim()} aria-label="ส่งคำถาม">{asking ? <span className="spinner" /> : <Icon name="arrow" />}</button></div></form>
             {!answer && !asking && <div className="question-suggestions">{["อำเภอเสนาเสี่ยงน้ำท่วมไหม", "เขื่อนภูมิพลมีน้ำเท่าไหร่", "เขื่อนเจ้าพระยาระบายน้ำเท่าไหร่"].map((example) => <button key={example} onClick={() => { setQuestion(example); questionInput.current?.focus(); }}>{example}</button>)}</div>}
             <div aria-live="polite">{asking && <p className="answer-text">กำลังตรวจสอบข้อมูลและเรียบเรียงคำตอบ…</p>}{answer && <div className={"answer-text " + (answer.intent === "error" ? "data-notice" : "")}><p>{answer.text}</p>{answer.sources.length > 0 && <p className="source-note">ที่มา: {answer.sources.join(", ")}</p>}{answer.llm_used && <p className="source-note">เรียบเรียงโดย AI (Gemini) · ระดับเตือนภัยมาจากกฎของระบบ ไม่ได้ให้ AI ตัดสิน</p>}</div>}</div>
