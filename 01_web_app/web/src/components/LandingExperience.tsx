@@ -39,7 +39,7 @@ export default function LandingExperience() {
           <div className="journey-header-message">
             <h1 id="hero-title">รู้ภัยก่อน ปลอดภัยกว่า</h1>
           </div>
-          <div className="journey-header-actions"><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
+          <div className="journey-header-actions"><button className="journey-search-icon" type="button" aria-label="พื้นที่ที่คุณอยากรู้" onClick={focusAreaSearch}>พื้นที่ที่คุณอยากรู้</button><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
         </header>
         <div className="journey-bottom">
           <div className="journey-category-bar" role="group" aria-label="เลือกประเภทข้อมูลบนแผนที่">
@@ -51,17 +51,8 @@ export default function LandingExperience() {
             <button data-category="rivers" className={"journey-category-button" + (view === "rivers" ? " is-active" : "")} type="button" aria-pressed={view === "rivers"} aria-controls="risk-map" onClick={() => { setRiverViewRequest((value) => value + 1); setView("rivers"); }}><Icon name="river" /><span><strong>แม่น้ำ</strong><small>ระดับน้ำและการไหล</small></span></button>
           </div>
           <main className="main-content journey-dashboard journey-hero-dashboard" id="risk-map" tabIndex={-1}>
-            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} onAreaChosen={finishAreaSearch} onOpenAreaSearch={focusAreaSearch} riverViewRequest={riverViewRequest} />
-          </main>
-          <div className="journey-feature-grid" id="about">
-            <a className="journey-area-card" href="#risk-map"><div className="journey-area-image"><span>EXPLORE YOUR AREA</span><span className="journey-card-arrow"><Icon name="arrow" /></span></div><div className="journey-area-copy"><h2>ทุกพื้นที่ มีเรื่องที่ควรรู้</h2><p>เริ่มสำรวจความเสี่ยงจากพื้นที่ใกล้ตัวคุณ</p></div></a>
-            <section className="journey-overview-card" aria-label="เกี่ยวกับแพลตฟอร์มทันภัย">
-              <div className="journey-metrics"><div><Icon name="shield" /><strong>04</strong><span>ประเภทภัย<br />ในแพลตฟอร์มเดียว</span></div><div><Icon name="pin" /><strong>03</strong><span>ระดับพื้นที่<br />จังหวัด อำเภอ ตำบล</span></div><div><Icon name="chat" /><strong>AI</strong><span>ผู้ช่วยอธิบาย<br />ข้อมูลความเสี่ยง</span></div><div><Icon name="map" /><strong>TH</strong><span>เพื่อทุกพื้นที่<br />ในประเทศไทย</span></div></div>
-              <div className="journey-overview-note"><span className="journey-shield-stamp"><Icon name="shield" /></span><p>“ข้อมูลที่เข้าใจง่าย<br /><em>คือจุดเริ่มต้นของการเตรียมพร้อมที่ดี”</em></p><a href="#risk-map" aria-label="เปิดแผนที่ทันภัย"><Icon name="arrow" /></a></div>
-            </section>
-            <button className="journey-story-card" type="button" onClick={() => guide.current?.showModal()}><span className="journey-story-play" aria-hidden="true"><Icon name="info" /></span><span><small>PREPARED, TOGETHER.</small><strong>รู้ก่อน.<br />พร้อมกว่า.</strong><span>รู้จักการใช้งานทันภัย <Icon name="arrow" /></span></span></button>
-          </div>
-          <span className="journey-photo-note">ภาพประกอบบรรยากาศ · ไม่ใช่ภาพสถานการณ์ปัจจุบัน</span>
+            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} onAreaChosen={finishAreaSearch} onOpenAreaSearch={focusAreaSearch} riverViewRequest={riverViewRequest} /> <button className="text-button" type="button" onClick={() => guide.current?.showModal()}>วิธีใช้งานทันภัย <Icon name="arrow" /></button>
+          </main><span className="journey-photo-note">ภาพประกอบบรรยากาศ · ไม่ใช่ภาพสถานการณ์ปัจจุบัน</span>
         </div>
       </section>
       <footer className="site-footer journey-footer" id="emergency"><a className="journey-footer-brand" href="#home"><Icon name="shield" /> ทันภัย <span>THANPHAI</span></a><div className="emergency-numbers"><Icon name="phone" /><strong>ฉุกเฉิน</strong><a href="tel:1784">1784 <span>ปภ.</span></a><a href="tel:1669">1669 <span>แพทย์ฉุกเฉิน</span></a><a href="tel:199">199 <span>แจ้งเหตุเพลิงไหม้</span></a></div><p>ติดตามประกาศจากหน่วยงานทางการเป็นหลัก · ThaiWater · กรมอุตุนิยมวิทยา · GISTDA · NASA FIRMS</p></footer>
