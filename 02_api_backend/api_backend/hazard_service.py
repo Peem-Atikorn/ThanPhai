@@ -17,8 +17,8 @@ import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
 from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsCyclones, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex, OpenMeteoMarine,
-                                    ThaiWaterRain24h, ThaiWaterWaterLevel, TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings,
-                                    UsgsEarthquakes, merge_quakes)
+                                    OpenMeteoWaveField, ThaiWaterRain24h, ThaiWaterWaterLevel, TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings,
+                                    UsgsEarthquakes, merge_quakes, sea_grid)
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
@@ -56,6 +56,14 @@ QUAKE_LIST_WINDOW = timedelta(days=7)
 # A cyclone this close (current position or forecast track) is mentioned on the district card even when its
 # wind areas do not reach the district.
 CYCLONE_NOTICE_KM = 800
+# Wave arrows on the map: the Andaman Sea and the Gulf of Thailand every 0.5° (486 points, 396 at sea on 2026-10-22).
+# Only sea points are asked between daily full-grid checks: ~1,700 of Open-Meteo's free 10,000 a day.
+WAVE_BBOX = (92.5, 5.5, 105.5, 14.0)
+WAVE_GRID_DEGREES = 0.5
+WAVE_TTL = timedelta(hours=6)
+WAVE_FULL_GRID_EVERY = timedelta(days=1)
+# Cyclone wind areas on the map are drawn at country zoom; ~1 km detail is plenty.
+CYCLONE_SIMPLIFY_DEGREES = 0.01
 # Districts with at least this many past landslides (DMR inventory 1989-2019) get landslide checks.
 LANDSLIDE_MIN_TRACES = 10
 GRAPH_TTL = timedelta(minutes=15)
@@ -128,6 +136,13 @@ class HazardService:
         self.quakes: list[dict] = []  # TMD + USGS, last 7 days, newest first
         self.pm25_stations: list[dict] = []  # fresh Air4Thai readings, for station points on the map
         self.regional_events: list[dict] = []  # GDACS events around South-East Asia
+        self.cyclone_records: list | None = None  # GDACS wind areas and track points; None until GDACS answers
+        self.cyclone_updated_at: datetime | None = None  # last time GDACS answered, not the last refresh
+        self._cyclone_features: tuple[list | None, list[dict]] = (None, [])  # (records, overlay features) built from them
+        self.wave_points: list[dict] = []  # sea grid for the wave arrows (map overlay)
+        self.wave_updated_at: datetime | None = None
+        self._wave_grid: list[tuple[str, float, float]] | None = None  # sea points only, from the last full-grid check
+        self._wave_grid_checked_at: datetime | None = None
         self._graph_cache: dict[tuple, tuple[datetime, dict]] = {}
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._boundaries: dict[str, dict] = {}  # area outlines, read on first request
@@ -207,6 +222,10 @@ class HazardService:
             gdacs = results.get("gdacs")
             if gdacs is not None and not isinstance(gdacs, Exception):
                 self.regional_events = self._regional_rows(gdacs)
+            cyclones = results.get("gdacs_cyclones")
+            if cyclones is not None and not isinstance(cyclones, Exception):
+                self.cyclone_records = cyclones  # keep the last good tracks if GDACS failed
+                self.cyclone_updated_at = datetime.now(timezone.utc)
             # Swap everything at once so readers never see a half-updated state.
             self.decisions = decisions
             if self._last_quakes is not None:
@@ -682,6 +701,41 @@ class HazardService:
         self.source_status[name] = {"ok": True, "records": len(records), "checked_at": now.isoformat()}
         self._inputs_changed = True  # rebuild decisions with the new forecast on the next request
 
+    # --- wave arrows (map overlay) ----------------------------------------------------------
+
+    @property
+    def waves_stale(self) -> bool:
+        return self.wave_updated_at is None or datetime.now(timezone.utc) - self.wave_updated_at > WAVE_TTL
+
+    def refresh_waves_in_background(self) -> None:
+        # The arrows share Open-Meteo's paced queue with the district forecasts; let those load first after a restart.
+        if not set(self.grid_updated_at) & set(self.inputs_pending):
+            self._start_job("open_meteo_waves", self.refresh_waves, self.waves_stale)
+
+    async def refresh_waves(self) -> None:
+        # Land points come back empty but still count against the quota (~90 of 486), so between full checks only the
+        # sea points are asked. A sea point can also come back empty for a while; the daily full check brings it back.
+        started = datetime.now(timezone.utc)
+        full = self._wave_grid is None or self._wave_grid_checked_at is None or started - self._wave_grid_checked_at > WAVE_FULL_GRID_EVERY
+        grid = sea_grid(WAVE_BBOX, WAVE_GRID_DEGREES) if full else self._wave_grid
+        async with httpx.AsyncClient(headers=USER_AGENT) as client:
+            records = await OpenMeteoWaveField(grid).run(client)
+        if full and records:
+            sea = {r.extra["area_code"] for r in records}
+            self._wave_grid = [p for p in grid if p[0] in sea]
+            self._wave_grid_checked_at = started
+        points = []
+        for r in records:
+            # The same rules as the coastal districts (rules.yaml marine), so arrows and districts agree.
+            level = self.engine.decide(DecisionInput(hazard=HazardType.MARINE, observations={"wave_height_max_24h": r.value})).level
+            points.append({"lat": r.lat, "lon": r.lon, "height_m": r.value, "level": level.name if level is not None else None,
+                           "direction_from_deg": r.extra["direction_from_deg"],
+                           "direction_to_deg": (r.extra["direction_from_deg"] + 180) % 360,
+                           "period_s": r.extra["period_s"], "peak_time": r.extra["peak_time"]})
+        self.wave_points = points
+        self.wave_updated_at = now = datetime.now(timezone.utc)
+        self.source_status["open_meteo_waves"] = {"ok": True, "records": len(points), "checked_at": now.isoformat()}
+
     # --- forecast (TMD NWP) ---------------------------------------------------------------
 
     @property
@@ -995,6 +1049,97 @@ class HazardService:
                 "hazards_at_risk": sum(1 for i in items if order[i["level"]] >= 1),
             }})
         return {"type": "FeatureCollection", "features": features}
+
+    # --- map overlays: drawn on top of the district layer --------------------------------------
+
+    def _overlay_status(self, updated_at: datetime | None, job: str) -> str:
+        """ok once data arrived; error while nothing arrived and the last try failed (retried after
+        RETRY_AFTER_FAILURE); pending while the first try is still running."""
+        if updated_at is not None:
+            return "ok"
+        return "error" if self.source_status.get(job, {}).get("ok") is False else "pending"
+
+    def flood_overlay(self) -> dict:
+        """Districts where GISTDA's satellites saw flood water in the last 7 days, with the flooded area.
+
+        District outlines, not the flood edge itself: GISTDA sends the edge as ~80,000 small cells per week.
+        """
+        features = []
+        for code, sat in self.satellite_cells.items():
+            if sat["cells"] <= 0 or code not in self._geometry:
+                continue
+            area = self.gazetteer.by_code[code]
+            features.append({"type": "Feature", "geometry": self._geometry[code], "properties": {
+                "code": code, "name_th": area.name_th, "province_th": self.gazetteer.by_code[area.parent_code].name_th,
+                "flood_km2": sat["approx_km2"], "flood_share": round(min(sat["approx_km2"] / area.area_km2, 1.0), 3) if area.area_km2 else None,
+            }})
+        features.sort(key=lambda f: -f["properties"]["flood_km2"])
+        status = self._overlay_status(self.satellite_updated_at, "gistda_flood") if os.getenv("GISTDA_API_KEY") or self.satellite_updated_at else "unavailable"
+        return {"type": "FeatureCollection", "features": features, "overlay": {
+            "status": status, "window": "7days", "updated_at": self.satellite_updated_at.isoformat() if self.satellite_updated_at else None,
+            "source": "GISTDA (ดาวเทียม Sentinel-1)"}}
+
+    def cyclone_overlay(self) -> dict:
+        """Tropical cyclones near Thailand (GDACS): track lines, track points and wind areas.
+
+        Per event: "track" (analysed positions), "forecast" (the latest position onward), one point per position,
+        and one "wind_area" per wind class, merged over the whole track (forecast included), with its rules level.
+        """
+        records = self.cyclone_records
+        if self._cyclone_features[0] is not records:  # rebuild only when GDACS sent new records
+            self._cyclone_features = (records, self._cyclone_features_from(records or []))
+        features = self._cyclone_features[1]
+        return {"type": "FeatureCollection", "features": features, "overlay": {
+            "status": self._overlay_status(self.cyclone_updated_at, "gdacs_cyclones"),
+            "storms": len({f["properties"]["event_id"] for f in features}),
+            "updated_at": self.cyclone_updated_at.isoformat() if self.cyclone_updated_at else None,
+            "source": "GDACS (UN/EU)"}}
+
+    def _cyclone_features_from(self, records: list) -> list[dict]:
+        from shapely.geometry import LineString, mapping, shape
+        from shapely.ops import unary_union
+
+        def geojson(geom) -> dict:
+            plain = json.loads(json.dumps(mapping(geom)))  # shapely gives tuples
+            return {"type": plain["type"], "coordinates": _round_coords(plain["coordinates"])}
+
+        events: dict[str, dict] = {}
+        for r in records:
+            e = events.setdefault(r.extra["event_id"], {"event": r.extra["event"], "name": r.extra.get("name"), "points": [], "areas": {}})
+            if r.variable == "cyclone_track_point" and r.valid_time:
+                e["points"].append(r)
+            elif r.variable == "cyclone_wind_area":
+                e["areas"].setdefault(r.value, []).append(shape(r.extra["geometry"]))
+        features = []
+        for event_id, e in events.items():
+            common = {"event_id": event_id, "event": e["event"], "name": e["name"]}
+            for wind, shapes in sorted(e["areas"].items()):
+                merged = unary_union(shapes).simplify(CYCLONE_SIMPLIFY_DEGREES, preserve_topology=True)
+                # The same rules as the districts inside the area (rules.yaml tropical_cyclone).
+                level = self.engine.decide(DecisionInput(hazard=HazardType.TROPICAL_CYCLONE, observations={"cyclone_wind_kmh": wind})).level
+                features.append({"type": "Feature", "geometry": geojson(merged), "properties": {
+                    **common, "kind": "wind_area", "wind_kmh": wind, "level": level.name if level is not None else None}})
+            points = sorted(e["points"], key=lambda r: r.valid_time)
+            analysed = [p for p in points if not p.extra["forecast"]]
+            ahead = [p for p in points if p.extra["forecast"]]
+            for kind, line in (("track", analysed), ("forecast", analysed[-1:] + ahead)):
+                if len(line) >= 2:
+                    features.append({"type": "Feature", "geometry": geojson(LineString([(p.lon, p.lat) for p in line])),
+                                     "properties": {**common, "kind": kind}})
+            for p in points:
+                features.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [p.lon, p.lat]}, "properties": {
+                    **common, "kind": "track_point", "time": p.valid_time.isoformat(), "forecast": p.extra["forecast"],
+                    "latest": bool(analysed) and p is analysed[-1]}})
+        return features
+
+    def wave_overlay(self) -> dict:
+        """Wave arrows: the highest wave in the next 24 h at each sea point, where it comes from and its rules level."""
+        features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [p["lon"], p["lat"]]},
+                     "properties": {k: v for k, v in p.items() if k not in ("lat", "lon")}} for p in self.wave_points]
+        return {"type": "FeatureCollection", "features": features, "overlay": {
+            "status": self._overlay_status(self.wave_updated_at, "open_meteo_waves"), "grid_degrees": WAVE_GRID_DEGREES,
+            "updated_at": self.wave_updated_at.isoformat() if self.wave_updated_at else None,
+            "source": "Open-Meteo Marine (แบบจำลองคลื่น)"}}
 
     def map_layer(self, hazard: str) -> dict:
         features = []

@@ -253,6 +253,23 @@ def test_open_meteo_marine_skips_land_cells():
     assert records[0].value == round(max(waves), 2) and records[0].unit == "m"
 
 
+def test_open_meteo_wave_field_keeps_direction_of_the_highest_wave():
+    from external_data.adapters import OpenMeteoWaveField, sea_grid
+
+    raw = load_json("om_marine_waves.json")  # Gulf of Thailand (sea) and central Bangkok (land: all null)
+    adapter = OpenMeteoWaveField([("9.6,101.4", 9.6, 101.4), ("13.8,100.5", 13.8, 100.5)])
+    records = adapter.parse([raw], datetime(2026, 10, 22, 0, 0, tzinfo=BANGKOK))
+    assert [r.extra["area_code"] for r in records] == ["9.6,101.4"]
+    hourly = raw[0]["hourly"]
+    peak = max(range(24), key=lambda i: hourly["wave_height"][i])
+    assert records[0].value == round(hourly["wave_height"][peak], 2)
+    assert records[0].extra["direction_from_deg"] == round(hourly["wave_direction"][peak])
+    assert records[0].extra["period_s"] == hourly["wave_period"][peak]
+
+    grid = sea_grid((99.0, 6.0, 100.0, 7.0), 0.5)
+    assert len(grid) == 9 and grid[0] == ("6.0,99.0", 6.0, 99.0) and grid[-1][1:] == (7.0, 100.0)
+
+
 def test_gdacs_cyclone_wind_areas_and_track():
     from external_data.adapters.gdacs_cyclones import GdacsCyclones
 
