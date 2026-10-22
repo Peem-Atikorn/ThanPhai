@@ -104,14 +104,14 @@ Every assessment must include its hazard, area, time window, alert level, confid
 
 | # | Module | Main work | Owner | Branch |
 |---|---|---|---|---|
-| 01 | `01_web_app` | Next.js, map layers, area subscription | | |
+| 01 | `01_web_app` | Next.js, map layers, area subscription | mahawongsupawit125-coder | |
 | 02 | `02_api_backend` | FastAPI gateway, auth, cache | | |
 | 03 | `03_hazard_ai_agent` | LLM planner, tool routing | | |
 | 04 | `04_external_data_services` | Data source adapters | | |
 | 05 | `05_geo_data_integration` | PostGIS, canonical schema, features | | |
-| 06 | `06_hazard_risk_models` | Four hazard risk models | | |
-| 07 | `07_knowledge_decision_llm` | RAG, alert rules, explanation | | |
-| 08 | `08_alert_feedback_monitoring` | Alerts, feedback, monitoring | | |
+| 06 | `06_hazard_risk_models` | Four hazard risk models | cheewakorn | |
+| 07 | `07_knowledge_decision_llm` | RAG, alert rules, explanation | cheewakorn | |
+| 08 | `08_alert_feedback_monitoring` | Alerts, feedback, monitoring | mahawongsupawit125-coder | |
 
 ----
 
