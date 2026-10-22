@@ -1,0 +1,21 @@
+# ที่มาและสิทธิ์การใช้ภาพพื้นหลัง
+
+บันทึกข้อมูลวันที่ 22 ตุลาคม 2026 ภาพพื้นหลังเป็นภาพประกอบบรรยากาศ ไม่ใช่ข้อมูลตรวจวัด ภาพข่าว หรือเหตุการณ์ปัจจุบัน และไม่เกี่ยวกับเครดิตของชั้นข้อมูลแผนที่/เรดาร์
+
+## ภาพที่ใช้อยู่
+
+| ไฟล์ | ที่มา | สถานะสิทธิ์ |
+| --- | --- | --- |
+| `thanphai-bangkok-storm.webp` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 เป็นฉากสมมติพายุฝนเหนือกรุงเทพฯ | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
+| `thanphai-bangkok-flood.webp` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 เป็นฉากสมมติน้ำท่วมในกรุงเทพฯ | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
+| `thanphai-chaophraya.webp` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 เป็นภาพ AI อ้างอิงแม่น้ำเจ้าพระยาและวัดอรุณ | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
+| `thanphai-bhumibol.webp` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 เป็นภาพ AI อ้างอิงลักษณะเขื่อนภูมิพล ไม่รับรองรายละเอียดทางวิศวกรรม | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
+| `thanphai-drought.webp` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 เป็นภาพประกอบทุ่งนาแห้ง | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
+| `thanphai-fire.webp` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 ผู้ใช้บันทึกเป็น fire-background.png และอนุญาตให้นำลงเว็บ | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
+| `thanphai-flood-assistant.png` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 | Output สำหรับผู้ใช้; ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
+
+สำหรับภาพที่สร้างด้วย OpenAI โปรดดู [Terms of Use – Content](https://openai.com/policies/terms-of-use/). ข้อกำหนดดังกล่าวไม่รับรองว่าภาพมีลิขสิทธิ์แต่ผู้เดียวหรือไม่มีสิทธิ์ของบุคคลอื่น เอกสารนี้บันทึกที่มา ไม่ได้ออกใบอนุญาตใหม่แทนเจ้าของภาพ และใบอนุญาตของโค้ดไม่ครอบคลุมภาพโดยอัตโนมัติ.
+
+## การปรับขนาด
+
+ภาพพื้นหลัง WebP ใช้ quality 78 และความกว้างไม่เกิน 1600 px เพื่อช่วยลดขนาดไฟล์ โดยคงภาพ Bangkok, เจ้าพระยา, ภูมิพล, ภัยแล้ง และไฟป่าที่ใช้งานอยู่ในเว็บ
