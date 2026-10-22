@@ -39,7 +39,7 @@ export default function LandingExperience() {
           <div className="journey-header-message">
             <h1 id="hero-title">รู้ภัยก่อน ปลอดภัยกว่า</h1>
           </div>
-          <div className="journey-header-actions"><button className="journey-search-icon" type="button" aria-label="พื้นที่ที่คุณอยากรู้" onClick={focusAreaSearch}>พื้นที่ที่คุณอยากรู้</button><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
+          <div className="journey-header-actions"><button className="journey-search-icon" type="button" onClick={focusAreaSearch}>พื้นที่ที่คุณอยากรู้</button><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
         </header>
         <div className="journey-bottom">
           <div className="journey-category-bar" role="group" aria-label="เลือกประเภทข้อมูลบนแผนที่">

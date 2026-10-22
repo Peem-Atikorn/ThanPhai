@@ -359,3 +359,10 @@
   color: #263d37;
   text-shadow: none;
 }
+
+
+/* Keep category search available in the header, including narrow screens. */
+.journey-search-icon { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--category-color, #244c5b); border-radius: 999px; background: #fffffff0; color: var(--category-color, #244c5b); font: inherit; font-size: 13px; font-weight: 650; line-height: 1.4; white-space: nowrap; cursor: pointer; }
+.journey-search-icon:hover { background: var(--category-tint, #e5eef3); }
+.journey-search-icon:focus-visible { outline: 3px solid var(--category-color, #244c5b); outline-offset: 3px; }
+@media (max-width: 520px) { .journey-live-shell .journey-top-cta { display: none; } .journey-search-icon { padding-inline: 12px; font-size: 12px; } }
