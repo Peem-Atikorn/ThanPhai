@@ -12,7 +12,7 @@
 | `thanphai-bhumibol.webp` | สร้างด้วย OpenAI ในแชทนี้ เป็นภาพ AI อ้างอิงลักษณะเขื่อนภูมิพล ไม่รับรองรายละเอียดทางวิศวกรรม | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
 | `thanphai-drought.webp` | สร้างด้วย OpenAI ในแชทนี้ เป็นภาพประกอบทุ่งนาแห้ง | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
 | `thanphai-fire.webp` | ภาพ AI ที่ผู้ใช้บันทึกเป็น fire-background.png และอนุญาตให้นำลงเว็บ | Output สำหรับผู้ใช้ ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
-| `thanphai-flood-assistant.png` | ภาพมาสคอตผู้ช่วยที่ใช้ประกอบหน้าหมวดน้ำท่วม | จัดทำสำหรับผู้ใช้ในแชทนี้ |
+| `thanphai-flood-assistant.png` | สร้างด้วย OpenAI image generation ตามคำขอของ mahawongsupawit125-coder, 22 ต.ค. 2026 | Output สำหรับผู้ใช้; ไม่ได้ประกาศเป็น CC0 หรือ Creative Commons |
 
 สำหรับภาพที่สร้างด้วย OpenAI โปรดดู [Terms of Use – Content](https://openai.com/policies/terms-of-use/). ข้อกำหนดดังกล่าวไม่รับรองว่าภาพมีลิขสิทธิ์แต่ผู้เดียวหรือไม่มีสิทธิ์ของบุคคลอื่น เอกสารนี้บันทึกที่มา ไม่ได้ออกใบอนุญาตใหม่แทนเจ้าของภาพ และใบอนุญาตของโค้ดไม่ครอบคลุมภาพโดยอัตโนมัติ.
 

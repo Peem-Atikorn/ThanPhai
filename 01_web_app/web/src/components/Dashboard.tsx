@@ -236,9 +236,10 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     select(code);
   }, [select]);
 
-  function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>) {
+fix: restore hazard area search behavior  function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearch = false) {
     selectedCode.current = item.code;
     select(item.code, item.level === "province" ? null : item.level === "tambon" ? item.code.slice(0, 6) : item.code);
+    setView("hazard");
     // Provinces and sub-districts get their own outline, and the map fits to it; districts use the map's selection.
     const request = ++outlineRequest.current;
     setOutline(null);
@@ -251,7 +252,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     }
     setResults(null);
     setSearchStatus("idle");
-    onAreaChosen?.();
+    if (fromSearch) onAreaChosen?.();
   }
 
   function chooseDam(dam: Dam) {
@@ -357,7 +358,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               {searchStatus === "error" && <p className="search-feedback data-notice">ค้นหาไม่สำเร็จ กรุณากดค้นหาเพื่อลองอีกครั้ง</p>}
               {results?.length === 0 && <p className="search-feedback">ไม่พบพื้นที่นี้ ลองใช้ชื่อจังหวัดหรืออำเภอเต็ม</p>}
             </div>
-            {!!results?.length && <div className="search-results"><div className="results-heading"><span>พบ {results.length} พื้นที่</span><button className="icon-button" aria-label="ปิดผลการค้นหา" onClick={() => { setResults(null); searchInput.current?.focus(); }}><Icon name="close" /></button></div><ul>{results.map((item) => <li key={item.code}><button onClick={() => chooseArea(item)}><Icon name="pin" /><span><strong>{prefix(item.level)}{item.name_th}</strong><small>{item.parents.join(" · ") || "ประเทศไทย"}</small></span><Icon name="arrow" /></button></li>)}</ul></div>}
+            {!!results?.length && <div className="search-results"><div className="results-heading"><span>พบ {results.length} พื้นที่</span><button className="icon-button" aria-label="ปิดผลการค้นหา" onClick={() => { setResults(null); searchInput.current?.focus(); }}><Icon name="close" /></button></div><ul>{results.map((item) => <li key={item.code}><button onClick={() => chooseArea(item, true)}><Icon name="pin" /><span><strong>{prefix(item.level)}{item.name_th}</strong><small>{item.parents.join(" · ") || "ประเทศไทย"}</small></span><Icon name="arrow" /></button></li>)}</ul></div>}
           </section>
   );
 
