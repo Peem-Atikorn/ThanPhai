@@ -40,7 +40,12 @@ let browser, socket;
   socket.addEventListener('message', event => {
     const message = JSON.parse(String(event.data));
     const call = pending.get(message.id);
-    if (call) { pending.delete(message.id); clearTimeout(call.timer); message.error ? call.reject(Error(message.error.message)) : call.resolve(message.result); }
+    if (call) {
+      pending.delete(message.id);
+      clearTimeout(call.timer);
+      if (message.error) call.reject(Error(message.error.message));
+      else call.resolve(message.result);
+    }
   });
   await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, {once:true}); socket.addEventListener('error', reject, {once:true}); });
   function send(method, params = {}, sessionId) {
@@ -70,7 +75,7 @@ let browser, socket;
   await until('document.readyState === "complete" && !!document.querySelector(".journey-category-bar")');
   await evaluate('document.fonts.ready.then(() => true)');
   await sleep(2000);
-    const headerSearch = await evaluate('document.querySelector(".journey-search-icon") !== null');
+  const headerSearch = await evaluate('document.querySelector(".journey-search-icon") !== null');
   assert(headerSearch, 'Missing header search entry.');
   await evaluate('document.querySelector(".journey-search-icon").click()');
   await until('document.querySelector(".journey-search-dialog").open');
@@ -79,7 +84,7 @@ let browser, socket;
   assert(starter, 'Missing area-intro search entry.');
   await until('document.querySelector(".journey-search-dialog").open');
   await evaluate('document.querySelector(".journey-search-dialog").close()');
-fs.mkdirSync(output, {recursive:true});
+  fs.mkdirSync(output, {recursive:true});
   const captured = [];
   for (const category of ['flood','rain_storm','fire','drought','dams','rivers']) {
     await evaluate(`document.querySelector('[data-category="${category}"]').click()`);
@@ -95,14 +100,14 @@ fs.mkdirSync(output, {recursive:true});
     fs.writeFileSync(path.join(output, category+'.png'), Buffer.from(data,'base64'));
     captured.push(category); console.log('Captured ' + category + '.png');
   }
-    for (const width of [1024,768,520,390,320]) {
+  for (const width of [1024,768,520,390,320]) {
     await page('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:false});
     await sleep(150);
     assert(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Horizontal overflow at ' + width);
     assert(await evaluate('!!document.querySelector(".journey-search-icon") && document.querySelector(".journey-search-icon").getBoundingClientRect().width > 0'), 'Header search must remain visible at ' + width);
     if (width <= 520) assert(await evaluate('getComputedStyle(document.querySelector(".journey-top-cta")).display === "none"'), 'Explore action should yield space to search at ' + width);
   }
-const {data} = await page('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
+  const {data} = await page('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
   fs.writeFileSync(path.join(output,'rivers-mobile.png'),Buffer.from(data,'base64'));
   const sections = captured.map(c=>`### ${c}\n\n![${c}](${c}.png)`).join('\n\n');
   fs.writeFileSync(path.join(output,'README.md'),`# PR screenshots\n\nCaptured from ${url.href} at ${new Date().toISOString()}. Actual running app and data; no API/map stubs. Desktop viewport: 1440 × 1100, full-page capture up to 6000 px high.\n\n${sections}\n\n### Mobile\n\n![Mobile](rivers-mobile.png)\n`);

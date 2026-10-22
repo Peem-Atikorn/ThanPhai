@@ -236,7 +236,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     select(code);
   }, [select]);
 
-function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearch = false) {
+  function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearch = false) {
     selectedCode.current = item.code;
     select(item.code, item.level === "province" ? null : item.level === "tambon" ? item.code.slice(0, 6) : item.code);
     setView("hazard");
@@ -446,7 +446,6 @@ function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearc
             {damDetail ? <DamDetail dam={damDetail} onClose={() => setSelectedDam(null)} /> : <>
               <div className="area-intro"><h2>เขื่อนขนาดใหญ่ทั่วประเทศ</h2>
               <p className="section-description">แตะชื่อเขื่อนหรือวงกลมบนแผนที่ เพื่อดูว่าวันนี้ระบายน้ำเท่าไหร่</p>
-
               </div>
             </>}
             {!!dams.list.length && <>
@@ -462,7 +461,6 @@ function chooseArea(item: SearchArea | NonNullable<AskAnswer["area"]>, fromSearc
             {riverDetail ? <RiverDetail river={riverDetail} onClose={() => setSelectedRiver(null)} /> : <>
               <div className="area-intro"><h2>ระดับน้ำในแม่น้ำ{riverProvince && ` · จ.${riverProvince.name}`}</h2>
               <p className="section-description">แตะสถานีเพื่อดูน้ำไหลผ่าน ระดับน้ำเทียบตลิ่ง และกราฟย้อนหลัง 3 วัน</p>
-
               </div>
             </>}
             {riverProvince && <div className="filter-chip"><span>เฉพาะ จ.{riverProvince.name} · {visibleRivers.length} สถานี</span><button type="button" onClick={() => { setRiverProvince(null); setRiverSort("chain"); }}>ดูทั้งประเทศ<Icon name="close" /></button></div>}

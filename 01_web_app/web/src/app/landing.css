@@ -15,35 +15,7 @@
 .journey-photo-note { position: static; display: block; text-align: right; margin: 8px 10px 0; font-size: 11px; color: #fff; text-shadow: 0 1px 4px #000; }
 .journey-bottom { max-width: 1536px; margin: auto; }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 .journey-story-play { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #fffe; color: #244c5b; }
-
-
 
 .journey-section-label { display: block; font: 11px/1.5 Arial, sans-serif; letter-spacing: .22em; color: #596b64; }
 .journey-footer { margin-top: 24px; padding-top: 22px; padding-bottom: 24px; background: #eeefe9; }
@@ -65,14 +37,9 @@
   .journey-hero { padding: 20px; }
   .journey-header { gap: 16px; }
   .journey-top-cta { gap: 12px; padding-left: 16px; }
-
-
-
-
 }
 @media (max-width: 950px) {
   .journey-top-cta { font-size: 11px; gap: 10px; }
-
 
   .journey-photo-note { bottom: 340px; }
 }
@@ -81,14 +48,6 @@
   .journey-brand { font-size: 21px; }
   .journey-brand-mark { width: 37px; height: 40px; }
   .journey-primary { font-size: 12px; gap: 16px; padding: 10px 18px; }
-
-
-
-
-
-
-
-
 
   .journey-photo-note { bottom: auto; top: 390px; right: 22px; max-width: 150px; text-align: right; font-size: 11px; }
   .journey-hero::before { background-position: 60% top; background-size: auto 640px; background-color: #cfdbda; }
@@ -99,8 +58,6 @@
 @media (max-width: 380px) {
   .journey-hero { padding: 16px 12px; }
   .journey-primary { font-size: 11px; padding: 10px 13px; }
-
-
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .journey-shell *, .journey-shell *::before, .journey-shell *::after { transition: none !important; animation: none !important; } }
 
@@ -167,7 +124,7 @@
 .journey-category-button[data-category="rivers"], .journey-live-shell[data-active-category="rivers"] { --category-color: #287785; --category-tint: #E2EFF1; }
 .journey-category-button { display: flex; align-items: center; justify-content: center; gap: 11px; min-height: 60px; min-width: 0; padding: 10px 12px; border: 0; border-radius: 999px; background: transparent; color: #344b49; text-align: left; transition: background-color .18s ease, color .18s ease, box-shadow .18s ease; }
 .journey-category-button:hover:not(:disabled) { background: var(--category-tint); color: var(--category-color); }
- 
+
 .journey-category-button.is-active small { color: #fff; }
 .journey-category-button:focus-visible { outline: 3px solid var(--category-color); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .journey-category-button { transition: none; } }
@@ -346,7 +303,6 @@
 }
 /* End ThanPhai flood assistant mascot */
 
-
 /* Keep the image disclaimer readable over every category illustration. */
 .journey-live-shell[data-active-category] .journey-photo-note {
   width: fit-content;
@@ -359,7 +315,6 @@
   color: #263d37;
   text-shadow: none;
 }
-
 
 /* Keep category search available in the header, including narrow screens. */
 .journey-search-icon { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--category-color, #244c5b); border-radius: 999px; background: #fffffff0; color: var(--category-color, #244c5b); font: inherit; font-size: 13px; font-weight: 650; line-height: 1.4; white-space: nowrap; cursor: pointer; }

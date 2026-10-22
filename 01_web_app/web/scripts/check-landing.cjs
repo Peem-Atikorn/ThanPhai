@@ -88,10 +88,12 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   const landing = instance(load('@/components/LandingExperience').default);
   tree = landing.render();
   const headerSearch = nodes(tree).find(n => n.type === 'button' && n.props.className === 'journey-search-icon');
-    assert(headerSearch, 'header search entry remains available');
+  assert(headerSearch, 'header search entry remains available');
   assert.equal(content(headerSearch), 'พื้นที่ที่คุณอยากรู้', 'visible search label is the accessible name');
   assert.equal(headerSearch.props['aria-label'], undefined, 'do not override the visible search label');
-  landing.state[4].current = { showModal() { opened++; } };
+  const searchDialog = nodes(tree).find(n => n.type === 'dialog' && n.props.className === 'journey-search-dialog');
+  assert(searchDialog, 'search dialog remains available');
+  searchDialog.props.ref.current = { showModal() { opened++; } };
   headerSearch.props.onClick();
   assert.equal(opened, 2, 'header search button opens the search dialog');
   const riverButton = nodes(tree).find(n => n.props['data-category'] === 'rivers');
@@ -100,5 +102,5 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   const source = fs.readFileSync(path.join(root, 'src/components/Dashboard.tsx'), 'utf8');
   for (const unused of ['initialQuery', 'initialHazard', 'initialView']) assert(!source.includes(unused), 'unused prop removed: ' + unused);
   assert(!content(tree).includes('ผลการค้นหาในแดชบอร์ด'), 'guide describes current dialog flow');
-    console.log('PASS: dialog entry, province river reset (including reselect), visible header search interaction, guide, unused props; actual component handlers with mocked hooks/API.');
+  console.log('PASS: dialog entry, province river reset (including reselect), visible header search interaction, guide, unused props; actual component handlers with mocked hooks/API.');
 })().catch(error => { console.error(error); process.exit(1); });
