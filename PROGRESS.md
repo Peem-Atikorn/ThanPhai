@@ -230,6 +230,15 @@ Round 7 (dams, 2026-10-19):
     "เฉพาะที่เสี่ยง": districts below WATCH are not filled. Both are remembered per browser (useSyncExternalStore over localStorage, memory if blocked).
 97. Bug caught in the browser: MapLibre only accepts ["zoom"] at the top of an interpolate; a zoom interpolate inside "case" dropped the whole station layer.
 
+### Round 17 — water quality and HII storm list (branch `feature/peem/04-water-quality-storms`)
+98. `/v1/water-quality`: ThaiWater's 42 automatic water-quality stations (PCD, MWA) from the `thailand_main` bundle the dams already download
+    (no extra call). Readings older than 6 h are dropped, as for water levels; saltiest first. `exceeds` uses ThaiWater's own limits read from the
+    payload (salinity > 0.25 / 0.5 / 2 g/L, dissolved oxygen < 3 mg/L). Other sensor values are passed on unchecked: the live feed has pH 2.5 and
+    10.8 in rivers, and DO exactly 0 (a sensor fault, dropped). Live 2026-10-23: หนองหวาย (ลำน้ำพอง) 0.54 g/L; MWA Samlae intake 0.11 g/L.
+99. `/v1/storms`: active tropical storms from ThaiWater `storm_data` (HII), one row per storm with track, wind in knots and km/h and ThaiWater's
+    category (TD … Cat 5). Positions are at synoptic hours, read as UTC. Live 2026-10-23: CHAMPI 100 kt (Cat 3) at 21.2°N 124.9°E.
+    A second source next to GDACS (which has the wind areas); not used in the cyclone rules.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).
@@ -249,7 +258,6 @@ Round 7 (dams, 2026-10-19):
 - [ ] Module 06: CHIRPS backfill → SPI per district (lets drought reach WARNING/CRITICAL); NDVI + TMD humidity as fire-model features; flood model from GISTDA flood history
 - [ ] Run `make ndvi` monthly (or schedule it)
 - [ ] Module 07: RAG over DDPM guides (needs PDFs)
-- [ ] Water quality (42 stations) and active-storm list (`storm_data`) when a storm is near Thailand
 - [ ] Module 05: map TMD warning text to provinces so warnings can set per-district minimum levels
 - [ ] Module 08: LINE delivery + subscription storage (needs LINE channel); ground-report endpoint
 - [ ] Split 03/05/07 into their own services when the team is ready (only `hazard_service.py` changes)

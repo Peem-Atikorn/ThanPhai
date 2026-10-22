@@ -10,6 +10,7 @@ from external_data.adapters import (
     OpenMeteoForecast,
     OpenMeteoRiverDischarge,
     ThaiWaterRain24h,
+    ThaiWaterStorms,
     ThaiWaterWaterLevel,
     TmdEarthquakes,
     TmdWarnings,
@@ -30,6 +31,7 @@ STATION_SOURCES = {
     "tmd_earthquakes": TmdEarthquakes,
     "usgs_earthquakes": UsgsEarthquakes,
     "gdacs": GdacsEvents,
+    "thaiwater_storms": ThaiWaterStorms,
 }
 POINT_SOURCES = {"open_meteo_forecast": OpenMeteoForecast, "open_meteo_flood": OpenMeteoRiverDischarge}
 HEADERS = {"User-Agent": "ThanPhai/0.1 (student project)"}
