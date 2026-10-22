@@ -74,7 +74,7 @@ let browser, socket;
   assert(starter, 'Missing empty-state search entry.');
   await until('document.querySelector(".journey-search-dialog").open');
   await evaluate('document.querySelector(".journey-search-dialog").close()');
-  assert(await evaluate('!document.querySelector(".journey-search-icon").hasAttribute("aria-label")'), 'Unexpected header-search aria-label override.');
+  assert(await evaluate('!document.querySelector(".journey-search-icon")'), 'Removed header-search button is still present.');
   fs.mkdirSync(output, {recursive:true});
   const captured = [];
   for (const category of ['flood','rain_storm','fire','drought','dams','rivers']) {

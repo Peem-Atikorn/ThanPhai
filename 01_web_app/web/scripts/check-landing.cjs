@@ -88,12 +88,12 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   const landing = instance(load('@/components/LandingExperience').default);
   tree = landing.render();
   const headerSearch = nodes(tree).find(n => n.type === 'button' && n.props.className === 'journey-search-icon');
-  assert.equal(headerSearch.props['aria-label'], undefined, 'visible label supplies the search accessible name');
+  assert.equal(headerSearch, undefined, 'header search entry removed');
   const riverButton = nodes(tree).find(n => n.props['data-category'] === 'rivers');
   riverButton.props.onClick(); tree = landing.render();
   assert.equal(nodes(tree).find(n => n.type === Dashboard).props.riverViewRequest, 1, 'top button emits explicit river reset request');
   const source = fs.readFileSync(path.join(root, 'src/components/Dashboard.tsx'), 'utf8');
   for (const unused of ['initialQuery', 'initialHazard', 'initialView']) assert(!source.includes(unused), 'unused prop removed: ' + unused);
   assert(!content(tree).includes('ผลการค้นหาในแดชบอร์ด'), 'guide describes current dialog flow');
-  console.log('PASS: dialog entry, province river reset (including reselect), labelled header search, guide, unused props; actual component handlers with mocked hooks/API.');
+  console.log('PASS: dialog entry, province river reset (including reselect), header search entry removed, guide, unused props; actual component handlers with mocked hooks/API.');
 })().catch(error => { console.error(error); process.exit(1); });

@@ -39,7 +39,7 @@ export default function LandingExperience() {
           <div className="journey-header-message">
             <h1 id="hero-title">รู้ภัยก่อน ปลอดภัยกว่า</h1>
           </div>
-          <div className="journey-header-actions"><button className="journey-search-icon" type="button" onClick={focusAreaSearch}><Icon name="search" /><span>พื้นที่ที่คุณอยากรู้</span></button><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
+          <div className="journey-header-actions"><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
         </header>
         <div className="journey-bottom">
           <div className="journey-category-bar" role="group" aria-label="เลือกประเภทข้อมูลบนแผนที่">
@@ -72,7 +72,7 @@ export default function LandingExperience() {
       <dialog className="journey-guide-dialog" ref={guide} aria-labelledby="guide-title">
         <button className="journey-dialog-close" type="button" aria-label="ปิดคำแนะนำ" onClick={() => guide.current?.close()}><Icon name="close" /></button>
         <span className="journey-section-label">A LITTLE KNOWLEDGE. MORE CONFIDENCE.</span><h2 id="guide-title">เริ่มต้นใช้งานทันภัย</h2><p>สำรวจข้อมูลใกล้ตัว เพื่อเตรียมพร้อมอย่างเข้าใจ</p>
-        <ol><li><strong>ค้นหาพื้นที่ของคุณ</strong><p>กด “พื้นที่ที่คุณอยากรู้” ด้านบน พิมพ์ชื่อจังหวัด อำเภอ หรือตำบล แล้วเลือกจากผลการค้นหาในหน้าต่างค้นหา</p></li><li><strong>เลือกสิ่งที่อยากรู้</strong><p>ดูความเสี่ยงฝนและพายุ น้ำท่วม ภัยแล้ง ไฟป่า หรือเปลี่ยนเป็นมุมมองเขื่อนและแม่น้ำ</p></li><li><strong>อ่านข้อมูลพร้อมแหล่งอ้างอิง</strong><p>ตรวจเวลาปรับปรุงข้อมูลและข้อจำกัดทุกครั้ง หากข้อมูลไม่พร้อม ระบบจะแสดงสถานะตามจริง</p></li></ol>
+        <ol><li><strong>ค้นหาพื้นที่ของคุณ</strong><p>กด “ค้นหาพื้นที่” ในกล่องข้อมูลข้างแผนที่ พิมพ์ชื่อจังหวัด อำเภอ หรือตำบล แล้วเลือกจากผลการค้นหาในหน้าต่างค้นหา</p></li><li><strong>เลือกสิ่งที่อยากรู้</strong><p>ดูความเสี่ยงฝนและพายุ น้ำท่วม ภัยแล้ง ไฟป่า หรือเปลี่ยนเป็นมุมมองเขื่อนและแม่น้ำ</p></li><li><strong>อ่านข้อมูลพร้อมแหล่งอ้างอิง</strong><p>ตรวจเวลาปรับปรุงข้อมูลและข้อจำกัดทุกครั้ง หากข้อมูลไม่พร้อม ระบบจะแสดงสถานะตามจริง</p></li></ol>
         <p className="journey-guide-notice"><Icon name="info" /> ทันภัยเป็นเครื่องมือประกอบการตัดสินใจ โปรดยึดประกาศเตือนจากหน่วยงานทางการเป็นหลัก</p><button className="journey-primary" type="button" onClick={() => { guide.current?.close(); scrollToMap(); }}>เริ่มสำรวจ <Icon name="arrow" /></button>
       </dialog>
     </div>
