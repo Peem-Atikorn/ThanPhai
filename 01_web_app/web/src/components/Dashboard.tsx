@@ -106,8 +106,8 @@ function DamDetail({ dam, onClose }: { dam: Dam; onClose: () => void }) {
   );
 }
 
-export default function Dashboard({ initialQuery = "", initialHazard = "flood", initialView = "hazard", activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, onAreaChosen }: { initialQuery?: string; initialHazard?: Hazard; initialView?: View; activeHazard?: Hazard; onHazardChange?: (value: Hazard) => void; activeView?: View; onViewChange?: (value: View) => void; hideToolbar?: boolean; searchInHeader?: boolean; searchTarget?: HTMLElement | null; onAreaChosen?: () => void }) {
-  const [localHazard, setLocalHazard] = useState<Hazard>(initialHazard);
+export default function Dashboard({ activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, onAreaChosen, onOpenAreaSearch, riverViewRequest = 0 }: { activeHazard?: Hazard; onHazardChange?: (value: Hazard) => void; activeView?: View; onViewChange?: (value: View) => void; hideToolbar?: boolean; searchInHeader?: boolean; searchTarget?: HTMLElement | null; onAreaChosen?: () => void; onOpenAreaSearch?: () => void; riverViewRequest?: number }) {
+  const [localHazard, setLocalHazard] = useState<Hazard>("flood");
   const hazard = activeHazard ?? localHazard;
   const setHazard = onHazardChange ?? setLocalHazard;
   const [revision, setRevision] = useState(0);
@@ -122,9 +122,9 @@ export default function Dashboard({ initialQuery = "", initialHazard = "flood", 
   const [focus, setFocus] = useState<{ lat: number; lon: number; zoom?: number } | null>(null);
   const [outline, setOutline] = useState<AreaBoundary | null>(null);
   const outlineRequest = useRef(0);
-  const [query, setQuery] = useState(initialQuery);
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchArea[] | null>(null);
-  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "error" | "success">(initialQuery.trim() ? "loading" : "idle");
+  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
   const searchRequest = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
   const [question, setQuestion] = useState("");
@@ -132,14 +132,20 @@ export default function Dashboard({ initialQuery = "", initialHazard = "flood", 
   const [asking, setAsking] = useState(false);
   const questionInput = useRef<HTMLInputElement>(null);
   const [dams, setDams] = useState<{ list: Dam[]; status: "loading" | "error" | "success" }>({ list: [], status: "loading" });
-  const [localView, setLocalView] = useState<View>(initialView);
+  const [localView, setLocalView] = useState<View>("hazard");
   const view = activeView ?? localView;
   const setView = onViewChange ?? setLocalView;
   const [rivers, setRivers] = useState<{ list: River[]; status: "loading" | "error" | "success" }>({ list: [], status: "loading" });
   const [selectedRiver, setSelectedRiver] = useState<string | null>(null);
   const [riverSort, setRiverSort] = useState<RiverSort>("chain");
   // Set when the river view is opened from a province's card: list and map show that province only.
-  const [riverProvince, setRiverProvince] = useState<{ code: string; name: string } | null>(null);
+  // A category click requests the nationwide list, even when rivers is already active.
+  // Scope a province shortcut to that request so resets happen in the same render.
+  const [riverFilter, setRiverFilter] = useState<{ request: number; province: { code: string; name: string } | null } | null>(null);
+  const riverProvince = riverFilter?.request === riverViewRequest ? riverFilter.province : null;
+  function setRiverProvince(province: { code: string; name: string } | null) {
+    setRiverFilter({ request: riverViewRequest, province });
+  }
   const visibleRivers = useMemo(() => riverProvince ? rivers.list.filter((r) => r.province_code === riverProvince.code) : rivers.list,
     [rivers.list, riverProvince]);
   const [selectedDam, setSelectedDam] = useState<string | null>(null);
@@ -300,21 +306,6 @@ export default function Dashboard({ initialQuery = "", initialHazard = "flood", 
   }
   const selectRiverFromMap = useCallback((id: string) => { setSelectedRiver(id); revealPanel(); }, [revealPanel]);
 
-  useEffect(() => {
-    if (!initialQuery.trim()) return;
-    const request = ++searchRequest.current;
-    let cancelled = false;
-    api.search(initialQuery.trim()).then((found) => {
-      if (!cancelled && request === searchRequest.current) {
-        setResults(found);
-        setSearchStatus("success");
-      }
-    }).catch(() => {
-      if (!cancelled && request === searchRequest.current) setSearchStatus("error");
-    });
-    return () => { cancelled = true; };
-  }, [initialQuery]);
-
   async function onSearch(event: FormEvent) {
     event.preventDefault();
     if (!query.trim()) return;
@@ -439,7 +430,7 @@ export default function Dashboard({ initialQuery = "", initialHazard = "flood", 
               {areaRivers && <button type="button" className={"river-callout " + (areaRivers.over ? "" : "is-calm")} onClick={openProvinceRivers}><Icon name="river" /><span><strong>{areaRivers.over ? `สถานีวัดน้ำในจังหวัดนี้ล้นตลิ่ง ${areaRivers.over} แห่ง` : `สถานีวัดน้ำในจังหวัดนี้ ${areaRivers.count} แห่ง`}</strong><small>ดูระดับน้ำและน้ำไหลผ่านรายชั่วโมงเฉพาะจังหวัดนี้</small></span><Icon name="arrow" /></button>}
               {!!area.degraded_services.length && <p className="data-notice">ข้อมูลบางแหล่งไม่พร้อมใช้งาน: {area.degraded_services.join(", ")}</p>}
               <p className="source-note">อัปเดต {formatTime(area.data_updated_at)} (เวลาไทย)</p>
-            </> : <div className="empty-area"><span className="empty-map-icon"><Icon name="map" width="32" height="32" /></span><h3>เริ่มจากพื้นที่ของคุณ</h3><p>แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่<br />เพื่อดูความเสี่ยงทั้ง 4 ประเภท</p>{!searchInHeader && <button className="text-button" onClick={() => searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button>}</div>}
+            </> : <div className="empty-area"><span className="empty-map-icon"><Icon name="map" width="32" height="32" /></span><h3>เริ่มจากพื้นที่ของคุณ</h3><p>แตะอำเภอบนแผนที่ หรือค้นหาชื่อพื้นที่<br />เพื่อดูความเสี่ยงทั้ง 4 ประเภท</p><button type="button" className="text-button" onClick={() => searchInHeader ? onOpenAreaSearch?.() : searchInput.current?.focus()}>ค้นหาพื้นที่<Icon name="arrow" /></button></div>}
             {!area && areaStatus === "idle" && layer && <div className="national-summary"><span className={"summary-dot " + (warningCount ? "has-warning" : "")} /><p>{warningCount ? <><strong>{number.format(warningCount)} อำเภอ</strong> อยู่ในระดับเตือนภัยหรือวิกฤต</> : "ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤตในข้อมูลชุดนี้"}<small>ภาพรวม{HAZARDS.find((h) => h.id === hazard)?.th}ทั่วประเทศ</small></p></div>}
           </section>
 

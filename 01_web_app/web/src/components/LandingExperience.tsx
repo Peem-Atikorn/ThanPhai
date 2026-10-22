@@ -10,6 +10,7 @@ type MapView = "hazard" | "dams" | "rivers";
 export default function LandingExperience() {
   const [hazard, setHazard] = useState<Hazard>("flood");
   const [view, setView] = useState<MapView>("hazard");
+  const [riverViewRequest, setRiverViewRequest] = useState(0);
   const guide = useRef<HTMLDialogElement>(null);
   const searchDialog = useRef<HTMLDialogElement>(null);
   const [searchTarget, setSearchTarget] = useState<HTMLDivElement | null>(null);
@@ -35,22 +36,22 @@ export default function LandingExperience() {
       <section className="journey-hero" id="home" aria-labelledby="hero-title">
         <header className="journey-header">
           <a className="journey-brand" href="#home" aria-label="ทันภัย หน้าแรก"><span className="journey-brand-mark"><Icon name="shield" width={30} height={30} /></span><span>ทันภัย<small>THANPHAI</small></span></a>
-          <div className="journey-map-message journey-header-message">
+          <div className="journey-header-message">
             <h1 id="hero-title">รู้ภัยก่อน ปลอดภัยกว่า</h1>
           </div>
-          <div className="journey-header-actions"><button className="journey-search-icon" type="button" aria-label="ไปยังช่องค้นหาพื้นที่" onClick={focusAreaSearch}><Icon name="search" /><span>พื้นที่ที่คุณอยากรู้</span></button><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
+          <div className="journey-header-actions"><button className="journey-search-icon" type="button" onClick={focusAreaSearch}><Icon name="search" /><span>พื้นที่ที่คุณอยากรู้</span></button><a href="#risk-map" className="journey-top-cta">สำรวจพื้นที่ <span><Icon name="arrow" /></span></a></div>
         </header>
         <div className="journey-bottom">
-          <div className="journey-search-bar journey-category-bar" role="group" aria-label="เลือกประเภทข้อมูลบนแผนที่">
+          <div className="journey-category-bar" role="group" aria-label="เลือกประเภทข้อมูลบนแผนที่">
             {HAZARDS.map((item) => {
               const active = view === "hazard" && hazard === item.id;
               return <button key={item.id} data-category={item.id} className={"journey-category-button" + (active ? " is-active" : "")} type="button" aria-pressed={active} aria-controls="risk-map" disabled={!item.ready} onClick={() => { setHazard(item.id); setView("hazard"); }}><Icon name={item.id} /><span><strong>{item.th}</strong><small>ความเสี่ยงรายพื้นที่</small></span></button>;
             })}
             <button data-category="dams" className={"journey-category-button" + (view === "dams" ? " is-active" : "")} type="button" aria-pressed={view === "dams"} aria-controls="risk-map" onClick={() => setView("dams")}><Icon name="dam" /><span><strong>เขื่อน</strong><small>สถานการณ์น้ำในอ่าง</small></span></button>
-            <button data-category="rivers" className={"journey-category-button" + (view === "rivers" ? " is-active" : "")} type="button" aria-pressed={view === "rivers"} aria-controls="risk-map" onClick={() => setView("rivers")}><Icon name="river" /><span><strong>แม่น้ำ</strong><small>ระดับน้ำและการไหล</small></span></button>
+            <button data-category="rivers" className={"journey-category-button" + (view === "rivers" ? " is-active" : "")} type="button" aria-pressed={view === "rivers"} aria-controls="risk-map" onClick={() => { setRiverViewRequest((value) => value + 1); setView("rivers"); }}><Icon name="river" /><span><strong>แม่น้ำ</strong><small>ระดับน้ำและการไหล</small></span></button>
           </div>
           <main className="main-content journey-dashboard journey-hero-dashboard" id="risk-map" tabIndex={-1}>
-            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} onAreaChosen={finishAreaSearch} />
+            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} onAreaChosen={finishAreaSearch} onOpenAreaSearch={focusAreaSearch} riverViewRequest={riverViewRequest} />
           </main>
           <div className="journey-feature-grid" id="about">
             <a className="journey-area-card" href="#risk-map"><div className="journey-area-image"><span>EXPLORE YOUR AREA</span><span className="journey-card-arrow"><Icon name="arrow" /></span></div><div className="journey-area-copy"><h2>ทุกพื้นที่ มีเรื่องที่ควรรู้</h2><p>เริ่มสำรวจความเสี่ยงจากพื้นที่ใกล้ตัวคุณ</p></div></a>
@@ -71,7 +72,7 @@ export default function LandingExperience() {
       <dialog className="journey-guide-dialog" ref={guide} aria-labelledby="guide-title">
         <button className="journey-dialog-close" type="button" aria-label="ปิดคำแนะนำ" onClick={() => guide.current?.close()}><Icon name="close" /></button>
         <span className="journey-section-label">A LITTLE KNOWLEDGE. MORE CONFIDENCE.</span><h2 id="guide-title">เริ่มต้นใช้งานทันภัย</h2><p>สำรวจข้อมูลใกล้ตัว เพื่อเตรียมพร้อมอย่างเข้าใจ</p>
-        <ol><li><strong>ค้นหาพื้นที่ของคุณ</strong><p>พิมพ์ชื่อจังหวัด อำเภอ หรือตำบล แล้วเลือกพื้นที่จากผลการค้นหาในแดชบอร์ด</p></li><li><strong>เลือกสิ่งที่อยากรู้</strong><p>ดูความเสี่ยงฝนและพายุ น้ำท่วม ภัยแล้ง ไฟป่า หรือเปลี่ยนเป็นมุมมองเขื่อนและแม่น้ำ</p></li><li><strong>อ่านข้อมูลพร้อมแหล่งอ้างอิง</strong><p>ตรวจเวลาปรับปรุงข้อมูลและข้อจำกัดทุกครั้ง หากข้อมูลไม่พร้อม ระบบจะแสดงสถานะตามจริง</p></li></ol>
+        <ol><li><strong>ค้นหาพื้นที่ของคุณ</strong><p>กด “พื้นที่ที่คุณอยากรู้” ด้านบน พิมพ์ชื่อจังหวัด อำเภอ หรือตำบล แล้วเลือกจากผลการค้นหาในหน้าต่างค้นหา</p></li><li><strong>เลือกสิ่งที่อยากรู้</strong><p>ดูความเสี่ยงฝนและพายุ น้ำท่วม ภัยแล้ง ไฟป่า หรือเปลี่ยนเป็นมุมมองเขื่อนและแม่น้ำ</p></li><li><strong>อ่านข้อมูลพร้อมแหล่งอ้างอิง</strong><p>ตรวจเวลาปรับปรุงข้อมูลและข้อจำกัดทุกครั้ง หากข้อมูลไม่พร้อม ระบบจะแสดงสถานะตามจริง</p></li></ol>
         <p className="journey-guide-notice"><Icon name="info" /> ทันภัยเป็นเครื่องมือประกอบการตัดสินใจ โปรดยึดประกาศเตือนจากหน่วยงานทางการเป็นหลัก</p><button className="journey-primary" type="button" onClick={() => { guide.current?.close(); scrollToMap(); }}>เริ่มสำรวจ <Icon name="arrow" /></button>
       </dialog>
     </div>
