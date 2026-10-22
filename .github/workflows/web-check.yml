@@ -1,0 +1,33 @@
+# Type-check, lint and run the landing check for the web app (module 01).
+# check:landing comes with PR #6; until that merges the step is skipped (--if-present).
+name: web-check
+
+on:
+  push:
+    branches-ignore: [main, develop]
+    paths: ["01_web_app/web/**", ".github/workflows/web-check.yml"]
+  pull_request:
+    branches: [main, develop]
+    paths: ["01_web_app/web/**", ".github/workflows/web-check.yml"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 01_web_app/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: 01_web_app/web/package-lock.json
+      - run: npm ci
+      # Route types (.next/types) must exist before tsc.
+      - name: Type-check
+        run: npx next typegen && npx tsc --noEmit
+      - name: Lint
+        run: npx eslint src scripts
+      - name: Landing check
+        run: npm run check:landing --if-present
