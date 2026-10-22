@@ -13,7 +13,8 @@
 
 ทุก overlay ตอบเป็น `FeatureCollection` และมีสองส่วนเพิ่ม:
 
-- `overlay`: `status` (`ok` · `pending` = ยังโหลดครั้งแรกไม่เสร็จ ให้ถามใหม่ใน ~1 นาที · `unavailable` = ไม่มี key ของแหล่งข้อมูล), `updated_at` (UTC), `source` (ชื่อที่ต้องแสดงเป็นเครดิต)
+- `overlay`: `status` (`ok` · `pending` = ยังโหลดครั้งแรกไม่เสร็จ ให้ถามใหม่ใน ~1 นาที · `error` = ยังไม่เคยได้ข้อมูลและครั้งล่าสุดดึงไม่สำเร็จ ระบบลองใหม่เองทุก 10 นาที · `unavailable` = ไม่มี key ของแหล่งข้อมูล), `updated_at` (UTC, เวลาที่ได้ข้อมูลชั้นนี้ครั้งล่าสุด), `source` (ชื่อที่ต้องแสดงเป็นเครดิต)
+- ถ้าดึงรอบใหม่ไม่สำเร็จ ชั้นนั้นยังส่งข้อมูลชุดเดิมกับ `updated_at` เดิม และชื่อแหล่งจะอยู่ใน `degraded_services`
 - `generated_at`, `data_updated_at`, `degraded_services`, `inputs_pending`: เหมือน endpoint อื่น
 
 กติกาที่ต้องคงไว้: **ระดับ (`level`) มาจาก `rules.yaml` เท่านั้น** หน้าเว็บห้ามคำนวณระดับเอง ให้ใช้สีตาม `LEVELS` ใน `lib/api.ts`
@@ -46,12 +47,18 @@
 
 | `kind` | geometry | ความหมาย | แนะนำการวาด |
 |---|---|---|---|
-| `wind_area` | Polygon / MultiPolygon | พื้นที่ลมแรงตลอดเส้นทาง (รวมคาดการณ์) ต่อระดับลม `wind_kmh` = 63 / 93 / 119 กม./ชม. ขึ้นไป | fill โปร่งใส เหลือง / ส้ม / แดง วาดจากลมอ่อนไปแรง |
+| `wind_area` | Polygon / MultiPolygon | พื้นที่ลมแรงตลอดเส้นทาง (รวมคาดการณ์) ต่อระดับลม `wind_kmh` = 63 / 93 / 119 กม./ชม. ขึ้นไป และ `level` จาก `rules.yaml` (`WATCH` / `WARNING` / `CRITICAL`) | fill โปร่งใสด้วยสีของ `level` จาก `LEVELS` วาดจากลมอ่อนไปแรง |
 | `track` | LineString | เส้นทางที่ผ่านมาแล้ว | เส้นทึบ |
 | `forecast` | LineString | จากตำแหน่งล่าสุดไปตามเส้นทางคาดการณ์ | เส้นประ |
 | `track_point` | Point | ตำแหน่งแต่ละช่วงเวลา: `time` (UTC), `forecast`, `latest` (ตำแหน่งล่าสุด) | จุดเล็ก · ไอคอนพายุที่ `latest = true` · แสดงเวลาเป็นเวลาไทยเมื่อแตะ |
 
 ทุก feature มี `event_id`, `event` (เช่น `CHAMPI-26`) และ `name`
+
+```json
+{"type": "Feature", "geometry": {"type": "MultiPolygon", "coordinates": ["..."]},
+ "properties": {"event_id": "1001234", "event": "CHAMPI-26", "name": "Tropical Storm CHAMPI-26", "kind": "wind_area",
+                "wind_kmh": 93.0, "level": "WARNING"}}
+```
 
 ## คลื่นทะเล (ลูกศร) — `/v1/map/overlays/waves`
 

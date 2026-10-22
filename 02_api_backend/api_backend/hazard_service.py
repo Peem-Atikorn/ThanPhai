@@ -57,7 +57,7 @@ QUAKE_LIST_WINDOW = timedelta(days=7)
 # wind areas do not reach the district.
 CYCLONE_NOTICE_KM = 800
 # Wave arrows on the map: the Andaman Sea and the Gulf of Thailand every 0.5° (486 points, 396 at sea on 2026-10-22).
-# Land points still count against Open-Meteo's quota: 486 every 6 h is ~1,950 of the free 10,000 a day.
+# After the first refresh only sea points are asked: 396 every 6 h is ~1,600 of Open-Meteo's free 10,000 a day.
 WAVE_BBOX = (92.5, 5.5, 105.5, 14.0)
 WAVE_GRID_DEGREES = 0.5
 WAVE_TTL = timedelta(hours=6)
@@ -136,8 +136,11 @@ class HazardService:
         self.pm25_stations: list[dict] = []  # fresh Air4Thai readings, for station points on the map
         self.regional_events: list[dict] = []  # GDACS events around South-East Asia
         self.cyclone_records: list | None = None  # GDACS wind areas and track points; None until GDACS answers
+        self.cyclone_updated_at: datetime | None = None  # last time GDACS answered, not the last refresh
+        self._cyclone_features: tuple[list | None, list[dict]] = (None, [])  # (records, overlay features) built from them
         self.wave_points: list[dict] = []  # sea grid for the wave arrows (map overlay)
         self.wave_updated_at: datetime | None = None
+        self._wave_grid: list[tuple[str, float, float]] | None = None  # sea points only, after the first refresh
         self._graph_cache: dict[tuple, tuple[datetime, dict]] = {}
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._boundaries: dict[str, dict] = {}  # area outlines, read on first request
@@ -220,6 +223,7 @@ class HazardService:
             cyclones = results.get("gdacs_cyclones")
             if cyclones is not None and not isinstance(cyclones, Exception):
                 self.cyclone_records = cyclones  # keep the last good tracks if GDACS failed
+                self.cyclone_updated_at = datetime.now(timezone.utc)
             # Swap everything at once so readers never see a half-updated state.
             self.decisions = decisions
             if self._last_quakes is not None:
@@ -702,11 +706,18 @@ class HazardService:
         return self.wave_updated_at is None or datetime.now(timezone.utc) - self.wave_updated_at > WAVE_TTL
 
     def refresh_waves_in_background(self) -> None:
-        self._start_job("open_meteo_waves", self.refresh_waves, self.waves_stale)
+        # The arrows share Open-Meteo's paced queue with the district forecasts; let those load first after a restart.
+        if not set(self.grid_updated_at) & set(self.inputs_pending):
+            self._start_job("open_meteo_waves", self.refresh_waves, self.waves_stale)
 
     async def refresh_waves(self) -> None:
+        grid = self._wave_grid or sea_grid(WAVE_BBOX, WAVE_GRID_DEGREES)
         async with httpx.AsyncClient(headers=USER_AGENT) as client:
-            records = await OpenMeteoWaveField(sea_grid(WAVE_BBOX, WAVE_GRID_DEGREES)).run(client)
+            records = await OpenMeteoWaveField(grid).run(client)
+        if self._wave_grid is None and records:
+            # Land points come back empty but still count against the quota (~90 of 486): ask only for sea points from now on.
+            sea = {r.extra["area_code"] for r in records}
+            self._wave_grid = [p for p in grid if p[0] in sea]
         points = []
         for r in records:
             # The same rules as the coastal districts (rules.yaml marine), so arrows and districts agree.
@@ -1035,6 +1046,13 @@ class HazardService:
 
     # --- map overlays: drawn on top of the district layer --------------------------------------
 
+    def _overlay_status(self, updated_at: datetime | None, job: str) -> str:
+        """ok once data arrived; error while nothing arrived and the last try failed (retried after
+        RETRY_AFTER_FAILURE); pending while the first try is still running."""
+        if updated_at is not None:
+            return "ok"
+        return "error" if self.source_status.get(job, {}).get("ok") is False else "pending"
+
     def flood_overlay(self) -> dict:
         """Districts where GISTDA's satellites saw flood water in the last 7 days, with the flooded area.
 
@@ -1050,7 +1068,7 @@ class HazardService:
                 "flood_km2": sat["approx_km2"], "flood_share": round(min(sat["approx_km2"] / area.area_km2, 1.0), 3) if area.area_km2 else None,
             }})
         features.sort(key=lambda f: -f["properties"]["flood_km2"])
-        status = "ok" if self.satellite_updated_at else ("unavailable" if not os.getenv("GISTDA_API_KEY") else "pending")
+        status = self._overlay_status(self.satellite_updated_at, "gistda_flood") if os.getenv("GISTDA_API_KEY") or self.satellite_updated_at else "unavailable"
         return {"type": "FeatureCollection", "features": features, "overlay": {
             "status": status, "window": "7days", "updated_at": self.satellite_updated_at.isoformat() if self.satellite_updated_at else None,
             "source": "GISTDA (ดาวเทียม Sentinel-1)"}}
@@ -1059,8 +1077,19 @@ class HazardService:
         """Tropical cyclones near Thailand (GDACS): track lines, track points and wind areas.
 
         Per event: "track" (analysed positions), "forecast" (the latest position onward), one point per position,
-        and one "wind_area" per wind class, merged over the whole track (forecast included).
+        and one "wind_area" per wind class, merged over the whole track (forecast included), with its rules level.
         """
+        records = self.cyclone_records
+        if self._cyclone_features[0] is not records:  # rebuild only when GDACS sent new records
+            self._cyclone_features = (records, self._cyclone_features_from(records or []))
+        features = self._cyclone_features[1]
+        return {"type": "FeatureCollection", "features": features, "overlay": {
+            "status": self._overlay_status(self.cyclone_updated_at, "gdacs_cyclones"),
+            "storms": len({f["properties"]["event_id"] for f in features}),
+            "updated_at": self.cyclone_updated_at.isoformat() if self.cyclone_updated_at else None,
+            "source": "GDACS (UN/EU)"}}
+
+    def _cyclone_features_from(self, records: list) -> list[dict]:
         from shapely.geometry import LineString, mapping, shape
         from shapely.ops import unary_union
 
@@ -1068,7 +1097,6 @@ class HazardService:
             plain = json.loads(json.dumps(mapping(geom)))  # shapely gives tuples
             return {"type": plain["type"], "coordinates": _round_coords(plain["coordinates"])}
 
-        records = self.cyclone_records or []
         events: dict[str, dict] = {}
         for r in records:
             e = events.setdefault(r.extra["event_id"], {"event": r.extra["event"], "name": r.extra.get("name"), "points": [], "areas": {}})
@@ -1081,7 +1109,10 @@ class HazardService:
             common = {"event_id": event_id, "event": e["event"], "name": e["name"]}
             for wind, shapes in sorted(e["areas"].items()):
                 merged = unary_union(shapes).simplify(CYCLONE_SIMPLIFY_DEGREES, preserve_topology=True)
-                features.append({"type": "Feature", "geometry": geojson(merged), "properties": {**common, "kind": "wind_area", "wind_kmh": wind}})
+                # The same rules as the districts inside the area (rules.yaml tropical_cyclone).
+                level = self.engine.decide(DecisionInput(hazard=HazardType.TROPICAL_CYCLONE, observations={"cyclone_wind_kmh": wind})).level
+                features.append({"type": "Feature", "geometry": geojson(merged), "properties": {
+                    **common, "kind": "wind_area", "wind_kmh": wind, "level": level.name if level is not None else None}})
             points = sorted(e["points"], key=lambda r: r.valid_time)
             analysed = [p for p in points if not p.extra["forecast"]]
             ahead = [p for p in points if p.extra["forecast"]]
@@ -1093,17 +1124,14 @@ class HazardService:
                 features.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [p.lon, p.lat]}, "properties": {
                     **common, "kind": "track_point", "time": p.valid_time.isoformat(), "forecast": p.extra["forecast"],
                     "latest": bool(analysed) and p is analysed[-1]}})
-        return {"type": "FeatureCollection", "features": features, "overlay": {
-            "status": "ok" if self.cyclone_records is not None else "pending", "storms": len(events),
-            "updated_at": self.updated_at.isoformat() if self.updated_at and self.cyclone_records is not None else None,
-            "source": "GDACS (UN/EU)"}}
+        return features
 
     def wave_overlay(self) -> dict:
         """Wave arrows: the highest wave in the next 24 h at each sea point, where it comes from and its rules level."""
         features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [p["lon"], p["lat"]]},
                      "properties": {k: v for k, v in p.items() if k not in ("lat", "lon")}} for p in self.wave_points]
         return {"type": "FeatureCollection", "features": features, "overlay": {
-            "status": "ok" if self.wave_updated_at else "pending", "grid_degrees": WAVE_GRID_DEGREES,
+            "status": self._overlay_status(self.wave_updated_at, "open_meteo_waves"), "grid_degrees": WAVE_GRID_DEGREES,
             "updated_at": self.wave_updated_at.isoformat() if self.wave_updated_at else None,
             "source": "Open-Meteo Marine (แบบจำลองคลื่น)"}}
 
