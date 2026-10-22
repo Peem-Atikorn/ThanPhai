@@ -351,3 +351,37 @@ def test_wave_overlay_levels_come_from_the_marine_rules(client, monkeypatch):
     assert body["features"][1]["geometry"]["coordinates"] == [101.5, 9.5] and body["overlay"]["status"] == "ok"
     asyncio.run(svc.refresh_waves())
     assert asked == [486, 2]  # land points (no waves) are not asked again
+
+
+def test_wave_point_missing_on_the_full_check_comes_back_on_the_next_one(client, monkeypatch):
+    import asyncio
+
+    from api_backend import hazard_service
+    from thanphai_shared import SourceRecord
+
+    c, svc, _ = client
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(svc, "_wave_grid", None)
+    monkeypatch.setattr(svc, "_wave_grid_checked_at", None)
+    answering = {"9.5,101.0"}  # sea point B (9.5,101.5) has no data for a while
+    asked = []
+
+    async def fake_run(self, http):
+        asked.append(len(self.points))
+        return [SourceRecord(source="open_meteo_waves", variable="wave_height_max_24h", value=1.0, unit="m", lat=lat, lon=lon,
+                             issued_at=now, valid_time=now, fetched_at=now, attribution="t",
+                             extra={"area_code": code, "direction_from_deg": 30, "period_s": 6.5, "peak_time": now.isoformat()})
+                for code, lat, lon in self.points if code in answering]
+
+    def shown():
+        return [f["geometry"]["coordinates"] for f in c.get("/v1/map/overlays/waves").json()["features"]]
+
+    monkeypatch.setattr(hazard_service.OpenMeteoWaveField, "run", fake_run)
+    asyncio.run(svc.refresh_waves())
+    answering.add("9.5,101.5")  # B is back at the source
+    asyncio.run(svc.refresh_waves())
+    assert asked == [486, 1] and shown() == [[101.0, 9.5]]  # between full checks only A is asked
+    svc._wave_grid_checked_at -= hazard_service.WAVE_FULL_GRID_EVERY + timedelta(minutes=1)
+    asyncio.run(svc.refresh_waves())
+    asyncio.run(svc.refresh_waves())
+    assert asked[2:] == [486, 2] and shown() == [[101.0, 9.5], [101.5, 9.5]]  # the daily full check brings B back

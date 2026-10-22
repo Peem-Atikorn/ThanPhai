@@ -57,10 +57,11 @@ QUAKE_LIST_WINDOW = timedelta(days=7)
 # wind areas do not reach the district.
 CYCLONE_NOTICE_KM = 800
 # Wave arrows on the map: the Andaman Sea and the Gulf of Thailand every 0.5° (486 points, 396 at sea on 2026-10-22).
-# After the first refresh only sea points are asked: 396 every 6 h is ~1,600 of Open-Meteo's free 10,000 a day.
+# Only sea points are asked between daily full-grid checks: ~1,700 of Open-Meteo's free 10,000 a day.
 WAVE_BBOX = (92.5, 5.5, 105.5, 14.0)
 WAVE_GRID_DEGREES = 0.5
 WAVE_TTL = timedelta(hours=6)
+WAVE_FULL_GRID_EVERY = timedelta(days=1)
 # Cyclone wind areas on the map are drawn at country zoom; ~1 km detail is plenty.
 CYCLONE_SIMPLIFY_DEGREES = 0.01
 # Districts with at least this many past landslides (DMR inventory 1989-2019) get landslide checks.
@@ -140,7 +141,8 @@ class HazardService:
         self._cyclone_features: tuple[list | None, list[dict]] = (None, [])  # (records, overlay features) built from them
         self.wave_points: list[dict] = []  # sea grid for the wave arrows (map overlay)
         self.wave_updated_at: datetime | None = None
-        self._wave_grid: list[tuple[str, float, float]] | None = None  # sea points only, after the first refresh
+        self._wave_grid: list[tuple[str, float, float]] | None = None  # sea points only, from the last full-grid check
+        self._wave_grid_checked_at: datetime | None = None
         self._graph_cache: dict[tuple, tuple[datetime, dict]] = {}
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._boundaries: dict[str, dict] = {}  # area outlines, read on first request
@@ -711,13 +713,17 @@ class HazardService:
             self._start_job("open_meteo_waves", self.refresh_waves, self.waves_stale)
 
     async def refresh_waves(self) -> None:
-        grid = self._wave_grid or sea_grid(WAVE_BBOX, WAVE_GRID_DEGREES)
+        # Land points come back empty but still count against the quota (~90 of 486), so between full checks only the
+        # sea points are asked. A sea point can also come back empty for a while; the daily full check brings it back.
+        started = datetime.now(timezone.utc)
+        full = self._wave_grid is None or self._wave_grid_checked_at is None or started - self._wave_grid_checked_at > WAVE_FULL_GRID_EVERY
+        grid = sea_grid(WAVE_BBOX, WAVE_GRID_DEGREES) if full else self._wave_grid
         async with httpx.AsyncClient(headers=USER_AGENT) as client:
             records = await OpenMeteoWaveField(grid).run(client)
-        if self._wave_grid is None and records:
-            # Land points come back empty but still count against the quota (~90 of 486): ask only for sea points from now on.
+        if full and records:
             sea = {r.extra["area_code"] for r in records}
             self._wave_grid = [p for p in grid if p[0] in sea]
+            self._wave_grid_checked_at = started
         points = []
         for r in records:
             # The same rules as the coastal districts (rules.yaml marine), so arrows and districts agree.
