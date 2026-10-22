@@ -82,6 +82,7 @@ async def fresh_service() -> HazardService:
     if service.fire_stale:
         service.refresh_fire_in_background()
     service.refresh_grids_in_background()
+    service.refresh_waves_in_background()
     return service
 
 
@@ -178,6 +179,27 @@ async def map_layer(hazard: str, request: Request) -> Response:
         return Response(content=compressed, media_type="application/json",
                         headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
     return Response(content=raw, media_type="application/json")
+
+
+@app.get("/v1/map/overlays/flood")
+async def flood_overlay() -> dict:
+    """Districts with satellite-detected flood water in the last 7 days (GISTDA), largest flooded area first."""
+    svc = await fresh_service()
+    return {**svc.flood_overlay(), **meta(svc)}
+
+
+@app.get("/v1/map/overlays/cyclones")
+async def cyclone_overlay() -> dict:
+    """Tropical cyclones near Thailand (GDACS): wind areas, analysed track, forecast track and positions."""
+    svc = await fresh_service()
+    return {**svc.cyclone_overlay(), **meta(svc)}
+
+
+@app.get("/v1/map/overlays/waves")
+async def wave_overlay() -> dict:
+    """Wave arrows over the Andaman Sea and the Gulf: highest wave in the next 24 h, direction and rules level."""
+    svc = await fresh_service()
+    return {**svc.wave_overlay(), **meta(svc)}
 
 
 @app.get("/v1/dams")

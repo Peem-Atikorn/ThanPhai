@@ -4,7 +4,7 @@ from external_data.adapters.gdacs import GdacsEvents
 from external_data.adapters.gdacs_cyclones import GdacsCyclones
 from external_data.adapters.firms import FirmsHotspots
 from external_data.adapters.open_meteo import (OpenMeteoAirQuality, OpenMeteoForecast, OpenMeteoHeatIndex, OpenMeteoMarine,
-                                              OpenMeteoRiverDischarge)
+                                              OpenMeteoRiverDischarge, OpenMeteoWaveField, sea_grid)
 from external_data.adapters.thaiwater import ThaiWaterRain24h, ThaiWaterWaterLevel
 from external_data.adapters.tmd import TmdWarnings, TmdWeather3Hours
 from external_data.adapters.tmd_nwp import TmdNwpDailyForecast
@@ -19,6 +19,7 @@ __all__ = [
     "OpenMeteoHeatIndex",
     "OpenMeteoMarine",
     "OpenMeteoRiverDischarge",
+    "OpenMeteoWaveField",
     "ThaiWaterRain24h",
     "ThaiWaterWaterLevel",
     "TmdNwpDailyForecast",
@@ -27,4 +28,5 @@ __all__ = [
     "TmdWeather3Hours",
     "UsgsEarthquakes",
     "merge_quakes",
+    "sea_grid",
 ]

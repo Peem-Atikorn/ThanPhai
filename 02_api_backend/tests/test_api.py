@@ -28,6 +28,7 @@ def client():
     svc.updated_at = datetime.now(timezone.utc)
     # Fresh forecasts, so requests do not start real Open-Meteo jobs in the background.
     svc.grid_updated_at = {name: svc.updated_at for name in svc.grid_updated_at}
+    svc.wave_updated_at = svc.updated_at
     svc.source_status = {"thaiwater_waterlevel": {"ok": True}, "nasa_firms": {"ok": False}}
     main.service, main.agent = svc, HazardAgent(svc.gazetteer, svc)
     return TestClient(main.app), svc, sena
@@ -249,3 +250,56 @@ def test_air_stations_endpoint(client):
                           "time": "2026-10-22T03:00:00+07:00"}]
     body = c.get("/v1/air/stations").json()
     assert body["stations"][0]["pm25"] == 42.0 and "data_updated_at" in body
+
+
+def test_flood_overlay_lists_only_districts_with_satellite_flood(client):
+    c, svc, sena = client
+    other = next(code for code in svc.amphoe_codes if code != sena)
+    svc.satellite_cells = {sena: {"cells": 100, "approx_km2": 12.4}, other: {"cells": 0, "approx_km2": 0.0}}
+    svc.satellite_updated_at = datetime.now(timezone.utc)
+    body = c.get("/v1/map/overlays/flood").json()
+    assert body["type"] == "FeatureCollection" and body["overlay"]["status"] == "ok"
+    assert [f["properties"]["code"] for f in body["features"]] == [sena]
+    props = body["features"][0]["properties"]
+    assert props["flood_km2"] == 12.4 and 0 < props["flood_share"] < 1 and body["features"][0]["geometry"]["type"] in ("Polygon", "MultiPolygon")
+
+
+def test_cyclone_overlay_has_wind_areas_tracks_and_positions(client):
+    import json as _json
+
+    from external_data.adapters.gdacs_cyclones import GdacsCyclones
+
+    c, svc, _ = client
+    fixture = Path(__file__).resolve().parents[2] / "04_external_data_services" / "tests" / "fixtures" / "gdacs_cyclone_geometry.json"
+    svc.cyclone_records = GdacsCyclones().parse([_json.loads(fixture.read_text(encoding="utf-8"))], datetime.now(timezone.utc))
+    body = c.get("/v1/map/overlays/cyclones").json()
+    kinds = [f["properties"]["kind"] for f in body["features"]]
+    assert sorted(f["properties"]["wind_kmh"] for f in body["features"] if f["properties"]["kind"] == "wind_area") == [63.0, 93.0, 119.0]
+    assert kinds.count("track") == 1 and kinds.count("forecast") == 1 and kinds.count("track_point") == 3
+    points = [f["properties"] for f in body["features"] if f["properties"]["kind"] == "track_point"]
+    assert [p["forecast"] for p in points] == [False, False, True] and [p["latest"] for p in points] == [False, True, False]
+    assert body["overlay"]["storms"] == 1 and body["features"][0]["properties"]["event"] == "CHAMPI-26"
+
+
+def test_wave_overlay_levels_come_from_the_marine_rules(client, monkeypatch):
+    import asyncio
+
+    from api_backend import hazard_service
+    from thanphai_shared import SourceRecord
+
+    c, svc, _ = client
+    now = datetime.now(timezone.utc)
+
+    async def fake_run(self, http):
+        return [SourceRecord(source="open_meteo_waves", variable="wave_height_max_24h", value=height, unit="m", lat=9.5, lon=lon,
+                             issued_at=now, valid_time=now, fetched_at=now, attribution="t",
+                             extra={"area_code": f"9.5,{lon}", "direction_from_deg": 30, "period_s": 6.5, "peak_time": now.isoformat()})
+                for lon, height in ((101.0, 0.6), (101.5, 3.2))]
+
+    monkeypatch.setattr(hazard_service.OpenMeteoWaveField, "run", fake_run)
+    asyncio.run(svc.refresh_waves())
+    body = c.get("/v1/map/overlays/waves").json()
+    props = [f["properties"] for f in body["features"]]
+    assert [p["level"] for p in props] == ["NORMAL", "WARNING"]  # rules.yaml: >= 3 m is WARNING
+    assert props[0]["direction_from_deg"] == 30 and props[0]["direction_to_deg"] == 210
+    assert body["features"][1]["geometry"]["coordinates"] == [101.5, 9.5] and body["overlay"]["status"] == "ok"

@@ -219,6 +219,37 @@ class OpenMeteoMarine(OpenMeteoGrid):
         return round(max(values), 2), {"peak_time": peak["time"].isoformat()}
 
 
+class OpenMeteoWaveField(OpenMeteoGrid):
+    """Wave arrows for the map: highest wave in the next 24 hours at each point of a sea grid, with its direction.
+
+    `wave_direction` is where the waves come from (degrees, 0 = from the north), as in Open-Meteo.
+    """
+
+    name = "open_meteo_waves"
+    attribution = "Marine data by Open-Meteo.com (CC BY 4.0)"
+    base_url = "https://marine-api.open-meteo.com/v1/marine"
+    hourly = ("wave_height", "wave_direction", "wave_period")
+    variable = "wave_height_max_24h"
+    unit = "m"
+    grid_degrees = 0.1  # the points are already a grid; snapping only merges exact duplicates
+
+    def summarise(self, hours: list[dict]) -> tuple[float, dict] | None:
+        rows = [h for h in hours if h["wave_height"] is not None and h["wave_direction"] is not None]
+        if not rows:
+            return None  # land
+        peak = max(rows, key=lambda h: h["wave_height"])
+        return round(peak["wave_height"], 2), {"direction_from_deg": round(peak["wave_direction"]),
+                                              "period_s": peak["wave_period"], "peak_time": peak["time"].isoformat()}
+
+
+def sea_grid(bbox: tuple[float, float, float, float], step: float) -> list[tuple[str, float, float]]:
+    """(id, lat, lon) every `step` degrees inside bbox (west, south, east, north), for OpenMeteoWaveField."""
+    west, south, east, north = bbox
+    lats = [round(south + i * step, 4) for i in range(int(round((north - south) / step)) + 1)]
+    lons = [round(west + i * step, 4) for i in range(int(round((east - west) / step)) + 1)]
+    return [(f"{lat},{lon}", lat, lon) for lat in lats for lon in lons]
+
+
 class OpenMeteoRiverDischarge(Adapter):
     """GloFAS daily river discharge forecast, used as a flood feature."""
 
