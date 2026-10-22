@@ -88,7 +88,7 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   const landing = instance(load('@/components/LandingExperience').default);
   tree = landing.render();
   const headerSearch = nodes(tree).find(n => n.type === 'button' && n.props.className === 'journey-search-icon');
-  assert.equal(headerSearch, undefined, 'header search entry removed');
+  assert(headerSearch, 'header search entry remains available');
   const riverButton = nodes(tree).find(n => n.props['data-category'] === 'rivers');
   riverButton.props.onClick(); tree = landing.render();
   assert.equal(nodes(tree).find(n => n.type === Dashboard).props.riverViewRequest, 1, 'top button emits explicit river reset request');
