@@ -230,10 +230,24 @@ Round 7 (dams, 2026-10-19):
     "เฉพาะที่เสี่ยง": districts below WATCH are not filled. Both are remembered per browser (useSyncExternalStore over localStorage, memory if blocked).
 97. Bug caught in the browser: MapLibre only accepts ["zoom"] at the top of an interpolate; a zoom interpolate inside "case" dropped the whole station layer.
 
+### Round 17 — TMD warnings per province (branch `feature/peem/05-tmd-warning-provinces`)
+98. TMD warnings now apply per area. Module 05 `warning_provinces()` reads the title and headline and returns the provinces named,
+    either directly ("จังหวัดน่าน แพร่ และเลย", "จ.ตาก", "กทม.") or through TMD forecast regions (ภาคเหนือ, ภาคตะวันออกเฉียงเหนือ/ภาคอีสาน,
+    ภาคกลาง, ภาคตะวันออก, ภาคใต้ฝั่งตะวันออก/ตะวันตก, ภาคใต้, กรุงเทพมหานครและปริมณฑล). TMD's regions are meteorological, not geographic:
+    กำแพงเพชร/พิจิตร/เพชรบูรณ์ are north, นครนายก east, เพชรบุรี/ประจวบคีรีขันธ์ southern east coast (tmd.go.th/forecast/daily, 2026-10-23).
+    `/v1/warnings` items gain `provinces` (province codes). A district gets `official_warning_active` for the warning's hazards only when its province
+    is named; the level comes from `rules.yaml` `official_warning.min_level`. The card shows the warning title and "กรมอุตุนิยมวิทยา (ประกาศเตือน)".
+99. Short province names are also words ("เลย", "ตาก", "แพร่" in "เผยแพร่", "น่าน" in "น่านน้ำ"): names of 4 letters or fewer count only as a list item
+    (after a space, จังหวัด/จ. or และ). Seas (อ่าวไทย, ทะเลอันดามัน) and "บริเวณประเทศไทย" name no province.
+100. Every warning in TMD's current feed is treated as in force: `EffectEndDate` is when the next issue is due (live 2026-10-23: issue 12 "ended" 06:00 and was still the current warning at 10:30),
+    so using it would drop the warning for half of each day. If TMD fails, the last good warnings keep applying.
+101. Known limits: sub-regions ("ภาคเหนือตอนล่าง", "ภาคใต้ตอนบน") count as the whole region (a few provinces too many, never too few), and every
+    region in the headline counts, also one only given "ฝนฟ้าคะนอง" (live issue 12: heavy rain for east and south, thunderstorms for north/central/Bangkok — all get WARNING).
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).
-- TMD warnings are national; they are shown as context but not applied per district until warning text can be mapped to provinces.
+- TMD warnings apply to the provinces their text names (round 17); a headline region with only thunderstorms is still warned (see 101).
 - Drought uses NDVI/VCI (monthly, ~2–6 weeks behind). Rainfall-deficit SPI per district still needs a CHIRPS backfill.
 - Earthdata token expires 2026-12-18; `make ndvi` fails with "not an HDF file" after that until it is renewed.
 - Gemini free tier: Google may use requests to improve its products. Move to the paid tier before real users.
@@ -250,7 +264,6 @@ Round 7 (dams, 2026-10-19):
 - [ ] Run `make ndvi` monthly (or schedule it)
 - [ ] Module 07: RAG over DDPM guides (needs PDFs)
 - [ ] Water quality (42 stations) and active-storm list (`storm_data`) when a storm is near Thailand
-- [ ] Module 05: map TMD warning text to provinces so warnings can set per-district minimum levels
 - [ ] Module 08: LINE delivery + subscription storage (needs LINE channel); ground-report endpoint
 - [ ] Split 03/05/07 into their own services when the team is ready (only `hazard_service.py` changes)
 - [ ] Keycloak auth (module 02)

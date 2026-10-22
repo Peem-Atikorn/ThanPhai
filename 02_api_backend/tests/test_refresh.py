@@ -487,3 +487,35 @@ def test_fresh_pm25_stations_are_kept_for_the_map(base_service):
     svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [],
                   "air4thai": [station("a", 1, 20.0), station("b", 1, 55.0), station("old", 9, 99.0)]}, [])
     assert [s["id"] for s in svc._last_pm25] == ["b", "a"]  # worst first; the 9-hour-old reading is dropped
+
+
+def test_tmd_warning_raises_only_the_provinces_it_names(base_service, monkeypatch):
+    from thanphai_shared import HazardType, OfficialWarning
+
+    svc = stale_copy(base_service)
+    now = datetime.now(timezone.utc)
+    warning = OfficialWarning(source="tmd_warnings", issue_no="5", title="ฝนตกหนักบริเวณจังหวัดนนทบุรี",
+                              headline="ฝนตกหนักบางแห่งบริเวณจังหวัดนนทบุรี", hazards=[HazardType.RAIN_STORM],
+                              announced_at=now, fetched_at=now, attribution="t")
+    empty = {"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}
+    decisions, warnings, _ = svc._process(empty, [warning])
+    assert warnings[0]["provinces"] == ["TH12"]
+
+    def rain(code):
+        return next(i for i in decisions[code] if i["hazard"] == "rain_storm")
+
+    bang_bua_thong = next(a.code for a in svc.gazetteer.resolve("อำเภอบางบัวทอง"))
+    warned = rain(bang_bua_thong)
+    assert warned["level"] == svc.engine.rules["official_warning"]["min_level"]
+    assert "OFFICIAL_WARNING" in warned["rule_ids"] and "ฝนตกหนักบริเวณจังหวัดนนทบุรี" in warned["notices"][0]
+    assert "กรมอุตุนิยมวิทยา (ประกาศเตือน)" in warned["sources"]
+    others = [code for code in svc.amphoe_codes if not code.startswith("TH12")]
+    assert all("OFFICIAL_WARNING" not in rain(code)["rule_ids"] for code in others)
+    # The warning is about rain only; flood in the same district is untouched.
+    assert "OFFICIAL_WARNING" not in next(i for i in decisions[bang_bua_thong] if i["hazard"] == "flood")["rule_ids"]
+
+    # TMD down this time: the last good warnings still apply.
+    monkeypatch.setattr(svc, "warnings", warnings)
+    decisions, kept, status = svc._process(empty, RuntimeError("down"))
+    assert kept is None and status["tmd_warnings"]["ok"] is False
+    assert "OFFICIAL_WARNING" in rain(bang_bua_thong)["rule_ids"]

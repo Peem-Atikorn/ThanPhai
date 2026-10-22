@@ -24,7 +24,7 @@ from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
-from geo_integration import Gazetteer
+from geo_integration import Gazetteer, warning_provinces
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import AlertLevel, HazardType
@@ -294,7 +294,11 @@ class HazardService:
             warnings = None
         else:
             status["tmd_warnings"] = {"ok": True, "records": len(warnings_result), "checked_at": now}
-            warnings = [w.model_dump(mode="json") for w in warnings_result]
+            warnings = [{**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, f"{w.title} {w.headline or ''}")}
+                        for w in warnings_result]
+        # Every warning in TMD's current feed is in force: its EffectEndDate is when the next issue is due, not when
+        # the hazard ends. If TMD failed this time, the last good warnings still apply.
+        official = self._official_by_province(warnings if warnings is not None else self.warnings)
 
         if records["thaiwater_waterlevel"]:
             fresh = self.fresh_levels(records["thaiwater_waterlevel"])
@@ -403,8 +407,8 @@ class HazardService:
             }
             items = []
             for hazard, obs in observations.items():
-                # National TMD warnings are shown as context; they are not applied per district until
-                # module 05 can map a warning's text to the provinces it names.
+                # A TMD warning applies to districts in the provinces it names; rules.yaml sets the level it gives.
+                warned = official.get(code[:4], {}).get(hazard, [])
                 model_level = model_conf = None
                 if hazard == HazardType.FIRE and pred:
                     # The model's level is one input; rules can still raise it, and it never lowers them.
@@ -414,9 +418,10 @@ class HazardService:
                     model_conf = p if model_level != AlertLevel.NORMAL else 1 - p
                     obs = {**obs, "fire_probability_7d": pred["probability"]}
                 d = self.engine.decide(DecisionInput(hazard=hazard, observations=obs, degraded_sources=degraded.get(hazard, []),
-                                                     model_level=model_level, model_confidence=model_conf))
-                notices = list(d.notices)
-                sources = list(SOURCES[hazard])
+                                                     model_level=model_level, model_confidence=model_conf,
+                                                     official_warning_active=bool(warned)))
+                notices = [f"กรมอุตุนิยมวิทยาประกาศเตือน: {title}" for title in warned] + list(d.notices)
+                sources = list(SOURCES[hazard]) + (["กรมอุตุนิยมวิทยา (ประกาศเตือน)"] if warned else [])
                 if obs.get("satellite_flood_cells_7d") is not None:
                     sources.append("GISTDA (ดาวเทียม)")
                 if hazard == HazardType.DROUGHT and drought:
@@ -459,6 +464,16 @@ class HazardService:
                 })
             decisions[code] = items
         return decisions, warnings, status
+
+    @staticmethod
+    def _official_by_province(warnings: list[dict]) -> dict[str, dict[HazardType, list[str]]]:
+        """Province code -> hazard -> titles of the TMD warnings that name the province for that hazard."""
+        found: dict[str, dict[HazardType, list[str]]] = {}
+        for warning in warnings:
+            for province in warning.get("provinces", []):
+                for hazard in warning["hazards"]:
+                    found.setdefault(province, {}).setdefault(HazardType(hazard), []).append(warning["title"])
+        return found
 
     @staticmethod
     def _vegetation_observations(veg: dict | None, flooded: bool) -> tuple[dict, str | None]:
