@@ -5,8 +5,12 @@ province lists ("จังหวัดเชียงราย พะเยา �
 """
 
 import re
+from collections.abc import Callable, Iterable
+from typing import TypeVar
 
 from geo_integration.gazetteer import ALIASES, Gazetteer
+
+H = TypeVar("H")
 
 # TMD forecast regions, as its daily forecast groups provinces. These are meteorological regions, not the
 # six geographic ones: กำแพงเพชร, พิจิตร and เพชรบูรณ์ are in the north, นครนายก in the east, and
@@ -51,6 +55,29 @@ COAST_SPELLING = re.compile(r"ภาคใต้\s*\(?\s*ฝั่ง\s*(ตะ�
 SHORT_NAME = 4
 BEFORE = re.compile(r"(?:^|[\s,:;(]|จังหวัด|จ\.|และ)$")
 AFTER = re.compile(r"^(?:$|[\s,:;).]|และ)")
+# Words that start a new statement about other areas ("ส่วนภาคเหนือตอนล่าง … ยังคงมีฝนฟ้าคะนอง"). "ส่วนมาก" and
+# "ส่วนใหญ่" mean "mostly" and do not.
+PART_START = re.compile(r"(?=ส่วน(?!มาก|ใหญ่)|หลังจากนั้น|สำหรับ|ขอให้|อนึ่ง)")
+
+
+def warning_parts(text: str) -> list[str]:
+    """A warning text cut into statements, each with its own areas and its own hazard words."""
+    return [part.strip() for part in PART_START.split(text) if part.strip()]
+
+
+def provinces_by_hazard(gazetteer: Gazetteer, text: str, classify: Callable[[str], Iterable[H]]) -> dict[H, list[str]]:
+    """Hazard -> province codes, sorted: a province counts for a hazard only where one statement names both.
+
+    Issue 12 has heavy rain in the east and south, "ส่วน" the lower north only thunderstorms: the north must not
+    get the heavy-rain (flood) warning. A statement with no hazard word of its own sets nothing.
+    """
+    found: dict[H, set[str]] = {}
+    for part in warning_parts(text):
+        hazards = list(classify(part))
+        provinces = warning_provinces(gazetteer, part) if hazards else []
+        for hazard in hazards:
+            found.setdefault(hazard, set()).update(provinces)
+    return {hazard: sorted(codes) for hazard, codes in found.items() if codes}
 
 
 def warning_provinces(gazetteer: Gazetteer, text: str) -> list[str]:

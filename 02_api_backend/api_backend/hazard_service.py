@@ -24,7 +24,8 @@ from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
-from geo_integration import Gazetteer, warning_provinces
+from external_data.adapters.tmd import classify_hazards
+from geo_integration import Gazetteer, provinces_by_hazard, warning_provinces
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import AlertLevel, HazardType
@@ -294,8 +295,12 @@ class HazardService:
             warnings = None
         else:
             status["tmd_warnings"] = {"ok": True, "records": len(warnings_result), "checked_at": now}
-            warnings = [{**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, f"{w.title} {w.headline or ''}")}
-                        for w in warnings_result]
+            warnings = []
+            for w in warnings_result:
+                text = f"{w.title} {w.headline or ''}"
+                by_hazard = provinces_by_hazard(self.gazetteer, text, classify_hazards)
+                warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
+                                 "provinces_by_hazard": {hazard.value: codes for hazard, codes in by_hazard.items()}})
         # Every warning in TMD's current feed is in force: its EffectEndDate is when the next issue is due, not when
         # the hazard ends. If TMD failed this time, the last good warnings still apply.
         official = self._official_by_province(warnings if warnings is not None else self.warnings)
@@ -470,8 +475,8 @@ class HazardService:
         """Province code -> hazard -> titles of the TMD warnings that name the province for that hazard."""
         found: dict[str, dict[HazardType, list[str]]] = {}
         for warning in warnings:
-            for province in warning.get("provinces", []):
-                for hazard in warning["hazards"]:
+            for hazard, provinces in warning.get("provinces_by_hazard", {}).items():
+                for province in provinces:
                     found.setdefault(province, {}).setdefault(HazardType(hazard), []).append(warning["title"])
         return found
 

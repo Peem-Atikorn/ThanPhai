@@ -519,3 +519,31 @@ def test_tmd_warning_raises_only_the_provinces_it_names(base_service, monkeypatc
     decisions, kept, status = svc._process(empty, RuntimeError("down"))
     assert kept is None and status["tmd_warnings"]["ok"] is False
     assert "OFFICIAL_WARNING" in rain(bang_bua_thong)["rule_ids"]
+
+
+def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service):
+    # Heavy rain (rain + flood) in the east and south; "ส่วนภาคเหนือตอนล่าง …" only thunderstorms. Before, every
+    # hazard went to every province named, and เชียงใหม่ got a flood WARNING.
+    import json as _json
+
+    from external_data.adapters.tmd import classify_hazards
+    from thanphai_shared import OfficialWarning
+
+    svc = stale_copy(base_service)
+    fixture = Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures" / "tmd_warning_texts.json"
+    issue = next(f for f in _json.loads(fixture.read_text(encoding="utf-8")) if f["issue_no"] == "12")
+    now = datetime.now(timezone.utc)
+    warning = OfficialWarning(source="tmd_warnings", issue_no="12", title=issue["text"], hazards=classify_hazards(issue["text"]),
+                              announced_at=now, fetched_at=now, attribution="t")
+    decisions, warnings, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []},
+                                          [warning])
+    assert "TH50" in warnings[0]["provinces"]  # still listed as named, for the warning panel
+
+    def rule_ids(district, hazard):
+        code = next(a.code for a in svc.gazetteer.resolve(district))
+        return next(i for i in decisions[code] if i["hazard"] == hazard)["rule_ids"]
+
+    for hazard in ("flood", "rain_storm"):
+        assert "OFFICIAL_WARNING" not in rule_ids("อำเภอเมืองเชียงใหม่", hazard)
+        assert "OFFICIAL_WARNING" in rule_ids("อำเภอเมืองชลบุรี", hazard)
+        assert "OFFICIAL_WARNING" in rule_ids("อำเภอหาดใหญ่", hazard)

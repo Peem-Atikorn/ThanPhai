@@ -3,8 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from geo_integration import Gazetteer, warning_provinces
+from external_data.adapters.tmd import classify_hazards
+from geo_integration import Gazetteer, provinces_by_hazard, warning_parts, warning_provinces
 from geo_integration.warning_areas import REGIONS
+from thanphai_shared import HazardType
 
 REAL = Path(__file__).resolve().parents[2] / "data" / "processed" / "gazetteer.json"
 FIXTURES = json.loads((Path(__file__).with_name("fixtures") / "tmd_warning_texts.json").read_text(encoding="utf-8"))
@@ -53,6 +55,32 @@ def test_real_warning_issue_12(gaz):
 def test_real_v1_storm_news_names_the_south_only(gaz):
     # Seas ("ทะเลอันดามัน", "อ่าวไทย") and other countries are not provinces.
     assert warning_provinces(gaz, text("1", "v1")) == sorted(SOUTH)
+
+
+def test_issue_12_heavy_rain_reaches_only_the_east_and_south(gaz):
+    # "ส่วนภาคเหนือตอนล่าง … ยังคงมีฝนฟ้าคะนอง": the north, northeast, central and Bangkok parts name no hazard of
+    # ours, so เชียงใหม่ (TH50) gets neither the heavy-rain nor the flood warning.
+    assert warning_parts(text("12"))[1].startswith("ส่วนภาคเหนือตอนล่าง")
+    by_hazard = provinces_by_hazard(gaz, text("12"), classify_hazards)
+    assert by_hazard == {HazardType.RAIN_STORM: sorted(EAST + SOUTH), HazardType.FLOOD: sorted(EAST + SOUTH)}
+    assert all("TH50" not in codes for codes in by_hazard.values())
+
+
+def test_issue_4_both_parts_have_heavy_rain(gaz):
+    by_hazard = provinces_by_hazard(gaz, text("4"), classify_hazards)
+    assert by_hazard[HazardType.FLOOD] == by_hazard[HazardType.RAIN_STORM] == warning_provinces(gaz, text("4"))
+
+
+def test_each_part_keeps_its_own_hazards(gaz):
+    # v1 storm news: flash floods for the whole south; "คลื่นลมแรง" (rain_storm) adds the west coast, already in it.
+    by_hazard = provinces_by_hazard(gaz, text("1", "v1"), classify_hazards)
+    assert by_hazard == {HazardType.RAIN_STORM: sorted(SOUTH), HazardType.FLOOD: sorted(SOUTH)}
+    assert provinces_by_hazard(gaz, "พายุ X สำหรับภาคใต้ฝั่งตะวันตกให้ระวังคลื่นลมแรง ส่วนภาคเหนือมีฝนตกหนักถึงหนักมาก",
+                               classify_hazards) == {HazardType.RAIN_STORM: sorted(SOUTH_WEST + NORTH), HazardType.FLOOD: NORTH}
+
+
+def test_mostly_is_not_a_new_part():
+    assert warning_parts("ฝนตกหนัก ส่วนมากบริเวณจังหวัดตาก") == ["ฝนตกหนัก ส่วนมากบริเวณจังหวัดตาก"]
 
 
 def test_province_list_with_short_names(gaz):
