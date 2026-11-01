@@ -17,8 +17,8 @@ import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
 from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsCyclones, GdacsEvents, OpenMeteoAirQuality, OpenMeteoHeatIndex, OpenMeteoMarine,
-                                    OpenMeteoWaveField, ThaiWaterRain24h, ThaiWaterWaterLevel, TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings,
-                                    UsgsEarthquakes, merge_quakes, sea_grid)
+                                    OpenMeteoWaveField, ThaiWaterRain24h, ThaiWaterStorms, ThaiWaterWaterLevel, ThaiWaterWaterQuality,
+                                    TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings, UsgsEarthquakes, merge_quakes, sea_grid)
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
@@ -132,6 +132,8 @@ class HazardService:
         self._drought: dict | None = None
         self.dams: list[dict] = []  # 35 large dams, refreshed with the live data
         self.rivers: list[dict] = []  # river stations with a flow gauge or over their bank
+        self.water_quality: list[dict] = []  # fresh readings of the automatic water-quality stations, saltiest first
+        self.storms: list[dict] = []  # active tropical storms (HII), one row per storm with its track
         self.media: dict | None = None  # radar, rain-forecast, storm and wave images
         self.quakes: list[dict] = []  # TMD + USGS, last 7 days, newest first
         self.pm25_stations: list[dict] = []  # fresh Air4Thai readings, for station points on the map
@@ -219,6 +221,12 @@ class HazardService:
                 self.rivers = self._river_rows(self.fresh_levels(levels))
             if media is not None and not isinstance(media, Exception):
                 self.media = media
+            quality = results.get("thaiwater_waterquality")
+            if quality is not None and not isinstance(quality, Exception):
+                self.water_quality = self._water_quality_rows(self.fresh_levels(quality))
+            storms = results.get("thaiwater_storms")
+            if storms is not None and not isinstance(storms, Exception):
+                self.storms = self._storm_rows(storms)
             gdacs = results.get("gdacs")
             if gdacs is not None and not isinstance(gdacs, Exception):
                 self.regional_events = self._regional_rows(gdacs)
@@ -260,22 +268,23 @@ class HazardService:
             "usgs_earthquakes": UsgsEarthquakes(days=7),
             "gdacs": GdacsEvents(),
             "gdacs_cyclones": GdacsCyclones(),
+            "thaiwater_storms": ThaiWaterStorms(),
         }
         async with httpx.AsyncClient(headers=USER_AGENT, follow_redirects=True) as client:
             results = await asyncio.gather(*(a.run(client) for a in adapters.values()), self._fetch_main_bundle(client),
                                            TmdWarnings().run_warnings(client), return_exceptions=True)
         out = dict(zip(adapters, results[:-2]))
         bundle = results[-2]
-        # thailand_main is ~12 MB; download it once for both the dams and the weather images.
-        out["thaiwater_dams"], out["thaiwater_media"] = (bundle, bundle) if isinstance(bundle, Exception) else bundle
+        # thailand_main is ~12 MB; download it once for the dams, the water-quality stations and the weather images.
+        out["thaiwater_dams"], out["thaiwater_waterquality"], out["thaiwater_media"] = (bundle,) * 3 if isinstance(bundle, Exception) else bundle
         return out, results[-1]
 
     @staticmethod
-    async def _fetch_main_bundle(client: httpx.AsyncClient) -> tuple[list, dict]:
+    async def _fetch_main_bundle(client: httpx.AsyncClient) -> tuple[list, list, dict]:
         adapter = ThaiWaterDams()
         fetched_at = datetime.now(timezone.utc)
         raw = await adapter.fetch(client)
-        return adapter.parse(raw, fetched_at), parse_media(raw, fetched_at)
+        return adapter.parse(raw, fetched_at), ThaiWaterWaterQuality().parse(raw, fetched_at), parse_media(raw, fetched_at)
 
     def _process(self, results: dict, warnings_result) -> tuple[dict[str, list[dict]], list[dict] | None, dict[str, dict]]:
         now = datetime.now(timezone.utc).isoformat()
@@ -894,6 +903,25 @@ class HazardService:
                  "province_code": f"TH{r.province_code}" if r.province_code else None,
                  "date": r.observed_at.date().isoformat() if r.observed_at else None, **r.extra} for r in records]
         return sorted(rows, key=lambda d: -(d["storage_percent"] or 0))
+
+    @staticmethod
+    def _water_quality_rows(records) -> list[dict]:
+        rows = [{"id": r.station_id, "salinity_gl": r.value, "lat": r.lat, "lon": r.lon,
+                 "province_code": f"TH{r.province_code}" if r.province_code else None,
+                 "time": r.observed_at.isoformat(), **r.extra} for r in records]
+        return sorted(rows, key=lambda d: -(d["salinity_gl"] or 0))
+
+    @staticmethod
+    def _storm_rows(records) -> list[dict]:
+        """One row per storm: its newest position and category, and the track (oldest first)."""
+        storms: dict[str, dict] = {}
+        for r in records:
+            storm = storms.setdefault(r.extra["name"], {"name": r.extra["name"], "track": []})
+            storm["track"].append({"time": r.observed_at.isoformat(), "lat": r.lat, "lon": r.lon, "wind_kt": r.value})
+            if r.extra["latest"]:
+                storm.update({"time": r.observed_at.isoformat(), "lat": r.lat, "lon": r.lon, "wind_kt": r.value,
+                              "wind_kmh": r.extra["wind_kmh"], "pressure_hpa": r.extra["pressure_hpa"], "category": r.extra["category"]})
+        return sorted(storms.values(), key=lambda s: -(s.get("wind_kt") or 0))
 
     @staticmethod
     def fresh_levels(records, now: datetime | None = None, max_age: timedelta = MAX_LEVEL_AGE) -> list:

@@ -209,6 +209,23 @@ async def dams() -> dict:
     return {"dams": svc.get_dams(), **meta(svc)}
 
 
+@app.get("/v1/water-quality")
+async def water_quality() -> dict:
+    """Automatic water-quality stations (PCD, MWA via ThaiWater) with a reading in the last 6 h, saltiest first.
+
+    `exceeds` holds the parameters past ThaiWater's own limits (salinity > 0.25 / 0.5 / 2 g/L, dissolved oxygen < 3 mg/L).
+    """
+    svc = await fresh_service()
+    return {"stations": svc.water_quality, "source": "คลังข้อมูลน้ำแห่งชาติ (สสน.): กรมควบคุมมลพิษ, การประปานครหลวง", **meta(svc)}
+
+
+@app.get("/v1/storms")
+async def storms() -> dict:
+    """Active tropical storms tracked by HII (ThaiWater), strongest first; empty when there is none. Times are UTC."""
+    svc = await fresh_service()
+    return {"storms": svc.storms, "source": "คลังข้อมูลน้ำแห่งชาติ (สสน.)", **meta(svc)}
+
+
 @app.get("/v1/dams/{dam_id}/history")
 async def dam_history(dam_id: str, series: Literal["storage", "released", "inflow"] = "storage") -> dict:
     """This year and last year day by day (million m³), with the dam's upper/lower rule curves."""
