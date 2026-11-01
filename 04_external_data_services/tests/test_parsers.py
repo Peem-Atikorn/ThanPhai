@@ -282,3 +282,30 @@ def test_gdacs_cyclone_wind_areas_and_track():
     assert [r.extra["forecast"] for r in track] == [False, False, True]  # issued 21/10 18:00 UTC; the last point is 26/10
     assert track[0].valid_time == datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
     assert 9 < track[0].lat < 10.5 and 160 < track[0].lon < 162  # centre of the small circle
+
+
+def test_thaiwater_water_quality_flags_come_from_the_payload_scale():
+    from external_data.adapters import ThaiWaterWaterQuality
+
+    records = ThaiWaterWaterQuality().parse(load_json("tw_thailand_main_waterquality.json"), NOW)
+    by_name = {r.extra["name_th"]: r for r in records}
+    assert len(records) == 42 and all(r.unit == "g/L" and r.observed_at.tzinfo == BANGKOK for r in records)
+    assert by_name["หนองหวาย"].value == 0.54 and by_name["หนองหวาย"].extra["exceeds"]["salinity"]["text"] == "> 0.5"
+    assert by_name["แก่งคอย"].extra["exceeds"]["salinity"]["text"] == "> 0.25"  # 0.30 g/L: the worst band it is in
+    assert "salinity" not in by_name["สำแล"].extra["exceeds"]  # 0.11 g/L at the MWA intake
+    assert by_name["ปราจีนบุรี"].extra["exceeds"]["do"]["text"] == "< 3"  # 0.76 mg/L
+    assert by_name["ราชบุรี"].extra["do_mgl"] is None and "do" not in by_name["ราชบุรี"].extra["exceeds"]  # 0 = sensor fault
+    assert by_name["สำแล"].extra["river_th"] == "คลองเชียงรากใหญ่" and by_name["สำแล"].province_code
+
+
+def test_thaiwater_storms_read_knots_and_category():
+    from external_data.adapters import ThaiWaterStorms
+
+    records = ThaiWaterStorms().parse(load_json("tw_storm_data.json"), NOW)
+    assert len(records) == 1
+    champi = records[0]
+    assert champi.extra["name"] == "CHAMPI" and champi.extra["latest"] and (champi.lat, champi.lon) == (21.2, 124.9)
+    assert champi.value == 100.0 and champi.unit == "kt" and champi.extra["wind_kmh"] == 185
+    assert champi.extra["category"]["category"] == "Cat 3"  # 96-113 kt
+    assert champi.observed_at == datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc)
+    assert ThaiWaterStorms().parse({"result": "OK", "data": [], "setting": []}, NOW) == []

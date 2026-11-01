@@ -385,3 +385,35 @@ def test_wave_point_missing_on_the_full_check_comes_back_on_the_next_one(client,
     asyncio.run(svc.refresh_waves())
     asyncio.run(svc.refresh_waves())
     assert asked[2:] == [486, 2] and shown() == [[101.0, 9.5], [101.5, 9.5]]  # the daily full check brings B back
+
+
+def test_water_quality_endpoint_keeps_fresh_stations_saltiest_first(client, monkeypatch):
+    import json as _json
+
+    from external_data.adapters import ThaiWaterWaterQuality
+
+    c, svc, _ = client
+    fixture = Path(__file__).resolve().parents[2] / "04_external_data_services" / "tests" / "fixtures" / "tw_thailand_main_waterquality.json"
+    records = ThaiWaterWaterQuality().parse(_json.loads(fixture.read_text(encoding="utf-8")), datetime.now(timezone.utc))
+    at = datetime(2026, 10, 23, 4, 30, tzinfo=timezone(timedelta(hours=7)))
+    monkeypatch.setattr(svc, "water_quality", svc._water_quality_rows(svc.fresh_levels(records, now=at)))
+    body = c.get("/v1/water-quality").json()
+    names = [s["name_th"] for s in body["stations"]]
+    assert len(names) == 41 and "อยุธยา" not in names  # its reading (22:00) is older than 6 h
+    first = body["stations"][0]
+    assert first["name_th"] == "หนองหวาย" and first["salinity_gl"] == 0.54 and first["exceeds"]["salinity"]["text"] == "> 0.5"
+    assert first["province_code"].startswith("TH") and "สสน." in body["source"]
+
+
+def test_storms_endpoint_one_row_per_storm_with_track(client, monkeypatch):
+    import json as _json
+
+    from external_data.adapters import ThaiWaterStorms
+
+    c, svc, _ = client
+    fixture = Path(__file__).resolve().parents[2] / "04_external_data_services" / "tests" / "fixtures" / "tw_storm_data.json"
+    records = ThaiWaterStorms().parse(_json.loads(fixture.read_text(encoding="utf-8")), datetime.now(timezone.utc))
+    monkeypatch.setattr(svc, "storms", svc._storm_rows(records))
+    storm = c.get("/v1/storms").json()["storms"][0]
+    assert storm["name"] == "CHAMPI" and storm["wind_kmh"] == 185 and storm["category"]["category"] == "Cat 3"
+    assert storm["time"] == "2026-10-22T12:00:00+00:00" and len(storm["track"]) == 1

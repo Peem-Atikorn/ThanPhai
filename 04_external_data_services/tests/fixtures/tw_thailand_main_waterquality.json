@@ -1,0 +1,3135 @@
+{
+ "waterquality": {
+  "data": {
+   "result": "OK",
+   "data": [
+    {
+     "id": 109243507,
+     "waterquality_id": 5,
+     "waterquality_datetime": "2026-10-23 03:10",
+     "waterquality_do": 3.41,
+     "waterquality_ph": 10.84,
+     "waterquality_temp": 32.1,
+     "waterquality_turbid": 145.19,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "",
+     "waterquality_salinity": 0.13,
+     "waterquality_conductivity": 0,
+     "waterquality_tds": 176,
+     "waterquality_chlorophyll": 0.06,
+     "waterquality_station": {
+      "id": 5,
+      "agency_id": 23,
+      "agency_name": {
+       "th": "การประปานครหลวง",
+       "en": "Metropolitan Waterworks Authority",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "กปน.",
+       "en": "MWA",
+       "jp": ""
+      },
+      "geocode_id": 277,
+      "waterquality_station_name": {
+       "th": "สะพานพระนั่งเกล้า",
+       "en": "Phra Nang Klao Bridge",
+       "jp": "プラナンカラオ橋"
+      },
+      "waterquality_station_lat": 13.862707,
+      "waterquality_station_long": 100.475875,
+      "waterquality_station_oldcode": "T4",
+      "is_active": "Y",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "นนทบุรี",
+       "en": "Nonthaburi"
+      },
+      "amphoe_name": {
+       "th": "เมืองนนทบุรี",
+       "en": "Mueang Nonthaburi District"
+      },
+      "tumbon_name": {
+       "th": "ไทรม้า",
+       "en": "Sai Ma"
+      },
+      "province_code": "12",
+      "river_id": 186259,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243474,
+     "waterquality_id": 178,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 0.76,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.13,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.18,
+     "waterquality_conductivity": 398.935,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 178,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 1490,
+      "waterquality_station_name": {
+       "th": "ปราจีนบุรี",
+       "en": "Prachin Buri",
+       "jp": "パッチンブリ"
+      },
+      "waterquality_station_lat": 14.03135,
+      "waterquality_station_long": 101.42698,
+      "waterquality_station_oldcode": "221",
+      "sub_basin_id": 281,
+      "province_name": {
+       "th": "ปราจีนบุรี",
+       "en": "Prachin Buri"
+      },
+      "amphoe_name": {
+       "th": "เมืองปราจีนบุรี",
+       "en": "Mueang Prachin Buri District"
+      },
+      "tumbon_name": {
+       "th": "บางบริบูรณ์",
+       "en": "Bang Boribun"
+      },
+      "province_code": "25",
+      "river_id": 194829,
+      "river_name": "แม่น้ำบางปะกง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 16,
+      "basin_code": 15,
+      "basin_name": {
+       "th": "ลุ่มน้ำบางปะกง",
+       "en": "Bang Pakong Basin"
+      }
+     }
+    },
+    {
+     "id": 109243482,
+     "waterquality_id": 195,
+     "waterquality_datetime": "2026-10-23 03:00",
+     "waterquality_do": 6.169,
+     "waterquality_ph": null,
+     "waterquality_temp": 23.488,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 195,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 7296,
+      "waterquality_station_name": {
+       "th": "ปากพนัง",
+       "en": "Pak Phanang",
+       "jp": "パックパナン"
+      },
+      "waterquality_station_lat": 8.219463,
+      "waterquality_station_long": 100.20083,
+      "waterquality_station_oldcode": "230",
+      "sub_basin_id": 327,
+      "province_name": {
+       "th": "นครศรีธรรมราช",
+       "en": "Nakhon Si Thammarat"
+      },
+      "amphoe_name": {
+       "th": "ปากพนัง",
+       "en": "Pak Phanang District"
+      },
+      "tumbon_name": {
+       "th": "ปากแพรก",
+       "en": "Pak Phraek"
+      },
+      "province_code": "80",
+      "river_id": 221777,
+      "river_name": "คลองหัวไทร"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 22,
+      "basin_code": 19,
+      "basin_name": {
+       "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนบน",
+       "en": "Peninsula - Upper East Coast Basin"
+      }
+     }
+    },
+    {
+     "id": 109243451,
+     "waterquality_id": 140,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 6.833,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.78,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.22,
+     "waterquality_conductivity": 502.058,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 140,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 651,
+      "waterquality_station_name": {
+       "th": "ป่าโมก",
+       "en": "Pa Mok",
+       "jp": "パモク"
+      },
+      "waterquality_station_lat": 14.45025,
+      "waterquality_station_long": 100.46032,
+      "waterquality_station_oldcode": "111",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "อ่างทอง",
+       "en": "Ang Thong"
+      },
+      "amphoe_name": {
+       "th": "ป่าโมก",
+       "en": "Pa Mok District"
+      },
+      "tumbon_name": {
+       "th": "บางเสด็จ",
+       "en": "Bang Sadet"
+      },
+      "province_code": "15",
+      "river_id": 181921,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243456,
+     "waterquality_id": 161,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 5.502,
+     "waterquality_ph": null,
+     "waterquality_temp": 30.176,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 161,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 6892,
+      "waterquality_station_name": {
+       "th": "บางเลน",
+       "en": "Bang Len",
+       "jp": "バンレン"
+      },
+      "waterquality_station_lat": 13.99864,
+      "waterquality_station_long": 100.18127,
+      "waterquality_station_oldcode": "116",
+      "sub_basin_id": 259,
+      "province_name": {
+       "th": "นครปฐม",
+       "en": "Nakhon Pathom"
+      },
+      "amphoe_name": {
+       "th": "บางเลน",
+       "en": "Bang Len District"
+      },
+      "tumbon_name": {
+       "th": "บางเลน",
+       "en": "Bang Len"
+      },
+      "province_code": "73",
+      "river_id": 185555,
+      "river_name": "แม่น้ำท่าจีน"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 14,
+      "basin_code": 13,
+      "basin_name": {
+       "th": "ลุ่มน้ำท่าจีน",
+       "en": "Tha Chin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243457,
+     "waterquality_id": 162,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 2.35,
+     "waterquality_ph": null,
+     "waterquality_temp": 31.123,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.17,
+     "waterquality_conductivity": 392.386,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 162,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 6951,
+      "waterquality_station_name": {
+       "th": "กระทุ่มแบน",
+       "en": "Krathum Ban",
+       "jp": "クラトゥムバン"
+      },
+      "waterquality_station_lat": 13.66606,
+      "waterquality_station_long": 100.26816,
+      "waterquality_station_oldcode": "117",
+      "sub_basin_id": 259,
+      "province_name": {
+       "th": "สมุทรสาคร",
+       "en": "Samut Sakhon"
+      },
+      "amphoe_name": {
+       "th": "กระทุ่มแบน",
+       "en": "Krathum Baen District"
+      },
+      "tumbon_name": {
+       "th": "ท่าไม้",
+       "en": "Tha Mai"
+      },
+      "province_code": "74",
+      "river_id": 188344,
+      "river_name": "แม่น้ำท่าจีน"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 14,
+      "basin_code": 13,
+      "basin_name": {
+       "th": "ลุ่มน้ำท่าจีน",
+       "en": "Tha Chin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243459,
+     "waterquality_id": 163,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 4,
+     "waterquality_ph": null,
+     "waterquality_temp": 30.867,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.22,
+     "waterquality_conductivity": 509.402,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 163,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 6858,
+      "waterquality_station_name": {
+       "th": "นครชัยศรี",
+       "en": "Nakhon Chai Si",
+       "jp": "ナコンチャイシー"
+      },
+      "waterquality_station_lat": 13.80085,
+      "waterquality_station_long": 100.188016,
+      "waterquality_station_oldcode": "121",
+      "sub_basin_id": 259,
+      "province_name": {
+       "th": "นครปฐม",
+       "en": "Nakhon Pathom"
+      },
+      "amphoe_name": {
+       "th": "นครชัยศรี",
+       "en": "Nakhon Chai Si District"
+      },
+      "tumbon_name": {
+       "th": "นครชัยศรี",
+       "en": "Nakhon Chai Si"
+      },
+      "province_code": "73",
+      "river_id": 186788,
+      "river_name": "แม่น้ำท่าจีน"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 14,
+      "basin_code": 13,
+      "basin_name": {
+       "th": "ลุ่มน้ำท่าจีน",
+       "en": "Tha Chin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243491,
+     "waterquality_id": 169,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 7.643,
+     "waterquality_ph": null,
+     "waterquality_temp": 23.176,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 169,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 6631,
+      "waterquality_station_name": {
+       "th": "ท่ามะกา",
+       "en": "Tha Maka",
+       "jp": "ターマカ"
+      },
+      "waterquality_station_lat": 13.906916,
+      "waterquality_station_long": 99.762414,
+      "waterquality_station_oldcode": "242",
+      "sub_basin_id": 276,
+      "province_name": {
+       "th": "กาญจนบุรี",
+       "en": "Kanchanaburi"
+      },
+      "amphoe_name": {
+       "th": "ท่ามะกา",
+       "en": "Tha Maka District"
+      },
+      "tumbon_name": {
+       "th": "หวายเหนียว",
+       "en": "Wai Niao"
+      },
+      "province_code": "71",
+      "river_id": 186159,
+      "river_name": "แม่น้ำแม่กลอง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 15,
+      "basin_code": 14,
+      "basin_name": {
+       "th": "ลุ่มน้ำแม่กลอง",
+       "en": "Mae Klong Basin"
+      }
+     }
+    },
+    {
+     "id": 109243492,
+     "waterquality_id": 170,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 0,
+     "waterquality_ph": null,
+     "waterquality_temp": 0,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 170,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 6485,
+      "waterquality_station_name": {
+       "th": "ราชบุรี",
+       "en": "Ratchaburi",
+       "jp": "ラッチャブリ"
+      },
+      "waterquality_station_lat": 13.559421,
+      "waterquality_station_long": 99.817052,
+      "waterquality_station_oldcode": "243",
+      "sub_basin_id": 276,
+      "province_name": {
+       "th": "ราชบุรี",
+       "en": "Ratchaburi"
+      },
+      "amphoe_name": {
+       "th": "เมืองราชบุรี",
+       "en": "Mueang Ratchaburi District"
+      },
+      "tumbon_name": {
+       "th": "หลุมดิน",
+       "en": "Lum Din"
+      },
+      "province_code": "70",
+      "river_id": 189968,
+      "river_name": "แม่น้ำแม่กลอง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 15,
+      "basin_code": 14,
+      "basin_name": {
+       "th": "ลุ่มน้ำแม่กลอง",
+       "en": "Mae Klong Basin"
+      }
+     }
+    },
+    {
+     "id": 109243446,
+     "waterquality_id": 175,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 0,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.082,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": null,
+     "waterquality_conductivity": 353.69,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 175,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 1525,
+      "waterquality_station_name": {
+       "th": "บางแตน",
+       "en": "Bang Tan",
+       "jp": "バンタン"
+      },
+      "waterquality_station_lat": 13.901744,
+      "waterquality_station_long": 101.167043,
+      "waterquality_station_oldcode": "105",
+      "sub_basin_id": 281,
+      "province_name": {
+       "th": "ปราจีนบุรี",
+       "en": "Prachin Buri"
+      },
+      "amphoe_name": {
+       "th": "บ้านสร้าง",
+       "en": "Ban Sang District"
+      },
+      "tumbon_name": {
+       "th": "บางแตน",
+       "en": "Bang Taen"
+      },
+      "province_code": "25",
+      "river_id": 195657,
+      "river_name": "แม่น้ำบางปะกง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 16,
+      "basin_code": 15,
+      "basin_name": {
+       "th": "ลุ่มน้ำบางปะกง",
+       "en": "Bang Pakong Basin"
+      }
+     }
+    },
+    {
+     "id": 109243452,
+     "waterquality_id": 141,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 4.845,
+     "waterquality_ph": null,
+     "waterquality_temp": 27.598,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.13,
+     "waterquality_conductivity": 281.062,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 141,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 460,
+      "waterquality_station_name": {
+       "th": "บางไทร",
+       "en": "Bang Sai",
+       "jp": "バンサイ"
+      },
+      "waterquality_station_lat": 14.20043,
+      "waterquality_station_long": 100.51236,
+      "waterquality_station_oldcode": "112",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "พระนครศรีอยุธยา",
+       "en": "Phra Nakhon Si Ayutthaya"
+      },
+      "amphoe_name": {
+       "th": "บางไทร",
+       "en": "Bang Sai District"
+      },
+      "tumbon_name": {
+       "th": "ราชคราม",
+       "en": "Ratchakhram"
+      },
+      "province_code": "14",
+      "river_id": 184154,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243458,
+     "waterquality_id": 143,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": null,
+     "waterquality_ph": 10.003,
+     "waterquality_temp": 31.648,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 143,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 144,
+      "waterquality_station_name": {
+       "th": "ดาวคะนอง",
+       "en": "Dao Khanong",
+       "jp": "ダーオカノン"
+      },
+      "waterquality_station_lat": 13.699,
+      "waterquality_station_long": 100.493,
+      "waterquality_station_oldcode": "118",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "กรุงเทพมหานคร",
+       "en": "Bangkok"
+      },
+      "amphoe_name": {
+       "th": "บางคอแหลม",
+       "en": "Bang Kho Laem District"
+      },
+      "tumbon_name": {
+       "th": "บางคอแหลม",
+       "en": "Bang Kho Laem"
+      },
+      "province_code": "10",
+      "river_id": 187850,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243488,
+     "waterquality_id": 151,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 2.952,
+     "waterquality_ph": null,
+     "waterquality_temp": 31.862,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 151,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 662,
+      "waterquality_station_name": {
+       "th": "โพธิ์ทอง",
+       "en": "Pho Thong",
+       "jp": "ポートトン"
+      },
+      "waterquality_station_lat": 14.621826,
+      "waterquality_station_long": 100.366077,
+      "waterquality_station_oldcode": "239",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "อ่างทอง",
+       "en": "Ang Thong"
+      },
+      "amphoe_name": {
+       "th": "โพธิ์ทอง",
+       "en": "Pho Thong District"
+      },
+      "tumbon_name": {
+       "th": "โพธิ์รังนก",
+       "en": "Pho Rang Nok"
+      },
+      "province_code": "15",
+      "river_id": 180515,
+      "river_name": "แม่น้ำน้อย"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243465,
+     "waterquality_id": 154,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 2.574,
+     "waterquality_ph": null,
+     "waterquality_temp": 26.857,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 154,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 1048,
+      "waterquality_station_name": {
+       "th": "เสาไห้",
+       "en": "Sao Hai",
+       "jp": "サオハイ"
+      },
+      "waterquality_station_lat": 14.556842,
+      "waterquality_station_long": 100.855329,
+      "waterquality_station_oldcode": "140",
+      "sub_basin_id": 257,
+      "province_name": {
+       "th": "สระบุรี",
+       "en": "Saraburi"
+      },
+      "amphoe_name": {
+       "th": "เสาไห้",
+       "en": "Sao Hai District"
+      },
+      "tumbon_name": {
+       "th": "ศาลารีไทย",
+       "en": "Sala Ri Thai"
+      },
+      "province_code": "19",
+      "river_id": 180949,
+      "river_name": "แม่น้ำป่าสัก"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 13,
+      "basin_code": 12,
+      "basin_name": {
+       "th": "ลุ่มน้ำป่าสัก",
+       "en": "Pasak Basin"
+      }
+     }
+    },
+    {
+     "id": 109243467,
+     "waterquality_id": 155,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 3.65,
+     "waterquality_ph": null,
+     "waterquality_temp": 27.33,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.3,
+     "waterquality_conductivity": 637.673,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 155,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 965,
+      "waterquality_station_name": {
+       "th": "แก่งคอย",
+       "en": "Kaeng Khoi",
+       "jp": "カエンコイ"
+      },
+      "waterquality_station_lat": 14.580956,
+      "waterquality_station_long": 100.966485,
+      "waterquality_station_oldcode": "142",
+      "sub_basin_id": 257,
+      "province_name": {
+       "th": "สระบุรี",
+       "en": "Saraburi"
+      },
+      "amphoe_name": {
+       "th": "แก่งคอย",
+       "en": "Kaeng Khoi District"
+      },
+      "tumbon_name": {
+       "th": "ตาลเดี่ยว",
+       "en": "Tan Diao"
+      },
+      "province_code": "19",
+      "river_id": 180849,
+      "river_name": "แม่น้ำป่าสัก"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 13,
+      "basin_code": 12,
+      "basin_name": {
+       "th": "ลุ่มน้ำป่าสัก",
+       "en": "Pasak Basin"
+      }
+     }
+    },
+    {
+     "id": 109243493,
+     "waterquality_id": 157,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 2.901,
+     "waterquality_ph": null,
+     "waterquality_temp": 30.002,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 157,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 429,
+      "waterquality_station_name": {
+       "th": "นครหลวง",
+       "en": "Nakhon Luang",
+       "jp": "ナコーンルワン"
+      },
+      "waterquality_station_lat": 14.468578,
+      "waterquality_station_long": 100.611085,
+      "waterquality_station_oldcode": "244",
+      "sub_basin_id": 257,
+      "province_name": {
+       "th": "พระนครศรีอยุธยา",
+       "en": "Phra Nakhon Si Ayutthaya"
+      },
+      "amphoe_name": {
+       "th": "นครหลวง",
+       "en": "Nakhon Luang District"
+      },
+      "tumbon_name": {
+       "th": "นครหลวง",
+       "en": "Nakhon Luang"
+      },
+      "province_code": "14",
+      "river_id": 181646,
+      "river_name": "แม่น้ำป่าสัก"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 13,
+      "basin_code": 12,
+      "basin_name": {
+       "th": "ลุ่มน้ำป่าสัก",
+       "en": "Pasak Basin"
+      }
+     }
+    },
+    {
+     "id": 109243454,
+     "waterquality_id": 159,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 2.36,
+     "waterquality_ph": null,
+     "waterquality_temp": 31.543,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 159,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 932,
+      "waterquality_station_name": {
+       "th": "หันคา",
+       "en": "Han Ka",
+       "jp": "ハンカ"
+      },
+      "waterquality_station_lat": 14.98559,
+      "waterquality_station_long": 100.01209,
+      "waterquality_station_oldcode": "114",
+      "sub_basin_id": 259,
+      "province_name": {
+       "th": "ชัยนาท",
+       "en": "Chai Nat"
+      },
+      "amphoe_name": {
+       "th": "หันคา",
+       "en": "Hankha District"
+      },
+      "tumbon_name": {
+       "th": "หันคา",
+       "en": "Han Kha"
+      },
+      "province_code": "18",
+      "river_id": 177271,
+      "river_name": "แม่น้ำท่าจีน"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 14,
+      "basin_code": 13,
+      "basin_name": {
+       "th": "ลุ่มน้ำท่าจีน",
+       "en": "Tha Chin Basin"
+      }
+     }
+    },
+    {
+     "id": 109242841,
+     "waterquality_id": 147,
+     "waterquality_datetime": "2026-10-22 22:00",
+     "waterquality_do": 3.169,
+     "waterquality_ph": null,
+     "waterquality_temp": 28.529,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.03,
+     "waterquality_conductivity": 40.45,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 147,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 415,
+      "waterquality_station_name": {
+       "th": "อยุธยา",
+       "en": "Ayutthaya",
+       "jp": "アユタヤ"
+      },
+      "waterquality_station_lat": 14.366783,
+      "waterquality_station_long": 100.531193,
+      "waterquality_station_oldcode": "222",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "พระนครศรีอยุธยา",
+       "en": "Phra Nakhon Si Ayutthaya"
+      },
+      "amphoe_name": {
+       "th": "พระนครศรีอยุธยา",
+       "en": "Phra Nakhon Si Ayutthaya District"
+      },
+      "tumbon_name": {
+       "th": "บ้านป้อม",
+       "en": "Ban Pom"
+      },
+      "province_code": "14",
+      "river_id": 182479,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243461,
+     "waterquality_id": 196,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 5.001,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.157,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.24,
+     "waterquality_conductivity": 537.24,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 196,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 7508,
+      "waterquality_station_name": {
+       "th": "สุราษฎร์ธานี",
+       "en": "Surat Thani",
+       "jp": "スラートターニー"
+      },
+      "waterquality_station_lat": 9.144368,
+      "waterquality_station_long": 99.323245,
+      "waterquality_station_oldcode": "124",
+      "sub_basin_id": 324,
+      "province_name": {
+       "th": "สุราษฎร์ธานี",
+       "en": "Surat Thani"
+      },
+      "amphoe_name": {
+       "th": "เมืองสุราษฎร์ธานี",
+       "en": "Mueang Surat Thani District"
+      },
+      "tumbon_name": {
+       "th": "ตลาด",
+       "en": "Talat"
+      },
+      "province_code": "84",
+      "river_id": 216042,
+      "river_name": "แม่น้ำตาปี"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 22,
+      "basin_code": 19,
+      "basin_name": {
+       "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนบน",
+       "en": "Peninsula - Upper East Coast Basin"
+      }
+     }
+    },
+    {
+     "id": 109243505,
+     "waterquality_id": 3,
+     "waterquality_datetime": "2026-10-23 03:10",
+     "waterquality_do": 0,
+     "waterquality_ph": 0,
+     "waterquality_temp": 30.79,
+     "waterquality_turbid": 0,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "",
+     "waterquality_salinity": 0.13,
+     "waterquality_conductivity": 274,
+     "waterquality_tds": 178,
+     "waterquality_chlorophyll": -9999,
+     "waterquality_station": {
+      "id": 3,
+      "agency_id": 23,
+      "agency_name": {
+       "th": "การประปานครหลวง",
+       "en": "Metropolitan Waterworks Authority",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "กปน.",
+       "en": "MWA",
+       "jp": ""
+      },
+      "geocode_id": 218,
+      "waterquality_station_name": {
+       "th": "โรงไฟฟ้าพระนครใต้",
+       "en": "Phranakhon Power Plant South",
+       "jp": "プラナコン発電所南"
+      },
+      "waterquality_station_lat": 13.615763,
+      "waterquality_station_long": 100.55948,
+      "waterquality_station_oldcode": "T2",
+      "is_active": "Y",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "สมุทรปราการ",
+       "en": "Samut Prakan"
+      },
+      "amphoe_name": {
+       "th": "เมืองสมุทรปราการ",
+       "en": "Mueang Samut Prakan District"
+      },
+      "tumbon_name": {
+       "th": "บางโปรง",
+       "en": "Bang Prong"
+      },
+      "province_code": "11",
+      "river_id": 188926,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243473,
+     "waterquality_id": 135,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 9.079,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.502,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 135,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 5097,
+      "waterquality_station_name": {
+       "th": "อุตรดิตถ์",
+       "en": "Uttaradit",
+       "jp": "ウッタラディット"
+      },
+      "waterquality_station_lat": 17.6087,
+      "waterquality_station_long": 100.0992,
+      "waterquality_station_oldcode": "220",
+      "sub_basin_id": 230,
+      "province_name": {
+       "th": "อุตรดิตถ์",
+       "en": "Uttaradit"
+      },
+      "amphoe_name": {
+       "th": "เมืองอุตรดิตถ์",
+       "en": "Mueang Uttaradit District"
+      },
+      "tumbon_name": {
+       "th": "บ้านเกาะ",
+       "en": "Ban Ko"
+      },
+      "province_code": "53",
+      "river_id": 80088,
+      "river_name": "แม่น้ำน่าน"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 9,
+      "basin_code": 9,
+      "basin_name": {
+       "th": "ลุ่มน้ำน่าน",
+       "en": "Nan Basin"
+      }
+     }
+    },
+    {
+     "id": 109243444,
+     "waterquality_id": 104,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 8.208,
+     "waterquality_ph": null,
+     "waterquality_temp": 24.813,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": 0,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 104,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 3301,
+      "waterquality_station_name": {
+       "th": "ปากบึงโจด",
+       "en": "Pak Bung Chod",
+       "jp": "パークブンチョット"
+      },
+      "waterquality_station_lat": 16.72779,
+      "waterquality_station_long": 102.75119,
+      "waterquality_station_oldcode": "103",
+      "sub_basin_id": 93,
+      "province_name": {
+       "th": "ขอนแก่น",
+       "en": "Khon Kaen"
+      },
+      "amphoe_name": {
+       "th": "อุบลรัตน์",
+       "en": "Ubolratana District"
+      },
+      "tumbon_name": {
+       "th": "โคกสูง",
+       "en": "Khok Sung"
+      },
+      "province_code": "40",
+      "river_id": 127840,
+      "river_name": "ลำน้ำพอง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 4,
+      "basin_code": 4,
+      "basin_name": {
+       "th": "ลุ่มน้ำชี",
+       "en": "Chi Basin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243472,
+     "waterquality_id": 134,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 7.356,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.038,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.1,
+     "waterquality_conductivity": 228.52,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 134,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 5260,
+      "waterquality_station_name": {
+       "th": "น่าน",
+       "en": "Nan",
+       "jp": "ナーン"
+      },
+      "waterquality_station_lat": 18.76681,
+      "waterquality_station_long": 100.772752,
+      "waterquality_station_oldcode": "217",
+      "sub_basin_id": 220,
+      "province_name": {
+       "th": "น่าน",
+       "en": "Nan"
+      },
+      "amphoe_name": {
+       "th": "เมืองน่าน",
+       "en": "Mueang Nan District"
+      },
+      "tumbon_name": {
+       "th": "ในเวียง",
+       "en": "Nai Wiang"
+      },
+      "province_code": "55",
+      "river_id": 39543,
+      "river_name": "แม่น้ำน่าน"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 9,
+      "basin_code": 9,
+      "basin_name": {
+       "th": "ลุ่มน้ำน่าน",
+       "en": "Nan Basin"
+      }
+     }
+    },
+    {
+     "id": 109243449,
+     "waterquality_id": 138,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 7.668,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.638,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 138,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 889,
+      "waterquality_station_name": {
+       "th": "ชัยนาท",
+       "en": "Chai Nat",
+       "jp": "チャイナット"
+      },
+      "waterquality_station_lat": 15.17293,
+      "waterquality_station_long": 100.12699,
+      "waterquality_station_oldcode": "109",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "ชัยนาท",
+       "en": "Chai Nat"
+      },
+      "amphoe_name": {
+       "th": "เมืองชัยนาท",
+       "en": "Mueang Chai Nat District"
+      },
+      "tumbon_name": {
+       "th": "ในเมือง",
+       "en": "Nai Mueang"
+      },
+      "province_code": "18",
+      "river_id": 175361,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243455,
+     "waterquality_id": 160,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 8.99,
+     "waterquality_ph": null,
+     "waterquality_temp": 28.685,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 160,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 6773,
+      "waterquality_station_name": {
+       "th": "สองพี่น้อง",
+       "en": "Song Phi Nong",
+       "jp": "ソンピーノン"
+      },
+      "waterquality_station_lat": 14.171382,
+      "waterquality_station_long": 100.115761,
+      "waterquality_station_oldcode": "115",
+      "sub_basin_id": 259,
+      "province_name": {
+       "th": "สุพรรณบุรี",
+       "en": "Suphan Buri"
+      },
+      "amphoe_name": {
+       "th": "สองพี่น้อง",
+       "en": "Song Phi Nong District"
+      },
+      "tumbon_name": {
+       "th": "บางตะเคียน",
+       "en": "Bang Takhian"
+      },
+      "province_code": "72",
+      "river_id": 184162,
+      "river_name": "แม่น้ำสุพรรณ"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 14,
+      "basin_code": 13,
+      "basin_name": {
+       "th": "ลุ่มน้ำท่าจีน",
+       "en": "Tha Chin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243479,
+     "waterquality_id": 118,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 6.433,
+     "waterquality_ph": null,
+     "waterquality_temp": 27.118,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": 0,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 118,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 2504,
+      "waterquality_station_name": {
+       "th": "ราษีไศล",
+       "en": "Rasi Sal",
+       "jp": "ラシーサーイ"
+      },
+      "waterquality_station_lat": 15.33611,
+      "waterquality_station_long": 104.15947,
+      "waterquality_station_oldcode": "227",
+      "sub_basin_id": 136,
+      "province_name": {
+       "th": "ศรีสะเกษ",
+       "en": "Si Sa Ket"
+      },
+      "amphoe_name": {
+       "th": "ราษีไศล",
+       "en": "Rasi Salai District"
+      },
+      "tumbon_name": {
+       "th": "เมืองคง",
+       "en": "Mueang Khong"
+      },
+      "province_code": "33",
+      "river_id": 145701,
+      "river_name": "แม่น้ำมูล"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 5,
+      "basin_code": 5,
+      "basin_name": {
+       "th": "ลุ่มน้ำมูล",
+       "en": "Mun Basin"
+      }
+     }
+    },
+    {
+     "id": 109243495,
+     "waterquality_id": 120,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 8.095,
+     "waterquality_ph": null,
+     "waterquality_temp": 23.146,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": 0.005,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 120,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 2249,
+      "waterquality_station_name": {
+       "th": "ท่าตูม(สุรินทร์)",
+       "en": "Tha Tum (Surin)",
+       "jp": "タータム（スリン）"
+      },
+      "waterquality_station_lat": 15.326672,
+      "waterquality_station_long": 103.678898,
+      "waterquality_station_oldcode": "246",
+      "sub_basin_id": 126,
+      "province_name": {
+       "th": "สุรินทร์",
+       "en": "Surin"
+      },
+      "amphoe_name": {
+       "th": "ท่าตูม",
+       "en": "Tha Tum District"
+      },
+      "tumbon_name": {
+       "th": "ทุ่งกุลา",
+       "en": "Thung Kula"
+      },
+      "province_code": "32",
+      "river_id": 145722,
+      "river_name": "แม่น้ำมูล"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 5,
+      "basin_code": 5,
+      "basin_name": {
+       "th": "ลุ่มน้ำมูล",
+       "en": "Mun Basin"
+      }
+     }
+    },
+    {
+     "id": 109243470,
+     "waterquality_id": 126,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 6.591,
+     "waterquality_ph": null,
+     "waterquality_temp": 25.593,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 126,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 4701,
+      "waterquality_station_name": {
+       "th": "เชียงใหม่",
+       "en": "Chiang Mai",
+       "jp": "チェンマイ"
+      },
+      "waterquality_station_lat": 18.741254,
+      "waterquality_station_long": 98.983611,
+      "waterquality_station_oldcode": "215",
+      "sub_basin_id": 162,
+      "province_name": {
+       "th": "เชียงใหม่",
+       "en": "Chiang Mai"
+      },
+      "amphoe_name": {
+       "th": "เมืองเชียงใหม่",
+       "en": "Mueang Chiang Mai District"
+      },
+      "tumbon_name": {
+       "th": "ป่าแดด",
+       "en": "Pa Daet"
+      },
+      "province_code": "50",
+      "river_id": 41774,
+      "river_name": "แม่น้ำปิง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 6,
+      "basin_code": 6,
+      "basin_name": {
+       "th": "ลุ่มน้ำปิง",
+       "en": "Ping Basin"
+      }
+     }
+    },
+    {
+     "id": 109243502,
+     "waterquality_id": 202,
+     "waterquality_datetime": "2026-10-23 03:10",
+     "waterquality_do": 2.79,
+     "waterquality_ph": 6.7,
+     "waterquality_temp": 31.56,
+     "waterquality_turbid": 49.34,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "",
+     "waterquality_salinity": 0.11,
+     "waterquality_conductivity": 0,
+     "waterquality_tds": 152.3,
+     "waterquality_chlorophyll": 3.85,
+     "waterquality_station": {
+      "id": 202,
+      "agency_id": 23,
+      "agency_name": {
+       "th": "การประปานครหลวง",
+       "en": "Metropolitan Waterworks Authority",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "กปน.",
+       "en": "MWA",
+       "jp": ""
+      },
+      "geocode_id": 332,
+      "waterquality_station_name": {
+       "th": "สำแล",
+       "en": "Sam Lai",
+       "jp": "サムライ"
+      },
+      "waterquality_station_lat": 14.040831,
+      "waterquality_station_long": 100.555875,
+      "waterquality_station_oldcode": "S1",
+      "is_active": "Y",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "ปทุมธานี",
+       "en": "Pathum Thani"
+      },
+      "amphoe_name": {
+       "th": "เมืองปทุมธานี",
+       "en": "Mueang Pathum Thani District"
+      },
+      "tumbon_name": {
+       "th": "บ้านกระแชง",
+       "en": "Ban Krachaeng"
+      },
+      "province_code": "13",
+      "river_id": 185040,
+      "river_name": "คลองเชียงรากใหญ่"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243490,
+     "waterquality_id": 165,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 2.5,
+     "waterquality_ph": 2.5,
+     "waterquality_temp": 31.905,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.18,
+     "waterquality_conductivity": 432.186,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 165,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 6703,
+      "waterquality_station_name": {
+       "th": "สุพรรณบุรี",
+       "en": "Suphan Buri",
+       "jp": "スパンブリ"
+      },
+      "waterquality_station_lat": 14.499154,
+      "waterquality_station_long": 100.125045,
+      "waterquality_station_oldcode": "241",
+      "sub_basin_id": 259,
+      "province_name": {
+       "th": "สุพรรณบุรี",
+       "en": "Suphan Buri"
+      },
+      "amphoe_name": {
+       "th": "เมืองสุพรรณบุรี",
+       "en": "Mueang Suphan Buri District"
+      },
+      "tumbon_name": {
+       "th": "พิหารแดง",
+       "en": "Phihan Daeng"
+      },
+      "province_code": "72",
+      "river_id": 181352,
+      "river_name": "แม่น้ำสุพรรณ"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 14,
+      "basin_code": 13,
+      "basin_name": {
+       "th": "ลุ่มน้ำท่าจีน",
+       "en": "Tha Chin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243483,
+     "waterquality_id": 188,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": null,
+     "waterquality_ph": 6.645,
+     "waterquality_temp": 29,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.09,
+     "waterquality_conductivity": 205.132,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 188,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 1180,
+      "waterquality_station_name": {
+       "th": "ระยอง",
+       "en": "Rayong",
+       "jp": "ラヨーン"
+      },
+      "waterquality_station_lat": 12.678212,
+      "waterquality_station_long": 101.274044,
+      "waterquality_station_oldcode": "232",
+      "sub_basin_id": 291,
+      "province_name": {
+       "th": "ระยอง",
+       "en": "Rayong"
+      },
+      "amphoe_name": {
+       "th": "เมืองระยอง",
+       "en": "Mueang Rayong District"
+      },
+      "tumbon_name": {
+       "th": "ท่าประดู่",
+       "en": "Tha Pradu"
+      },
+      "province_code": "21",
+      "river_id": 204691,
+      "river_name": "คลองคา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 18,
+      "basin_code": 17,
+      "basin_name": {
+       "th": "ลุ่มน้ำชายฝั่งทะเลตะวันออก",
+       "en": "East Coast Gulf Basin"
+      }
+     }
+    },
+    {
+     "id": 109243481,
+     "waterquality_id": 194,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 7.498,
+     "waterquality_ph": null,
+     "waterquality_temp": 26.866,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.02,
+     "waterquality_conductivity": 38.085,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 194,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 7733,
+      "waterquality_station_name": {
+       "th": "หลังสวน",
+       "en": "Lang Suan",
+       "jp": "ランスアン"
+      },
+      "waterquality_station_lat": 9.952968,
+      "waterquality_station_long": 99.064461,
+      "waterquality_station_oldcode": "229",
+      "sub_basin_id": 312,
+      "province_name": {
+       "th": "ชุมพร",
+       "en": "Chumphon"
+      },
+      "amphoe_name": {
+       "th": "หลังสวน",
+       "en": "Lang Suan District"
+      },
+      "tumbon_name": {
+       "th": "ขันเงิน",
+       "en": "Khan Ngoen"
+      },
+      "province_code": "86",
+      "river_id": 214154,
+      "river_name": "คลองหลังสวน"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 22,
+      "basin_code": 19,
+      "basin_name": {
+       "th": "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนบน",
+       "en": "Peninsula - Upper East Coast Basin"
+      }
+     }
+    },
+    {
+     "id": 109243462,
+     "waterquality_id": 106,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": null,
+     "waterquality_ph": null,
+     "waterquality_temp": 36.984,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.54,
+     "waterquality_conductivity": 1354.09,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 106,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 3288,
+      "waterquality_station_name": {
+       "th": "หนองหวาย",
+       "en": "Nong Wai",
+       "jp": "ノンワイ"
+      },
+      "waterquality_station_lat": 16.724627,
+      "waterquality_station_long": 102.803359,
+      "waterquality_station_oldcode": "133",
+      "sub_basin_id": 93,
+      "province_name": {
+       "th": "ขอนแก่น",
+       "en": "Khon Kaen"
+      },
+      "amphoe_name": {
+       "th": "น้ำพอง",
+       "en": "Nam Phong District"
+      },
+      "tumbon_name": {
+       "th": "น้ำพอง",
+       "en": "Nam Phong"
+      },
+      "province_code": "40",
+      "river_id": 128005,
+      "river_name": "ลำน้ำพอง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 4,
+      "basin_code": 4,
+      "basin_name": {
+       "th": "ลุ่มน้ำชี",
+       "en": "Chi Basin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243464,
+     "waterquality_id": 110,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": null,
+     "waterquality_ph": null,
+     "waterquality_temp": 27.933,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.29,
+     "waterquality_conductivity": 643.103,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 110,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 3896,
+      "waterquality_station_name": {
+       "th": "โกสุมพิสัย",
+       "en": "Kosum Pisai",
+       "jp": "コーサムピサイ"
+      },
+      "waterquality_station_lat": 16.196979,
+      "waterquality_station_long": 103.135024,
+      "waterquality_station_oldcode": "139",
+      "sub_basin_id": 96,
+      "province_name": {
+       "th": "มหาสารคาม",
+       "en": "Maha Sarakham"
+      },
+      "amphoe_name": {
+       "th": "โกสุมพิสัย",
+       "en": "Kosum Phisai District"
+      },
+      "tumbon_name": {
+       "th": "เลิงใต้",
+       "en": "Loeng Tai"
+      },
+      "province_code": "44",
+      "river_id": 133161,
+      "river_name": "แม่น้ำชี"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 4,
+      "basin_code": 4,
+      "basin_name": {
+       "th": "ลุ่มน้ำชี",
+       "en": "Chi Basin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243477,
+     "waterquality_id": 114,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 0,
+     "waterquality_ph": null,
+     "waterquality_temp": 30.367,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.17,
+     "waterquality_conductivity": 383.634,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 114,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 2860,
+      "waterquality_station_name": {
+       "th": "ยโสธร",
+       "en": "Yasothon",
+       "jp": "ヤソートーン"
+      },
+      "waterquality_station_lat": 15.80041,
+      "waterquality_station_long": 104.13394,
+      "waterquality_station_oldcode": "225",
+      "sub_basin_id": 102,
+      "province_name": {
+       "th": "ยโสธร",
+       "en": "Yasothon"
+      },
+      "amphoe_name": {
+       "th": "เมืองยโสธร",
+       "en": "Mueang Yasothon District"
+      },
+      "tumbon_name": {
+       "th": "ในเมือง",
+       "en": "Nai Mueang"
+      },
+      "province_code": "35",
+      "river_id": 139091,
+      "river_name": "แม่น้ำชี"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 4,
+      "basin_code": 4,
+      "basin_name": {
+       "th": "ลุ่มน้ำชี",
+       "en": "Chi Basin Basin"
+      }
+     }
+    },
+    {
+     "id": 109243450,
+     "waterquality_id": 139,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 4.955,
+     "waterquality_ph": null,
+     "waterquality_temp": 32.099,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": 0,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 139,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 840,
+      "waterquality_station_name": {
+       "th": "สิงห์บุรี",
+       "en": "Sing Buri",
+       "jp": "シンブリ"
+      },
+      "waterquality_station_lat": 14.89905,
+      "waterquality_station_long": 100.40288,
+      "waterquality_station_oldcode": "110",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "สิงห์บุรี",
+       "en": "Sing Buri"
+      },
+      "amphoe_name": {
+       "th": "เมืองสิงห์บุรี",
+       "en": "Mueang Sing Buri District"
+      },
+      "tumbon_name": {
+       "th": "บางมัญ",
+       "en": "Bang Man"
+      },
+      "province_code": "17",
+      "river_id": 178428,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243453,
+     "waterquality_id": 142,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 2.04,
+     "waterquality_ph": 9.643,
+     "waterquality_temp": 31.75,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.13,
+     "waterquality_conductivity": 312.918,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 142,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 318,
+      "waterquality_station_name": {
+       "th": "ปากเกร็ด",
+       "en": "Pak Kret",
+       "jp": "パックレット"
+      },
+      "waterquality_station_lat": 13.93609,
+      "waterquality_station_long": 100.49943,
+      "waterquality_station_oldcode": "113",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "นนทบุรี",
+       "en": "Nonthaburi"
+      },
+      "amphoe_name": {
+       "th": "ปากเกร็ด",
+       "en": "Pak Kret District"
+      },
+      "tumbon_name": {
+       "th": "บางตะไนย์",
+       "en": "Bang Tanai"
+      },
+      "province_code": "12",
+      "river_id": 185851,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243468,
+     "waterquality_id": 153,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 7.335,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.047,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 153,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 5796,
+      "waterquality_station_name": {
+       "th": "อุทัยธานี",
+       "en": "Uthai Thani",
+       "jp": "ウタイタニ"
+      },
+      "waterquality_station_lat": 15.374339,
+      "waterquality_station_long": 100.03858,
+      "waterquality_station_oldcode": "144",
+      "sub_basin_id": 246,
+      "province_name": {
+       "th": "อุทัยธานี",
+       "en": "Uthai Thani"
+      },
+      "amphoe_name": {
+       "th": "เมืองอุทัยธานี",
+       "en": "Mueang Uthai Thani District"
+      },
+      "tumbon_name": {
+       "th": "อุทัยใหม่",
+       "en": "Uthai Mai"
+      },
+      "province_code": "61",
+      "river_id": 173092,
+      "river_name": "แม่น้ำสะแกกรัง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 12,
+      "basin_code": 11,
+      "basin_name": {
+       "th": "ลุ่มน้ำสะแกกรัง",
+       "en": "Sakae Krang Basin"
+      }
+     }
+    },
+    {
+     "id": 109243447,
+     "waterquality_id": 187,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 11.401,
+     "waterquality_ph": null,
+     "waterquality_temp": 27.206,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.01,
+     "waterquality_conductivity": null,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 187,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 1193,
+      "waterquality_station_name": {
+       "th": "มาบตาพุด",
+       "en": "Maptaphut",
+       "jp": "マップタープット"
+      },
+      "waterquality_station_lat": 12.66984,
+      "waterquality_station_long": 101.18019,
+      "waterquality_station_oldcode": "106",
+      "sub_basin_id": 290,
+      "province_name": {
+       "th": "ระยอง",
+       "en": "Rayong"
+      },
+      "amphoe_name": {
+       "th": "เมืองระยอง",
+       "en": "Mueang Rayong District"
+      },
+      "tumbon_name": {
+       "th": "มาบตาพุด",
+       "en": "Maptaphut"
+      },
+      "province_code": "21",
+      "river_id": 204735,
+      "river_name": "คลองน้ำหู"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 18,
+      "basin_code": 17,
+      "basin_name": {
+       "th": "ลุ่มน้ำชายฝั่งทะเลตะวันออก",
+       "en": "East Coast Gulf Basin"
+      }
+     }
+    },
+    {
+     "id": 109243484,
+     "waterquality_id": 189,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": null,
+     "waterquality_ph": 6.529,
+     "waterquality_temp": 28.51,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.26,
+     "waterquality_conductivity": 580.101,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 189,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 1253,
+      "waterquality_station_name": {
+       "th": "จันทบุรี",
+       "en": "Chanthaburi",
+       "jp": "チャンタブリ"
+      },
+      "waterquality_station_lat": 12.613479,
+      "waterquality_station_long": 102.114745,
+      "waterquality_station_oldcode": "234",
+      "sub_basin_id": 296,
+      "province_name": {
+       "th": "จันทบุรี",
+       "en": "Chanthaburi"
+      },
+      "amphoe_name": {
+       "th": "เมืองจันทบุรี",
+       "en": "Mueang Chanthaburi District"
+      },
+      "tumbon_name": {
+       "th": "จันทนิมิต",
+       "en": "Chanthanimit"
+      },
+      "province_code": "22",
+      "river_id": 205031,
+      "river_name": "คลองจันทบุรี"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 18,
+      "basin_code": 17,
+      "basin_name": {
+       "th": "ลุ่มน้ำชายฝั่งทะเลตะวันออก",
+       "en": "East Coast Gulf Basin"
+      }
+     }
+    },
+    {
+     "id": 109243489,
+     "waterquality_id": 148,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 14.365,
+     "waterquality_ph": null,
+     "waterquality_temp": 29.634,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.2,
+     "waterquality_conductivity": 452.891,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 148,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 246,
+      "waterquality_station_name": {
+       "th": "สมุทรปราการ",
+       "en": "Samut Prakan",
+       "jp": "サムットプラカーン"
+      },
+      "waterquality_station_lat": 13.66275,
+      "waterquality_station_long": 100.54014,
+      "waterquality_station_oldcode": "240",
+      "sub_basin_id": 240,
+      "province_name": {
+       "th": "สมุทรปราการ",
+       "en": "Samut Prakan"
+      },
+      "amphoe_name": {
+       "th": "พระประแดง",
+       "en": "Phra Pradaeng District"
+      },
+      "tumbon_name": {
+       "th": "บางหญ้าแพรก",
+       "en": "Bang Ya Phraek"
+      },
+      "province_code": "11",
+      "river_id": 188522,
+      "river_name": "แม่น้ำเจ้าพระยา"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 10,
+      "basin_code": 10,
+      "basin_name": {
+       "th": "ลุ่มน้ำเจ้าพระยา",
+       "en": "Chao Phraya Basin"
+      }
+     }
+    },
+    {
+     "id": 109243448,
+     "waterquality_id": 176,
+     "waterquality_datetime": "2026-10-23 02:30",
+     "waterquality_do": 4.699,
+     "waterquality_ph": null,
+     "waterquality_temp": 30.625,
+     "waterquality_turbid": null,
+     "waterquality_bod": null,
+     "waterquality_tcb": null,
+     "waterquality_fcb": null,
+     "waterquality_nh3n": null,
+     "waterquality_wqi": null,
+     "waterquality_ammonium": null,
+     "waterquality_nitrate": null,
+     "waterquality_colorstatus": "",
+     "waterquality_status": "ปกติ",
+     "waterquality_salinity": 0.08,
+     "waterquality_conductivity": 186.549,
+     "waterquality_tds": null,
+     "waterquality_chlorophyll": null,
+     "waterquality_station": {
+      "id": 176,
+      "agency_id": 14,
+      "agency_name": {
+       "th": "กรมควบคุมมลพิษ ",
+       "en": "Pollution Control Department",
+       "jp": ""
+      },
+      "agency_shortname": {
+       "th": "คพ.",
+       "en": "PCD",
+       "jp": ""
+      },
+      "geocode_id": 1521,
+      "waterquality_station_name": {
+       "th": "บ้านสร้าง",
+       "en": "Ban Sang",
+       "jp": "バンサン"
+      },
+      "waterquality_station_lat": 14.00141,
+      "waterquality_station_long": 101.22189,
+      "waterquality_station_oldcode": "108",
+      "sub_basin_id": 281,
+      "province_name": {
+       "th": "ปราจีนบุรี",
+       "en": "Prachin Buri"
+      },
+      "amphoe_name": {
+       "th": "บ้านสร้าง",
+       "en": "Ban Sang District"
+      },
+      "tumbon_name": {
+       "th": "บ้านสร้าง",
+       "en": "Ban Sang"
+      },
+      "province_code": "25",
+      "river_id": 194979,
+      "river_name": "แม่น้ำบางปะกง"
+     },
+     "station_type": "waterquality",
+     "basin": {
+      "id": 16,
+      "basin_code": 15,
+      "basin_name": {
+       "th": "ลุ่มน้ำบางปะกง",
+       "en": "Bang Pakong Basin"
+      }
+     }
+    }
+   ]
+  },
+  "setting": {
+   "scale": {
+    "salinity": [
+     {
+      "operator": ">",
+      "term": "2",
+      "color": "#EE141F",
+      "text": "> 2",
+      "trans": "salinity_2",
+      "inGraph": true
+     },
+     {
+      "operator": ">",
+      "term": "0.50",
+      "color": "#EE141F",
+      "text": "> 0.5",
+      "trans": "salinity_0.5",
+      "inGraph": true
+     },
+     {
+      "operator": ">",
+      "term": "0.25",
+      "color": "#FFA500",
+      "text": "> 0.25",
+      "trans": "salinity_0.25",
+      "inGraph": true
+     }
+    ],
+    "do": [
+     {
+      "operator": "<",
+      "term": "3",
+      "color": "#EE141F",
+      "text": "< 3",
+      "trans": "standard_>",
+      "inGraph": true
+     }
+    ],
+    "ph": [
+     {
+      "operator": "between",
+      "term": "6.5",
+      "term_2": "9",
+      "color": "#66C803",
+      "trans": "standard",
+      "text": "6.5 - 9",
+      "inGraph": false
+     },
+     {
+      "operator": ">",
+      "term": "9",
+      "color": "#EE141F",
+      "text": "> 9",
+      "trans": "standard_>",
+      "inGraph": true
+     },
+     {
+      "operator": "<",
+      "term": "6.5",
+      "color": "#EE141F",
+      "text": "< 6.5",
+      "trans": "standard_<",
+      "inGraph": true
+     }
+    ],
+    "turbid": [
+     {
+      "operator": "==",
+      "term": "5",
+      "color": "#66C803",
+      "trans": "standard",
+      "text": "= 5",
+      "inGraph": false
+     },
+     {
+      "operator": ">",
+      "term": "5",
+      "color": "#EE141F",
+      "trans": "standard_>",
+      "text": "> 5 ntu",
+      "inGraph": true
+     },
+     {
+      "operator": "<",
+      "term": "5",
+      "color": "#EE141F",
+      "trans": "standard_<",
+      "text": "< 5 ntu",
+      "inGraph": true
+     }
+    ],
+    "tds": [
+     {
+      "operator": "<=",
+      "term": "1000",
+      "color": "#66C803",
+      "text": "<= 1,000",
+      "trans": "standard",
+      "inGraph": false
+     },
+     {
+      "operator": ">",
+      "term": "1000",
+      "color": "#EE141F",
+      "text": "> 1,000",
+      "trans": "standard_>",
+      "inGraph": true
+     }
+    ]
+   },
+   "criteria": {
+    "144": {
+     "salinity": [
+      {
+       "operator": "<",
+       "term": "0.25",
+       "color": "#EE141F",
+       "text": "> 0.25",
+       "trans": "salinity_0.25",
+       "inGraph": true
+      }
+     ],
+     "do": [
+      {
+       "operator": ">",
+       "term": "2",
+       "color": "#EE141F",
+       "text": "> 2",
+       "trans": "standard_<",
+       "inGraph": true
+      }
+     ],
+     "conductivity": [
+      {
+       "operator": "<",
+       "term": "500",
+       "color": "#EE141F",
+       "trans": "standard_<",
+       "text": "< 500",
+       "inGraph": false
+      }
+     ],
+     "ph": [
+      {
+       "operator": "between",
+       "term": "5",
+       "term_2": "9",
+       "color": "#66C803",
+       "trans": "standard",
+       "text": "5 - 9",
+       "inGraph": false
+      },
+      {
+       "operator": ">",
+       "term": "9",
+       "color": "#EE141F",
+       "text": "> 9",
+       "trans": "standard_>",
+       "inGraph": true
+      },
+      {
+       "operator": "<",
+       "term": "5",
+       "color": "#EE141F",
+       "text": "< 5",
+       "trans": "standard_<",
+       "inGraph": true
+      }
+     ],
+     "id": 144,
+     "name": "สำเหร่"
+    }
+   },
+   "default": {
+    "color": "#66C803",
+    "colorname": "green"
+   },
+   "not_today": {
+    "color": "gray",
+    "colorname": "gray",
+    "text": "-"
+   }
+  }
+ }
+}

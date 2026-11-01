@@ -6,6 +6,8 @@ from external_data.adapters.firms import FirmsHotspots
 from external_data.adapters.open_meteo import (OpenMeteoAirQuality, OpenMeteoForecast, OpenMeteoHeatIndex, OpenMeteoMarine,
                                               OpenMeteoRiverDischarge, OpenMeteoWaveField, sea_grid)
 from external_data.adapters.thaiwater import ThaiWaterRain24h, ThaiWaterWaterLevel
+from external_data.adapters.thaiwater_storms import ThaiWaterStorms
+from external_data.adapters.thaiwater_waterquality import ThaiWaterWaterQuality
 from external_data.adapters.tmd import TmdWarnings, TmdWeather3Hours
 from external_data.adapters.tmd_nwp import TmdNwpDailyForecast
 
@@ -21,7 +23,9 @@ __all__ = [
     "OpenMeteoRiverDischarge",
     "OpenMeteoWaveField",
     "ThaiWaterRain24h",
+    "ThaiWaterStorms",
     "ThaiWaterWaterLevel",
+    "ThaiWaterWaterQuality",
     "TmdNwpDailyForecast",
     "TmdEarthquakes",
     "TmdWarnings",
