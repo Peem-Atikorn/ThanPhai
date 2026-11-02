@@ -24,8 +24,8 @@ from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
-from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues
-from geo_integration import Gazetteer, provinces_by_hazard, warning_provinces
+from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues, read_days
+from geo_integration import Gazetteer, hazard_areas, warning_provinces
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import AlertLevel, HazardType
@@ -312,12 +312,17 @@ class HazardService:
             warnings = []
             for w in latest_issues(warnings_result):
                 text = f"{w.title} {w.headline or ''}"
-                by_hazard = provinces_by_hazard(self.gazetteer, [w.title, w.headline or ""], classify_hazards)
-                window = impact_window(w.title, w.announced_at.astimezone(BANGKOK).date())
+                issued = w.announced_at.astimezone(BANGKOK).date()
+                areas = hazard_areas(self.gazetteer, [w.title, w.headline or ""], classify_hazards, lambda part: read_days(part, issued))
+                window = impact_window(w.title, issued)
                 warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
-                                 "provinces_by_hazard": {hazard.value: codes for hazard, codes in by_hazard.items()},
+                                 "provinces_by_hazard": {hazard.value: sorted(codes) for hazard, codes in areas.items()},
                                  "impact_from": window[0].isoformat() if window else None,
-                                 "impact_to": window[1].isoformat() if window else None})
+                                 "impact_to": window[1].isoformat() if window else None,
+                                 # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
+                                 "impact_by_hazard": {hazard.value: {code: [days[0].isoformat(), days[1].isoformat()]
+                                                                     for code, days in codes.items() if days}
+                                                      for hazard, codes in areas.items()}})
         # Every warning in TMD's current feed is in force: its EffectEndDate is when the next issue is due, not when
         # the hazard ends. If TMD failed this time, the last good warnings still apply.
         official = self._official_by_province(warnings if warnings is not None else self.warnings, self._today(),
@@ -498,16 +503,18 @@ class HazardService:
     @staticmethod
     def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None]]]]:
         """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None) of the
-        TMD warnings that name the province for that hazard. Warnings whose last impact day has passed are left out."""
+        TMD warnings that name the province for that hazard. A province uses the days its own statement gives, else the
+        warning's; it is left out once its last impact day has passed."""
         found: dict[str, dict[HazardType, list[tuple[str, date | None]]]] = {}
         for warning in warnings:
-            start = date.fromisoformat(warning["impact_from"]) if warning.get("impact_from") else None
-            end = date.fromisoformat(warning["impact_to"]) if warning.get("impact_to") else None
-            if end is not None and today > end:
-                continue
-            upcoming = start if start is not None and today < start - timedelta(days=lead_days) else None
+            whole = (warning.get("impact_from"), warning.get("impact_to"))
             for hazard, provinces in warning.get("provinces_by_hazard", {}).items():
+                own = warning.get("impact_by_hazard", {}).get(hazard, {})
                 for province in provinces:
+                    first, last = (date.fromisoformat(d) if d else None for d in own.get(province, whole))
+                    if last is not None and today > last:
+                        continue
+                    upcoming = first if first is not None and today < first - timedelta(days=lead_days) else None
                     found.setdefault(province, {}).setdefault(HazardType(hazard), []).append((warning["title"], upcoming))
         return found
 

@@ -6,11 +6,13 @@ province lists ("จังหวัดเชียงราย พะเยา �
 
 import re
 from collections.abc import Callable, Iterable
+from datetime import date
 from typing import TypeVar
 
 from geo_integration.gazetteer import ALIASES, Gazetteer
 
 H = TypeVar("H")
+Days = tuple[date, date]
 
 # TMD forecast regions, as its daily forecast groups provinces. These are meteorological regions, not the
 # six geographic ones: กำแพงเพชร, พิจิตร and เพชรบูรณ์ are in the north, นครนายก in the east, and
@@ -72,24 +74,42 @@ def warning_parts(*texts: str) -> list[str]:
 
 
 def provinces_by_hazard(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Callable[[str], Iterable[H]]) -> dict[H, list[str]]:
-    """Hazard -> province codes, sorted: a province counts for a hazard only where one statement names both.
+    """Hazard -> province codes, sorted: a province counts for a hazard only where one statement names both."""
+    return {hazard: sorted(areas) for hazard, areas in hazard_areas(gazetteer, texts, classify).items()}
+
+
+def hazard_areas(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Callable[[str], Iterable[H]],
+                 read_days: Callable[[str], Days | None] = lambda _: None) -> dict[H, dict[str, Days | None]]:
+    """Hazard -> province code -> (first, last day) the statements naming both give, or None: the warning's own days.
 
     Issue 12 has heavy rain in the east and south, "ส่วน" the lower north only thunderstorms: the north must not
     get the heavy-rain (flood) warning. The title and the headline are cut separately, so the title's heavy rain
     in the south does not run into the headline's first areas. A statement with no hazard word of its own sets
-    nothing, unless it says it gets the same impact ("ได้รับผลกระทบ"): then it takes the hazards of the statement
-    before it in the same text.
+    nothing, unless it says it gets the same impact ("ได้รับผลกระทบ"): then it takes the hazards, and if it gives
+    none of its own the days, of the statement before it in the same text.
+
+    Issue 3 (2026-11-02): the title says 5-9 Nov for the south, the headline 5-7 Nov for upper Thailand. A province
+    named in several statements gets the span of all of them; one without days there keeps the warning's days.
     """
-    found: dict[H, set[str]] = {}
+    found: dict[H, dict[str, Days | None]] = {}
     for text in [texts] if isinstance(texts, str) else texts:
-        previous: list[H] = []
+        previous: tuple[list[H], Days | None] = ([], None)
         for part in warning_parts(text):
-            hazards = list(classify(part)) or (previous if SAME_IMPACT.search(part) else [])
-            provinces = warning_provinces(gazetteer, part) if hazards else []
+            own = list(classify(part))
+            same = not own and bool(SAME_IMPACT.search(part))
+            hazards = own or (previous[0] if same else [])
+            days = read_days(part) or (previous[1] if same else None)
             for hazard in hazards:
-                found.setdefault(hazard, set()).update(provinces)
-            previous = hazards
-    return {hazard: sorted(codes) for hazard, codes in found.items() if codes}
+                areas = found.setdefault(hazard, {})
+                for code in warning_provinces(gazetteer, part):
+                    areas[code] = _span(areas[code], days) if code in areas else days
+            previous = (hazards, days)
+    return {hazard: areas for hazard, areas in found.items() if areas}
+
+
+def _span(a: Days | None, b: Days | None) -> Days | None:
+    """Both statements' days together; None (the warning's whole window) wins."""
+    return None if a is None or b is None else (min(a[0], b[0]), max(a[1], b[1]))
 
 
 def warning_provinces(gazetteer: Gazetteer, text: str) -> list[str]:

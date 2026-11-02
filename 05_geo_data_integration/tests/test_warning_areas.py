@@ -1,10 +1,11 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from external_data.adapters.tmd import classify_hazards
-from geo_integration import Gazetteer, provinces_by_hazard, warning_parts, warning_provinces
+from external_data.adapters.tmd import classify_hazards, read_days
+from geo_integration import Gazetteer, hazard_areas, provinces_by_hazard, warning_parts, warning_provinces
 from geo_integration.warning_areas import REGIONS
 from thanphai_shared import HazardType
 
@@ -87,6 +88,29 @@ def test_live_issue_3_flood_only_in_the_south_rain_everywhere(gaz):
     by_hazard = provinces_by_hazard(gaz, [issue["title"], issue["headline"]], classify_hazards)
     assert by_hazard[HazardType.FLOOD] == sorted(SOUTH)
     assert by_hazard[HazardType.RAIN_STORM] == sorted(NORTH + NORTHEAST + CENTRAL + BANGKOK_AREA + EAST + SOUTH)
+
+
+def test_live_issue_3_upper_thailand_days_5_to_7_south_5_to_9(gaz):
+    # Title: south for 5-9 Nov. Headline: "ในช่วงวันที่ 5–7 พฤศจิกายน 2569 บริเวณประเทศไทยตอนบน", and "ส่วนภาคเหนือ …
+    # จะได้รับผลกระทบในระยะถัดไป" keeps those days.
+    issue = next(f for f in FIXTURES if f["issue_no"] == "3")
+    areas = hazard_areas(gaz, [issue["title"], issue["headline"]], classify_hazards, lambda part: read_days(part, date(2026, 11, 2)))
+    upper, south = (date(2026, 11, 5), date(2026, 11, 7)), (date(2026, 11, 5), date(2026, 11, 9))
+    assert areas[HazardType.RAIN_STORM] == {code: upper for code in NORTH + NORTHEAST + CENTRAL + BANGKOK_AREA + EAST} | {
+        code: south for code in SOUTH}
+    assert areas[HazardType.FLOOD] == {code: south for code in SOUTH}
+
+
+def test_province_in_two_statements_gets_both_spans(gaz):
+    days = {"18-20": (date(2026, 10, 18), date(2026, 10, 20)), "21-25": (date(2026, 10, 21), date(2026, 10, 25))}
+
+    def read(part):
+        return next((d for k, d in days.items() if k in part), None)
+
+    text = "ในช่วงวันที่ 18-20 ภาคใต้มีฝนตกหนัก หลังจากนั้นในช่วงวันที่ 21-25 ภาคใต้และภาคกลางมีฝนตกหนัก ขอให้ภาคกลางระวังฝนตกหนัก"
+    areas = hazard_areas(gaz, text, classify_hazards, read)[HazardType.RAIN_STORM]
+    assert areas["TH90"] == (date(2026, 10, 18), date(2026, 10, 25))
+    assert areas["TH14"] is None  # "ขอให้ …" gives no days: the warning's own days, the widest
 
 
 def test_same_impact_takes_the_hazards_of_the_statement_before(gaz):

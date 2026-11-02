@@ -20,7 +20,7 @@ from external_data.adapters import (
 )
 from external_data.adapters.base import BANGKOK, in_thailand_bbox
 from external_data.adapters.thaiwater import bank_quality_flag, signed_bank_diff
-from external_data.adapters.tmd import as_list, classify_hazards, impact_window, latest_issues
+from external_data.adapters.tmd import as_list, classify_hazards, impact_window, latest_issues, read_days
 from thanphai_shared import HazardType
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -150,6 +150,49 @@ def test_tmd_latest_issue_replaces_earlier_ones():
 )
 def test_tmd_impact_window(title, expected):
     assert impact_window(title, date(2026, 10, 22)) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ในช่วงวันที่ 18-20 ต.ค. 69 ภาคใต้และภาคตะวันออกจะมีฝนตกต่อเนื่อง", (date(2026, 10, 18), date(2026, 10, 20))),
+        ("ในช่วงวันที่ 5–7 พฤศจิกายน 2569 บริเวณประเทศไทยตอนบน", (date(2026, 11, 5), date(2026, 11, 7))),
+        ("ในวันที่ 5 พ.ย. ภาคเหนือ", (date(2026, 11, 5), date(2026, 11, 5))),  # no year: the issue's
+        ("ส่วนภาคเหนือ ภาคกลาง จะได้รับผลกระทบในระยะถัดไป", None),
+        ("ฉบับที่ 3 (286/2569)", None),
+    ],
+)
+def test_tmd_read_days_in_a_statement(text, expected):
+    assert read_days(text, date(2026, 10, 18)) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "announced", "expected"),
+    [
+        # Review of #17: with no year, both days were put in the issue's year and the start a year before that,
+        # so a warning issued on 29 Dec for 30 Dec - 2 Jan read as 30 Dec 2025 - 2 Jan 2026 and was dropped as over.
+        ("ในช่วงวันที่ 30 ธ.ค. - 2 ม.ค.", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 30 ธันวาคม - 2 มกราคม", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 30 ธ.ค. - 2 ม.ค.", date(2027, 1, 1), (date(2026, 12, 30), date(2027, 1, 2))),  # a reissue on 1 Jan
+        ("ในวันที่ 2 ม.ค.", date(2026, 12, 30), (date(2027, 1, 2), date(2027, 1, 2))),
+        ("ในวันที่ 30 ธ.ค.", date(2027, 1, 1), (date(2026, 12, 30), date(2026, 12, 30))),
+        ("จนถึงวันที่ 2 ม.ค.", date(2026, 12, 30), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 28 ก.พ. - 1 มี.ค.", date(2027, 2, 27), (date(2027, 2, 28), date(2027, 3, 1))),
+        ("ในวันที่ 29 ก.พ.", date(2028, 2, 27), (date(2028, 2, 29), date(2028, 2, 29))),  # a leap year
+        ("ในวันที่ 29 ก.พ.", date(2027, 2, 27), None),  # no 29 February near 2027: not 2028
+        # A written year is kept as written.
+        ("ในช่วงวันที่ 30 ธันวาคม 2569 - 2 มกราคม 2570", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 30 ธันวาคม - 2 มกราคม 2570", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+    ],
+)
+def test_tmd_read_days_without_a_year_across_the_new_year(text, announced, expected):
+    assert read_days(text, announced) == expected
+
+
+def test_tmd_year_end_warning_is_not_over_on_its_days():
+    # The same case through the title: still in force on 31 Dec and 2 Jan, over on 3 Jan.
+    first, last = impact_window("ฝนตกหนัก (มีผลกระทบในช่วงวันที่ 30 ธ.ค. - 2 ม.ค.) ฉบับที่ 1", date(2026, 12, 29))
+    assert first <= date(2026, 12, 31) <= last and date(2027, 1, 2) <= last < date(2027, 1, 3)
 
 
 def test_tmd_weather_3h_parses_stations():

@@ -273,7 +273,17 @@ Round 7 (dams, 2026-10-19):
     no longer counts after its last day. No dates read: WARNING now, as before. Phase is worked out on each refresh, so it also holds for kept warnings.
     Why 1 day: TMD reissues every 6-12 h and places change; a WARNING days ahead for most of the country wears out attention (and LINE alerts later).
     Live 2026-11-02 (issue 3, 5-9 Nov): 897 WATCH, 27 WARNING, 4 CRITICAL (was 924 WARNING); ขอนแก่น/เชียงใหม่ rain WATCH, หาดใหญ่ rain + flood WATCH.
-    Not yet: per-region days in the headline ("5–7 พ.ย. ประเทศไทยตอนบน"); the title's window is used for all.
+
+### Round 21 — TMD days per region (branch `feature/peem/05-tmd-warning-region-days`, stacked on 05-tmd-warning-lead-time)
+109. A warning can give other days per region: issue 3's title says 5–9 Nov (the south), its headline "ในช่วงวันที่ 5–7 พฤศจิกายน 2569
+    บริเวณประเทศไทยตอนบน". Module 04 `read_days()` reads the first date or range in any statement, also short forms ("18-20 ต.ค. 69") and
+    no year (the issue's); module 05 `hazard_areas()` pairs each statement's days with its provinces and hazards. A "ได้รับผลกระทบ" statement
+    without days keeps the days of the one before it; a province in several statements gets their whole span; one with no days there keeps the
+    title's. `/v1/warnings` items gain `impact_by_hazard` (hazard -> province -> [first, last]).
+    Live 2026-11-02: rain 61 upper provinces 5–7 Nov and 16 southern 5–9 Nov; flood 16 southern 5–9 Nov. เชียงใหม่ is no longer warned on 8–9 Nov.
+110. Bug (review): a date with no year took the issue's year, so "30 ธ.ค. - 2 ม.ค." issued on 29 Dec 2026 read as 30 Dec 2025 – 2 Jan 2026
+    and the warning was dropped as over. A day with no year is now the one closest to the issue day (2 ม.ค. → 2027; 30 ธ.ค. reissued on
+    1 Jan → 2026); the first day of a range still takes its year from the last. Over half a year off means no such day ("29 ก.พ." in 2027).
 
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
