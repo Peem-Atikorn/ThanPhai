@@ -34,6 +34,14 @@ def test_model_can_raise_above_official():
     assert decide(official_warning_active=True, model_level=L.CRITICAL).level == L.CRITICAL
 
 
+def test_upcoming_official_warning_is_a_watch_and_rules_can_raise_it():
+    d = decide(official_warning_upcoming=True)
+    assert d.level == L.WATCH and d.rule_ids == ["OFFICIAL_WARNING_UPCOMING"]
+    assert decide(official_warning_upcoming=True, observations={"above_bank_m": 0.5}).level == L.CRITICAL
+    # Active wins when both hold (another warning for the same hazard is already in force).
+    assert decide(official_warning_active=True, official_warning_upcoming=True).rule_ids == ["OFFICIAL_WARNING"]
+
+
 @pytest.mark.parametrize(
     ("above_bank_m", "expected"),
     [(-1.0, L.NORMAL), (-0.3, L.WATCH), (0.0, L.WATCH), (0.01, L.WARNING), (0.5, L.CRITICAL), (1.21, L.CRITICAL)],

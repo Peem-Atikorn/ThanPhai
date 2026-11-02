@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -521,7 +521,7 @@ def test_tmd_warning_raises_only_the_provinces_it_names(base_service, monkeypatc
     assert "OFFICIAL_WARNING" in rain(bang_bua_thong)["rule_ids"]
 
 
-def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service):
+def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service, monkeypatch):
     # Heavy rain (rain + flood) in the east and south; "ส่วนภาคเหนือตอนล่าง …" only thunderstorms. Before, every
     # hazard went to every province named, and เชียงใหม่ got a flood WARNING.
     import json as _json
@@ -530,11 +530,12 @@ def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service):
     from thanphai_shared import OfficialWarning
 
     svc = stale_copy(base_service)
+    monkeypatch.setattr(svc, "_today", lambda: date(2026, 10, 22))  # impact "จนถึงวันที่ 25 ตุลาคม 2569"
     fixture = Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures" / "tmd_warning_texts.json"
     issue = next(f for f in _json.loads(fixture.read_text(encoding="utf-8")) if f["issue_no"] == "12")
-    now = datetime.now(timezone.utc)
+    at = datetime.fromisoformat(issue["announced"]).replace(tzinfo=timezone(timedelta(hours=7)))
     warning = OfficialWarning(source="tmd_warnings", issue_no="12", title=issue["text"], hazards=classify_hazards(issue["text"]),
-                              announced_at=now, fetched_at=now, attribution="t")
+                              announced_at=at, fetched_at=at, attribution="t")
     decisions, warnings, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []},
                                           [warning])
     assert "TH50" in warnings[0]["provinces"]  # still listed as named, for the warning panel
@@ -549,7 +550,7 @@ def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service):
         assert "OFFICIAL_WARNING" in rule_ids("อำเภอหาดใหญ่", hazard)
 
 
-def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_service):
+def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_service, monkeypatch):
     # Live 2026-11-02, issues 2 and 3 of one warning in the feed. Before: ขอนแก่น got a flood WARNING from the title's
     # heavy rain in the south, the north/central/east got nothing, and each card listed both issues.
     import json as _json
@@ -558,6 +559,7 @@ def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_servi
     from thanphai_shared import OfficialWarning
 
     svc = stale_copy(base_service)
+    monkeypatch.setattr(svc, "_today", lambda: date(2026, 11, 4))  # impact 5-9 Nov: active from the day before
     fixture = Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures" / "tmd_warning_texts.json"
     issue = next(f for f in _json.loads(fixture.read_text(encoding="utf-8")) if f["issue_no"] == "3")
     now = datetime.now(timezone.utc)
@@ -580,3 +582,38 @@ def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_servi
         assert "OFFICIAL_WARNING" in rain["rule_ids"] and sum("กรมอุตุนิยมวิทยาประกาศเตือน" in n for n in rain["notices"]) == 1
     assert "OFFICIAL_WARNING" in item("อำเภอหาดใหญ่", "flood")["rule_ids"]
     assert all("OFFICIAL_WARNING" not in item(d, "flood")["rule_ids"] for d in ("อำเภอเมืองขอนแก่น", "อำเภอเมืองเชียงใหม่", "อำเภอเมืองชลบุรี"))
+
+
+@pytest.mark.parametrize(
+    ("today", "level", "rule", "notice"),
+    [
+        (date(2026, 11, 2), "WATCH", "OFFICIAL_WARNING_UPCOMING", "ประกาศเตือนล่วงหน้า (คาดว่าเริ่ม 5 พฤศจิกายน 2569)"),
+        (date(2026, 11, 4), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
+        (date(2026, 11, 9), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
+        (date(2026, 11, 10), None, None, None),  # past its last impact day: the warning no longer counts
+    ],
+)
+def test_tmd_warning_is_a_watch_until_the_day_before_its_impact(base_service, monkeypatch, today, level, rule, notice):
+    # Issue 3 was issued on 2 Nov for 5-9 Nov: rules.yaml lead_days 1 makes it a WATCH on 2-3 Nov, a WARNING 4-9 Nov.
+    import json as _json
+
+    from external_data.adapters.tmd import classify_hazards
+    from thanphai_shared import OfficialWarning
+
+    svc = stale_copy(base_service)
+    monkeypatch.setattr(svc, "_today", lambda: today)
+    fixture = Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures" / "tmd_warning_texts.json"
+    issue = next(f for f in _json.loads(fixture.read_text(encoding="utf-8")) if f["issue_no"] == "3")
+    at = datetime(2026, 11, 2, 15, 13, tzinfo=timezone(timedelta(hours=7)))
+    warning = OfficialWarning(source="tmd_warnings", issue_no="3", title=issue["title"], headline=issue["headline"],
+                              hazards=classify_hazards(issue["text"]), announced_at=at, fetched_at=at, attribution="t")
+    empty = {"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}
+    decisions, warnings, _ = svc._process(empty, [warning])
+    assert (warnings[0]["impact_from"], warnings[0]["impact_to"]) == ("2026-11-05", "2026-11-09")
+    code = next(a.code for a in svc.gazetteer.resolve("อำเภอเมืองเชียงใหม่"))
+    item = next(i for i in decisions[code] if i["hazard"] == "rain_storm")
+    if rule:
+        assert item["rule_ids"][0] == rule and item["level"] == level and notice in item["notices"][0]
+    else:
+        assert not any(r.startswith("OFFICIAL_WARNING") for r in item["rule_ids"])
+        assert not any("กรมอุตุนิยมวิทยาประกาศเตือน" in n for n in item["notices"])
