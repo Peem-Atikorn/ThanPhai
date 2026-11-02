@@ -9,7 +9,7 @@ import json
 import logging
 import math
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import geopandas as gpd
@@ -24,7 +24,7 @@ from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
-from external_data.adapters.tmd import classify_hazards, latest_issues
+from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues
 from geo_integration import Gazetteer, provinces_by_hazard, warning_provinces
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
@@ -105,6 +105,11 @@ def _round_coords(coords):
     if isinstance(coords[0], (int, float)):
         return [round(coords[0], MAP_COORD_DECIMALS), round(coords[1], MAP_COORD_DECIMALS)]
     return [_round_coords(c) for c in coords]
+
+
+def thai_date(day: date) -> str:
+    """"5 พฤศจิกายน 2569", as TMD writes dates."""
+    return f"{day.day} {list(THAI_MONTHS)[day.month - 1]} {day.year + 543}"
 
 
 def _clean(value) -> float | None:
@@ -308,11 +313,15 @@ class HazardService:
             for w in latest_issues(warnings_result):
                 text = f"{w.title} {w.headline or ''}"
                 by_hazard = provinces_by_hazard(self.gazetteer, [w.title, w.headline or ""], classify_hazards)
+                window = impact_window(w.title, w.announced_at.astimezone(BANGKOK).date())
                 warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
-                                 "provinces_by_hazard": {hazard.value: codes for hazard, codes in by_hazard.items()}})
+                                 "provinces_by_hazard": {hazard.value: codes for hazard, codes in by_hazard.items()},
+                                 "impact_from": window[0].isoformat() if window else None,
+                                 "impact_to": window[1].isoformat() if window else None})
         # Every warning in TMD's current feed is in force: its EffectEndDate is when the next issue is due, not when
         # the hazard ends. If TMD failed this time, the last good warnings still apply.
-        official = self._official_by_province(warnings if warnings is not None else self.warnings)
+        official = self._official_by_province(warnings if warnings is not None else self.warnings, self._today(),
+                                              self.engine.rules["official_warning"]["lead_days"])
 
         if records["thaiwater_waterlevel"]:
             fresh = self.fresh_levels(records["thaiwater_waterlevel"])
@@ -433,8 +442,11 @@ class HazardService:
                     obs = {**obs, "fire_probability_7d": pred["probability"]}
                 d = self.engine.decide(DecisionInput(hazard=hazard, observations=obs, degraded_sources=degraded.get(hazard, []),
                                                      model_level=model_level, model_confidence=model_conf,
-                                                     official_warning_active=bool(warned)))
-                notices = [f"กรมอุตุนิยมวิทยาประกาศเตือน: {title}" for title in warned] + list(d.notices)
+                                                     official_warning_active=any(start is None for _, start in warned),
+                                                     official_warning_upcoming=any(start is not None for _, start in warned)))
+                notices = [f"กรมอุตุนิยมวิทยาประกาศเตือน: {title}" if start is None else
+                           f"กรมอุตุนิยมวิทยาประกาศเตือนล่วงหน้า (คาดว่าเริ่ม {thai_date(start)}): {title}"
+                           for title, start in warned] + list(d.notices)
                 sources = list(SOURCES[hazard]) + (["กรมอุตุนิยมวิทยา (ประกาศเตือน)"] if warned else [])
                 if obs.get("satellite_flood_cells_7d") is not None:
                     sources.append("GISTDA (ดาวเทียม)")
@@ -480,13 +492,23 @@ class HazardService:
         return decisions, warnings, status
 
     @staticmethod
-    def _official_by_province(warnings: list[dict]) -> dict[str, dict[HazardType, list[str]]]:
-        """Province code -> hazard -> titles of the TMD warnings that name the province for that hazard."""
-        found: dict[str, dict[HazardType, list[str]]] = {}
+    def _today() -> date:
+        return datetime.now(BANGKOK).date()
+
+    @staticmethod
+    def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None]]]]:
+        """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None) of the
+        TMD warnings that name the province for that hazard. Warnings whose last impact day has passed are left out."""
+        found: dict[str, dict[HazardType, list[tuple[str, date | None]]]] = {}
         for warning in warnings:
+            start = date.fromisoformat(warning["impact_from"]) if warning.get("impact_from") else None
+            end = date.fromisoformat(warning["impact_to"]) if warning.get("impact_to") else None
+            if end is not None and today > end:
+                continue
+            upcoming = start if start is not None and today < start - timedelta(days=lead_days) else None
             for hazard, provinces in warning.get("provinces_by_hazard", {}).items():
                 for province in provinces:
-                    found.setdefault(province, {}).setdefault(HazardType(hazard), []).append(warning["title"])
+                    found.setdefault(province, {}).setdefault(HazardType(hazard), []).append((warning["title"], upcoming))
         return found
 
     @staticmethod

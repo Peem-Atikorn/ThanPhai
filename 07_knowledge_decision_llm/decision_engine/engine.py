@@ -18,6 +18,8 @@ class DecisionInput:
     model_level: AlertLevel | None = None
     model_confidence: float | None = None
     official_warning_active: bool = False
+    # An official warning whose impact starts more than `lead_days` ahead.
+    official_warning_upcoming: bool = False
     observations: dict[str, float | None] = field(default_factory=dict)
     degraded_sources: list[str] = field(default_factory=list)
 
@@ -45,6 +47,9 @@ class DecisionEngine:
         if data.official_warning_active:
             level = AlertLevel[self.rules["official_warning"]["min_level"]]
             candidates.append((level, conf["official"], "OFFICIAL_WARNING"))
+        elif data.official_warning_upcoming:
+            level = AlertLevel[self.rules["official_warning"]["upcoming_level"]]
+            candidates.append((level, conf["official"], "OFFICIAL_WARNING_UPCOMING"))
 
         hazard_rules = self.rules["overrides"].get(data.hazard.value, [])
         for rule in hazard_rules:

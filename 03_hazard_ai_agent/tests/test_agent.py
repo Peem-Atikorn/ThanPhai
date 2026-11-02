@@ -422,3 +422,10 @@ def test_the_word_river_is_not_the_tambon_named_mae_nam():
     assert understand("แม่น้ำเจ้าพระยาตอนนี้เป็นยังไง", gaz, NOW).intent == "river"
     named = understand("ต.แม่น้ำ ฝนตกไหม", gaz, NOW)
     assert named.intent == "risk" and named.area.code == "TH840405"  # written as a place, it is one
+
+
+def test_reason_names_an_upcoming_tmd_warning():
+    from hazard_agent.agent import _reason
+
+    assert _reason({"rule_ids": ["OFFICIAL_WARNING"]}) == "มีประกาศเตือนจากกรมอุตุนิยมวิทยา"
+    assert "ล่วงหน้า" in _reason({"rule_ids": ["OFFICIAL_WARNING_UPCOMING"]})

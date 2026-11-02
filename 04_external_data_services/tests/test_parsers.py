@@ -1,7 +1,7 @@
 """Offline parser tests against real responses saved on 2026-10-19."""
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -20,7 +20,7 @@ from external_data.adapters import (
 )
 from external_data.adapters.base import BANGKOK, in_thailand_bbox
 from external_data.adapters.thaiwater import bank_quality_flag, signed_bank_diff
-from external_data.adapters.tmd import as_list, classify_hazards, latest_issues
+from external_data.adapters.tmd import as_list, classify_hazards, impact_window, latest_issues
 from thanphai_shared import HazardType
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -133,6 +133,23 @@ def test_tmd_latest_issue_replaces_earlier_ones():
              single]
     kept = latest_issues(TmdWarnings().parse_warnings({"Warning": items}, NOW))
     assert [w.issue_no for w in kept] == ["3", "4"]  # issue 4 is another warning (heavy rain, 2026-10-18)
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("อากาศแปรปรวน (มีผลกระทบในช่วงวันที่ 5-9 พฤศจิกายน 2569) ฉบับที่ 3 (286/2569)", (date(2026, 11, 5), date(2026, 11, 9))),
+        ("ฝนตกหนัก (มีผลกระทบในช่วงวันที่ 5–7 พฤศจิกายน 2569)", (date(2026, 11, 5), date(2026, 11, 7))),
+        ("ฝนตกหนัก (มีผลกระทบในช่วงวันที่ 30 ตุลาคม - 2 พฤศจิกายน 2569)", (date(2026, 10, 30), date(2026, 11, 2))),
+        ("ฝนตกหนัก (มีผลกระทบในช่วงวันที่ 30 ธันวาคม - 2 มกราคม 2570)", (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ฝนตกหนัก (มีผลกระทบจนถึงวันที่ 25 ตุลาคม 2569) ฉบับที่ 12", (date(2026, 10, 22), date(2026, 10, 25))),
+        ("ฝนตกหนัก (มีผลกระทบในวันที่ 5 พฤศจิกายน 2569)", (date(2026, 11, 5), date(2026, 11, 5))),
+        ("ฝนตกหนักบริเวณประเทศไทย ฉบับที่ 1", None),  # no impact note: the caller applies it now
+        ("ฝนตกหนัก (มีผลกระทบในช่วงวันที่ 30-31 พฤศจิกายน 2569)", None),  # no 31 November
+    ],
+)
+def test_tmd_impact_window(title, expected):
+    assert impact_window(title, date(2026, 10, 22)) == expected
 
 
 def test_tmd_weather_3h_parses_stations():

@@ -1,10 +1,14 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.10.22.6"
+version: "2026.11.02.1"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
   min_level: WARNING
+  # TMD warns days ahead ("มีผลกระทบในช่วงวันที่ 5-9 พฤศจิกายน" issued 2 Nov). A warning is active from `lead_days`
+  # before its first impact day to the end of its last; before that it sets `upcoming_level`. No dates read: active now.
+  lead_days: 1
+  upcoming_level: WATCH
 
 # Observation thresholds. A rule fires when `value <op> threshold`. Rules for the same hazard
 # are all checked and the highest level wins.

@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 import httpx
@@ -32,6 +32,39 @@ def classify_hazards(text: str) -> list[HazardType]:
 
 # "… ฉบับที่ 3 (286/2569)": issues of one warning differ only in this tail.
 ISSUE_TAIL = re.compile(r"\s*ฉบับที่\s*\d+\s*(?:\(\s*\d+\s*/\s*\d+\s*\))?\s*$")
+
+
+THAI_MONTHS = {name: i for i, name in enumerate(
+    ("มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม",
+     "พฤศจิกายน", "ธันวาคม"), start=1)}
+_MONTH = "|".join(THAI_MONTHS)
+# In the title's "(มีผลกระทบ …)": "ในช่วงวันที่ 5-9 พฤศจิกายน 2569", "30 ตุลาคม - 2 พฤศจิกายน 2569", "จนถึงวันที่ 25 ตุลาคม 2569".
+IMPACT_NOTE = re.compile(r"มีผลกระทบ([^)]*)")
+DAY_RANGE = re.compile(rf"(\d{{1,2}})\s*(?:({_MONTH})\s*(\d{{4}})?)?\s*[-–]\s*(\d{{1,2}})\s*({_MONTH})\s*(\d{{4}})")
+ONE_DAY = re.compile(rf"(\d{{1,2}})\s*({_MONTH})\s*(\d{{4}})")
+
+
+def impact_window(title: str, announced: date) -> tuple[date, date] | None:
+    """First and last impact day (Thai dates, Buddhist years) from a warning title; None when it gives none.
+
+    EffectStartDate/EffectEndDate cannot be used: EffectEndDate is when the next issue is due.
+    """
+    note = IMPACT_NOTE.search(title)
+    if not note:
+        return None
+    try:
+        if m := DAY_RANGE.search(note.group(1)):
+            d1, m1, y1, d2, m2, y2 = m.groups()
+            end = date(int(y2) - 543, THAI_MONTHS[m2], int(d2))
+            month = THAI_MONTHS[m1] if m1 else end.month
+            year = int(y1) - 543 if y1 else end.year - (month > end.month)  # "30 ธันวาคม - 2 มกราคม 2570"
+            return date(year, month, int(d1)), end
+        if m := ONE_DAY.search(note.group(1)):
+            day = date(int(m.group(3)) - 543, THAI_MONTHS[m.group(2)], int(m.group(1)))
+            return (min(announced, day), day) if "จนถึง" in note.group(1) else (day, day)
+    except ValueError:  # an impossible date ("31 พฤศจิกายน")
+        return None
+    return None
 
 
 def latest_issues(warnings: list[OfficialWarning]) -> list[OfficialWarning]:

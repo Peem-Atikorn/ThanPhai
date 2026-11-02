@@ -263,12 +263,22 @@ Round 7 (dams, 2026-10-19):
     Now: title and headline are cut separately; a title also splits at "และ" + weather word + "บริเวณ" (not "และมีฝนตกหนักบางแห่ง");
     a part with no hazard word but "ผลกระทบ"/"เช่นเดียวกัน" takes the hazards of the part before it; "ประเทศไทยตอนบน" = all but the south;
     `latest_issues()` (module 04) keeps the newest issue of each title. Live result: rain_storm 77 provinces, flood the 16 southern ones.
-106. Open question: every warning in the feed applies now (100), so issue 3 puts 924 of 928 districts at WARNING on 2 Nov for weather from 5 Nov.
+106. With 105, issue 3 put 924 of 928 districts at WARNING on 2 Nov for weather from 5 Nov (every warning in the feed applied now, 100).
+
+### Round 20 — TMD warning lead time (branch `feature/peem/05-tmd-warning-lead-time`, stacked on 05-tmd-warning-parts)
+107. Module 04 `impact_window()` reads the title's "(มีผลกระทบ …)": "ในช่วงวันที่ 5-9 พฤศจิกายน 2569", "30 ตุลาคม - 2 พฤศจิกายน",
+    across a year end, "จนถึงวันที่ 25 ตุลาคม" (from the issue day), one day; Buddhist years. `/v1/warnings` items gain `impact_from` / `impact_to`.
+108. rules.yaml (2026.11.02.1) `official_warning.lead_days: 1`, `upcoming_level: WATCH`: a warning is WARNING from the day before its first
+    impact day to the end of its last, WATCH (`OFFICIAL_WARNING_UPCOMING`, notice "ประกาศเตือนล่วงหน้า (คาดว่าเริ่ม …)") before that, and
+    no longer counts after its last day. No dates read: WARNING now, as before. Phase is worked out on each refresh, so it also holds for kept warnings.
+    Why 1 day: TMD reissues every 6-12 h and places change; a WARNING days ahead for most of the country wears out attention (and LINE alerts later).
+    Live 2026-11-02 (issue 3, 5-9 Nov): 897 WATCH, 27 WARNING, 4 CRITICAL (was 924 WARNING); ขอนแก่น/เชียงใหม่ rain WATCH, หาดใหญ่ rain + flood WATCH.
+    Not yet: per-region days in the headline ("5–7 พ.ย. ประเทศไทยตอนบน"); the title's window is used for all.
 
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).
-- TMD warnings apply per hazard to the provinces their text names with it (round 18, 104); a region given only thunderstorms is not warned.
+- TMD warnings apply per hazard to the provinces their text names with it (round 18, 104); a region given only thunderstorms is not warned. WATCH until the day before the impact window, then WARNING (108).
 - Drought uses NDVI/VCI (monthly, ~2–6 weeks behind). Rainfall-deficit SPI per district still needs a CHIRPS backfill.
 - Earthdata token expires 2026-12-18; `make ndvi` fails with "not an HDF file" after that until it is renewed.
 - Gemini free tier: Google may use requests to improve its products. Move to the paid tier before real users.
