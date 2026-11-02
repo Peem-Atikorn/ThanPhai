@@ -166,6 +166,35 @@ def test_tmd_read_days_in_a_statement(text, expected):
     assert read_days(text, date(2026, 10, 18)) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "announced", "expected"),
+    [
+        # Review of #17: with no year, both days were put in the issue's year and the start a year before that,
+        # so a warning issued on 29 Dec for 30 Dec - 2 Jan read as 30 Dec 2025 - 2 Jan 2026 and was dropped as over.
+        ("ในช่วงวันที่ 30 ธ.ค. - 2 ม.ค.", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 30 ธันวาคม - 2 มกราคม", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 30 ธ.ค. - 2 ม.ค.", date(2027, 1, 1), (date(2026, 12, 30), date(2027, 1, 2))),  # a reissue on 1 Jan
+        ("ในวันที่ 2 ม.ค.", date(2026, 12, 30), (date(2027, 1, 2), date(2027, 1, 2))),
+        ("ในวันที่ 30 ธ.ค.", date(2027, 1, 1), (date(2026, 12, 30), date(2026, 12, 30))),
+        ("จนถึงวันที่ 2 ม.ค.", date(2026, 12, 30), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 28 ก.พ. - 1 มี.ค.", date(2027, 2, 27), (date(2027, 2, 28), date(2027, 3, 1))),
+        ("ในวันที่ 29 ก.พ.", date(2028, 2, 27), (date(2028, 2, 29), date(2028, 2, 29))),  # a leap year
+        ("ในวันที่ 29 ก.พ.", date(2027, 2, 27), None),  # no 29 February near 2027: not 2028
+        # A written year is kept as written.
+        ("ในช่วงวันที่ 30 ธันวาคม 2569 - 2 มกราคม 2570", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+        ("ในช่วงวันที่ 30 ธันวาคม - 2 มกราคม 2570", date(2026, 12, 29), (date(2026, 12, 30), date(2027, 1, 2))),
+    ],
+)
+def test_tmd_read_days_without_a_year_across_the_new_year(text, announced, expected):
+    assert read_days(text, announced) == expected
+
+
+def test_tmd_year_end_warning_is_not_over_on_its_days():
+    # The same case through the title: still in force on 31 Dec and 2 Jan, over on 3 Jan.
+    first, last = impact_window("ฝนตกหนัก (มีผลกระทบในช่วงวันที่ 30 ธ.ค. - 2 ม.ค.) ฉบับที่ 1", date(2026, 12, 29))
+    assert first <= date(2026, 12, 31) <= last and date(2027, 1, 2) <= last < date(2027, 1, 3)
+
+
 def test_tmd_weather_3h_parses_stations():
     records = TmdWeather3Hours().parse(load_json("tmd_weather3h.json"), NOW)
     assert len(records) == 4 * 5

@@ -621,3 +621,23 @@ def test_tmd_warning_is_a_watch_until_the_day_before_its_impact(base_service, mo
     else:
         assert not any(r.startswith("OFFICIAL_WARNING") for r in item["rule_ids"])
         assert not any("กรมอุตุนิยมวิทยาประกาศเตือน" in n for n in item["notices"])
+
+
+@pytest.mark.parametrize(("today", "active"), [(date(2026, 12, 31), True), (date(2027, 1, 2), True), (date(2027, 1, 3), False)])
+def test_tmd_warning_over_the_new_year_without_years_stays_in_force(base_service, monkeypatch, today, active):
+    # Review of #17: "30 ธ.ค. - 2 ม.ค." with no year was read a year back and the warning was dropped as over.
+    from thanphai_shared import HazardType, OfficialWarning
+
+    svc = stale_copy(base_service)
+    monkeypatch.setattr(svc, "_today", lambda: today)
+    at = datetime(2026, 12, 29, 17, 0, tzinfo=timezone(timedelta(hours=7)))
+    warning = OfficialWarning(source="tmd_warnings", issue_no="1", title="ฝนตกหนักบริเวณภาคใต้ (มีผลกระทบในช่วงวันที่ 30 ธ.ค. - 2 ม.ค.) ฉบับที่ 1",
+                              headline="ในช่วงวันที่ 30 ธ.ค. - 2 ม.ค. ภาคใต้จะมีฝนตกหนัก", hazards=[HazardType.RAIN_STORM],
+                              announced_at=at, fetched_at=at, attribution="t")
+    decisions, warnings, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []},
+                                          [warning])
+    assert (warnings[0]["impact_from"], warnings[0]["impact_to"]) == ("2026-12-30", "2027-01-02")
+    assert warnings[0]["impact_by_hazard"]["rain_storm"]["TH90"] == ["2026-12-30", "2027-01-02"]
+    code = next(a.code for a in svc.gazetteer.resolve("อำเภอหาดใหญ่"))
+    rain = next(i for i in decisions[code] if i["hazard"] == "rain_storm")
+    assert ("OFFICIAL_WARNING" in rain["rule_ids"]) is active

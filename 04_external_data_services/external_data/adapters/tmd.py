@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -49,11 +49,22 @@ DAY_RANGE = re.compile(rf"(\d{{1,2}})\s*(?:({_MONTH})\s*{_YEAR}?)?\s*[-–]\s*(\
 ONE_DAY = re.compile(rf"(\d{{1,2}})\s*({_MONTH})\s*{_YEAR}?")
 
 
-def _year(text: str | None, announced: date) -> int:
-    """Gregorian year from "2569" or "69"; the issue's year when none is written."""
-    if not text:
-        return announced.year
-    return (int(text) + 2500 if len(text) == 2 else int(text)) - 543
+def _date(day: str, month: int, year: str | None, announced: date) -> date:
+    """A Thai date: Buddhist year "2569" or "69"; with no year, the one closest to the issue day. A warning issued
+    on 30 Dec 2026 that says "2 ม.ค." means 2 Jan 2027, not 2 Jan 2026 (which would already be over)."""
+    if year:
+        return date((int(year) + 2500 if len(year) == 2 else int(year)) - 543, month, int(day))
+    candidates = []
+    for y in (announced.year - 1, announced.year, announced.year + 1):
+        try:
+            candidates.append(date(y, month, int(day)))
+        except ValueError:  # 29 February in a common year
+            pass
+    best = min(candidates, key=lambda d: abs(d - announced), default=None)
+    # Warnings speak of the days around their issue; half a year off means no such day ("29 ก.พ." in 2027).
+    if best is None or abs(best - announced) > timedelta(days=183):
+        raise ValueError(f"no such day near {announced}: {day}/{month}")
+    return best
 
 
 def read_days(text: str, announced: date) -> tuple[date, date] | None:
@@ -61,12 +72,13 @@ def read_days(text: str, announced: date) -> tuple[date, date] | None:
     try:
         if m := DAY_RANGE.search(text):
             d1, m1, y1, d2, m2, y2 = m.groups()
-            end = date(_year(y2, announced), MONTHS[m2], int(d2))
+            end = _date(d2, MONTHS[m2], y2, announced)
             month = MONTHS[m1] if m1 else end.month
-            year = _year(y1, announced) if y1 else end.year - (month > end.month)  # "30 ธันวาคม - 2 มกราคม 2570"
+            # The first day takes its year from the last one: "30 ธันวาคม - 2 มกราคม 2570" starts in 2569.
+            year = _date(d1, month, y1, announced).year if y1 else end.year - (month > end.month)
             return date(year, month, int(d1)), end
         if m := ONE_DAY.search(text):
-            day = date(_year(m.group(3), announced), MONTHS[m.group(2)], int(m.group(1)))
+            day = _date(m.group(1), MONTHS[m.group(2)], m.group(3), announced)
             return (min(announced, day), day) if "จนถึง" in text[:m.start()] else (day, day)
     except ValueError:  # an impossible date ("31 พฤศจิกายน")
         return None

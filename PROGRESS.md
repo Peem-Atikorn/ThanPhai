@@ -281,6 +281,9 @@ Round 7 (dams, 2026-10-19):
     without days keeps the days of the one before it; a province in several statements gets their whole span; one with no days there keeps the
     title's. `/v1/warnings` items gain `impact_by_hazard` (hazard -> province -> [first, last]).
     Live 2026-11-02: rain 61 upper provinces 5–7 Nov and 16 southern 5–9 Nov; flood 16 southern 5–9 Nov. เชียงใหม่ is no longer warned on 8–9 Nov.
+110. Bug (review): a date with no year took the issue's year, so "30 ธ.ค. - 2 ม.ค." issued on 29 Dec 2026 read as 30 Dec 2025 – 2 Jan 2026
+    and the warning was dropped as over. A day with no year is now the one closest to the issue day (2 ม.ค. → 2027; 30 ธ.ค. reissued on
+    1 Jan → 2026); the first day of a range still takes its year from the last. Over half a year off means no such day ("29 ก.พ." in 2027).
 
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
