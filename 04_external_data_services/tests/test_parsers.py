@@ -20,7 +20,7 @@ from external_data.adapters import (
 )
 from external_data.adapters.base import BANGKOK, in_thailand_bbox
 from external_data.adapters.thaiwater import bank_quality_flag, signed_bank_diff
-from external_data.adapters.tmd import as_list, classify_hazards, impact_window, latest_issues
+from external_data.adapters.tmd import as_list, classify_hazards, impact_window, latest_issues, read_days
 from thanphai_shared import HazardType
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -150,6 +150,20 @@ def test_tmd_latest_issue_replaces_earlier_ones():
 )
 def test_tmd_impact_window(title, expected):
     assert impact_window(title, date(2026, 10, 22)) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ในช่วงวันที่ 18-20 ต.ค. 69 ภาคใต้และภาคตะวันออกจะมีฝนตกต่อเนื่อง", (date(2026, 10, 18), date(2026, 10, 20))),
+        ("ในช่วงวันที่ 5–7 พฤศจิกายน 2569 บริเวณประเทศไทยตอนบน", (date(2026, 11, 5), date(2026, 11, 7))),
+        ("ในวันที่ 5 พ.ย. ภาคเหนือ", (date(2026, 11, 5), date(2026, 11, 5))),  # no year: the issue's
+        ("ส่วนภาคเหนือ ภาคกลาง จะได้รับผลกระทบในระยะถัดไป", None),
+        ("ฉบับที่ 3 (286/2569)", None),
+    ],
+)
+def test_tmd_read_days_in_a_statement(text, expected):
+    assert read_days(text, date(2026, 10, 18)) == expected
 
 
 def test_tmd_weather_3h_parses_stations():

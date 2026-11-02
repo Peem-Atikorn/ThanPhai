@@ -37,34 +37,49 @@ ISSUE_TAIL = re.compile(r"\s*ฉบับที่\s*\d+\s*(?:\(\s*\d+\s*/\s*\d+
 THAI_MONTHS = {name: i for i, name in enumerate(
     ("มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม",
      "พฤศจิกายน", "ธันวาคม"), start=1)}
-_MONTH = "|".join(THAI_MONTHS)
+# Headlines use short forms: "ในช่วงวันที่ 18-20 ต.ค. 69".
+SHORT_MONTHS = {name: i for i, name in enumerate(
+    ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."), start=1)}
+MONTHS = THAI_MONTHS | SHORT_MONTHS
+_MONTH = "|".join(re.escape(name) for name in sorted(MONTHS, key=len, reverse=True))
+_YEAR = r"(?:พ\.ศ\.\s*)?(\d{4}|\d{2}(?!\d))"
 # In the title's "(มีผลกระทบ …)": "ในช่วงวันที่ 5-9 พฤศจิกายน 2569", "30 ตุลาคม - 2 พฤศจิกายน 2569", "จนถึงวันที่ 25 ตุลาคม 2569".
 IMPACT_NOTE = re.compile(r"มีผลกระทบ([^)]*)")
-DAY_RANGE = re.compile(rf"(\d{{1,2}})\s*(?:({_MONTH})\s*(\d{{4}})?)?\s*[-–]\s*(\d{{1,2}})\s*({_MONTH})\s*(\d{{4}})")
-ONE_DAY = re.compile(rf"(\d{{1,2}})\s*({_MONTH})\s*(\d{{4}})")
+DAY_RANGE = re.compile(rf"(\d{{1,2}})\s*(?:({_MONTH})\s*{_YEAR}?)?\s*[-–]\s*(\d{{1,2}})\s*({_MONTH})\s*{_YEAR}?")
+ONE_DAY = re.compile(rf"(\d{{1,2}})\s*({_MONTH})\s*{_YEAR}?")
+
+
+def _year(text: str | None, announced: date) -> int:
+    """Gregorian year from "2569" or "69"; the issue's year when none is written."""
+    if not text:
+        return announced.year
+    return (int(text) + 2500 if len(text) == 2 else int(text)) - 543
+
+
+def read_days(text: str, announced: date) -> tuple[date, date] | None:
+    """First and last day of the first date or date range in a warning text (Thai dates, Buddhist years); None if none."""
+    try:
+        if m := DAY_RANGE.search(text):
+            d1, m1, y1, d2, m2, y2 = m.groups()
+            end = date(_year(y2, announced), MONTHS[m2], int(d2))
+            month = MONTHS[m1] if m1 else end.month
+            year = _year(y1, announced) if y1 else end.year - (month > end.month)  # "30 ธันวาคม - 2 มกราคม 2570"
+            return date(year, month, int(d1)), end
+        if m := ONE_DAY.search(text):
+            day = date(_year(m.group(3), announced), MONTHS[m.group(2)], int(m.group(1)))
+            return (min(announced, day), day) if "จนถึง" in text[:m.start()] else (day, day)
+    except ValueError:  # an impossible date ("31 พฤศจิกายน")
+        return None
+    return None
 
 
 def impact_window(title: str, announced: date) -> tuple[date, date] | None:
-    """First and last impact day (Thai dates, Buddhist years) from a warning title; None when it gives none.
+    """First and last impact day of the whole warning, from the title's "(มีผลกระทบ …)"; None when it gives none.
 
     EffectStartDate/EffectEndDate cannot be used: EffectEndDate is when the next issue is due.
     """
     note = IMPACT_NOTE.search(title)
-    if not note:
-        return None
-    try:
-        if m := DAY_RANGE.search(note.group(1)):
-            d1, m1, y1, d2, m2, y2 = m.groups()
-            end = date(int(y2) - 543, THAI_MONTHS[m2], int(d2))
-            month = THAI_MONTHS[m1] if m1 else end.month
-            year = int(y1) - 543 if y1 else end.year - (month > end.month)  # "30 ธันวาคม - 2 มกราคม 2570"
-            return date(year, month, int(d1)), end
-        if m := ONE_DAY.search(note.group(1)):
-            day = date(int(m.group(3)) - 543, THAI_MONTHS[m.group(2)], int(m.group(1)))
-            return (min(announced, day), day) if "จนถึง" in note.group(1) else (day, day)
-    except ValueError:  # an impossible date ("31 พฤศจิกายน")
-        return None
-    return None
+    return read_days(note.group(1), announced) if note else None
 
 
 def latest_issues(warnings: list[OfficialWarning]) -> list[OfficialWarning]:

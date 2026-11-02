@@ -585,16 +585,19 @@ def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_servi
 
 
 @pytest.mark.parametrize(
-    ("today", "level", "rule", "notice"),
+    ("district", "today", "level", "rule", "notice"),
     [
-        (date(2026, 11, 2), "WATCH", "OFFICIAL_WARNING_UPCOMING", "ประกาศเตือนล่วงหน้า (คาดว่าเริ่ม 5 พฤศจิกายน 2569)"),
-        (date(2026, 11, 4), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
-        (date(2026, 11, 9), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
-        (date(2026, 11, 10), None, None, None),  # past its last impact day: the warning no longer counts
+        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 2), "WATCH", "OFFICIAL_WARNING_UPCOMING", "ประกาศเตือนล่วงหน้า (คาดว่าเริ่ม 5 พฤศจิกายน 2569)"),
+        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 4), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
+        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 7), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
+        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 8), None, None, None),  # upper Thailand: 5-7 Nov in the headline
+        ("อำเภอหาดใหญ่", date(2026, 11, 9), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),  # south: 5-9 Nov
+        ("อำเภอหาดใหญ่", date(2026, 11, 10), None, None, None),  # past its last impact day: the warning no longer counts
     ],
 )
-def test_tmd_warning_is_a_watch_until_the_day_before_its_impact(base_service, monkeypatch, today, level, rule, notice):
-    # Issue 3 was issued on 2 Nov for 5-9 Nov: rules.yaml lead_days 1 makes it a WATCH on 2-3 Nov, a WARNING 4-9 Nov.
+def test_tmd_warning_is_a_watch_until_the_day_before_its_impact(base_service, monkeypatch, district, today, level, rule, notice):
+    # Issue 3 was issued on 2 Nov, for 5-7 Nov in upper Thailand and 5-9 Nov in the south: rules.yaml lead_days 1 makes
+    # it a WATCH on 2-3 Nov and a WARNING from 4 Nov to each region's last day.
     import json as _json
 
     from external_data.adapters.tmd import classify_hazards
@@ -610,7 +613,8 @@ def test_tmd_warning_is_a_watch_until_the_day_before_its_impact(base_service, mo
     empty = {"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}
     decisions, warnings, _ = svc._process(empty, [warning])
     assert (warnings[0]["impact_from"], warnings[0]["impact_to"]) == ("2026-11-05", "2026-11-09")
-    code = next(a.code for a in svc.gazetteer.resolve("อำเภอเมืองเชียงใหม่"))
+    assert warnings[0]["impact_by_hazard"]["rain_storm"]["TH50"] == ["2026-11-05", "2026-11-07"]
+    code = next(a.code for a in svc.gazetteer.resolve(district))
     item = next(i for i in decisions[code] if i["hazard"] == "rain_storm")
     if rule:
         assert item["rule_ids"][0] == rule and item["level"] == level and notice in item["notices"][0]
