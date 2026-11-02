@@ -547,3 +547,36 @@ def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service):
         assert "OFFICIAL_WARNING" not in rule_ids("อำเภอเมืองเชียงใหม่", hazard)
         assert "OFFICIAL_WARNING" in rule_ids("อำเภอเมืองชลบุรี", hazard)
         assert "OFFICIAL_WARNING" in rule_ids("อำเภอหาดใหญ่", hazard)
+
+
+def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_service):
+    # Live 2026-11-02, issues 2 and 3 of one warning in the feed. Before: ขอนแก่น got a flood WARNING from the title's
+    # heavy rain in the south, the north/central/east got nothing, and each card listed both issues.
+    import json as _json
+
+    from external_data.adapters.tmd import classify_hazards
+    from thanphai_shared import OfficialWarning
+
+    svc = stale_copy(base_service)
+    fixture = Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures" / "tmd_warning_texts.json"
+    issue = next(f for f in _json.loads(fixture.read_text(encoding="utf-8")) if f["issue_no"] == "3")
+    now = datetime.now(timezone.utc)
+
+    def warning(no, title, at):
+        return OfficialWarning(source="tmd_warnings", issue_no=no, title=title, headline=issue["headline"],
+                               hazards=classify_hazards(issue["text"]), announced_at=at, fetched_at=now, attribution="t")
+
+    older = warning("2", issue["title"].replace("ฉบับที่ 3 (286/2569)", "ฉบับที่ 2 (285/2569)"), now - timedelta(hours=9))
+    decisions, warnings, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []},
+                                          [older, warning("3", issue["title"], now)])
+    assert [w["issue_no"] for w in warnings] == ["3"]
+
+    def item(district, hazard):
+        code = next(a.code for a in svc.gazetteer.resolve(district))
+        return next(i for i in decisions[code] if i["hazard"] == hazard)
+
+    for district in ("อำเภอเมืองขอนแก่น", "อำเภอเมืองเชียงใหม่", "อำเภอเมืองชลบุรี", "อำเภอหาดใหญ่"):
+        rain = item(district, "rain_storm")
+        assert "OFFICIAL_WARNING" in rain["rule_ids"] and sum("กรมอุตุนิยมวิทยาประกาศเตือน" in n for n in rain["notices"]) == 1
+    assert "OFFICIAL_WARNING" in item("อำเภอหาดใหญ่", "flood")["rule_ids"]
+    assert all("OFFICIAL_WARNING" not in item(d, "flood")["rule_ids"] for d in ("อำเภอเมืองขอนแก่น", "อำเภอเมืองเชียงใหม่", "อำเภอเมืองชลบุรี"))
