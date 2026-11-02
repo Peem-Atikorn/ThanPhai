@@ -44,6 +44,8 @@ REGIONS = {
     "ภาคใต้ฝั่งตะวันออก": SOUTH_EAST_COAST,
     "ภาคใต้ฝั่งตะวันตก": SOUTH_WEST_COAST,
     "ภาคใต้": SOUTH_EAST_COAST + SOUTH_WEST_COAST,
+    # Upper Thailand: everything but the south (live issue 3, 2026-11-02: "ส่วนภาคเหนือ ภาคกลาง … และภาคตะวันออก").
+    "ประเทศไทยตอนบน": NORTH + NORTHEAST + CENTRAL + BANGKOK_AND_VICINITY + EAST,
 }
 # Longest first, so "ภาคตะวันออกเฉียงเหนือ" is not read as "ภาคตะวันออก" and "ภาคใต้ฝั่ง…" not as "ภาคใต้".
 REGION_PATTERN = re.compile("|".join(re.escape(name) for name in sorted(REGIONS, key=len, reverse=True)))
@@ -57,26 +59,36 @@ BEFORE = re.compile(r"(?:^|[\s,:;(]|จังหวัด|จ\.|และ)$")
 AFTER = re.compile(r"^(?:$|[\s,:;).]|และ)")
 # Words that start a new statement about other areas ("ส่วนภาคเหนือตอนล่าง … ยังคงมีฝนฟ้าคะนอง"). "ส่วนมาก" and
 # "ส่วนใหญ่" mean "mostly" and do not.
-PART_START = re.compile(r"(?=ส่วน(?!มาก|ใหญ่)|หลังจากนั้น|สำหรับ|ขอให้|อนึ่ง)")
+# A title joins two subjects with "และ" + weather + its own area: "อากาศแปรปรวนบริเวณประเทศไทยตอนบน
+# และฝนตกหนักถึงหนักมากบริเวณภาคใต้". Without "บริเวณ" in the same word, "และมีฝนตกหนักบางแห่ง" stays with its area.
+PART_START = re.compile(r"(?=ส่วน(?!มาก|ใหญ่)|หลังจากนั้น|สำหรับ|ขอให้|อนึ่ง|\sและ(?:มี)?(?:ฝน|พายุ|คลื่น|ลม|น้ำ|อากาศ)\S*บริเวณ)")
+# "ส่วนภาคเหนือ … จะได้รับผลกระทบในระยะถัดไป": the same weather as the statement before, later.
+SAME_IMPACT = re.compile(r"ผลกระทบ|เช่นเดียวกัน")
 
 
-def warning_parts(text: str) -> list[str]:
-    """A warning text cut into statements, each with its own areas and its own hazard words."""
-    return [part.strip() for part in PART_START.split(text) if part.strip()]
+def warning_parts(*texts: str) -> list[str]:
+    """Warning texts (title, headline) cut into statements, each with its own areas and its own hazard words."""
+    return [part.strip() for text in texts for part in PART_START.split(text) if part.strip()]
 
 
-def provinces_by_hazard(gazetteer: Gazetteer, text: str, classify: Callable[[str], Iterable[H]]) -> dict[H, list[str]]:
+def provinces_by_hazard(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Callable[[str], Iterable[H]]) -> dict[H, list[str]]:
     """Hazard -> province codes, sorted: a province counts for a hazard only where one statement names both.
 
     Issue 12 has heavy rain in the east and south, "ส่วน" the lower north only thunderstorms: the north must not
-    get the heavy-rain (flood) warning. A statement with no hazard word of its own sets nothing.
+    get the heavy-rain (flood) warning. The title and the headline are cut separately, so the title's heavy rain
+    in the south does not run into the headline's first areas. A statement with no hazard word of its own sets
+    nothing, unless it says it gets the same impact ("ได้รับผลกระทบ"): then it takes the hazards of the statement
+    before it in the same text.
     """
     found: dict[H, set[str]] = {}
-    for part in warning_parts(text):
-        hazards = list(classify(part))
-        provinces = warning_provinces(gazetteer, part) if hazards else []
-        for hazard in hazards:
-            found.setdefault(hazard, set()).update(provinces)
+    for text in [texts] if isinstance(texts, str) else texts:
+        previous: list[H] = []
+        for part in warning_parts(text):
+            hazards = list(classify(part)) or (previous if SAME_IMPACT.search(part) else [])
+            provinces = warning_provinces(gazetteer, part) if hazards else []
+            for hazard in hazards:
+                found.setdefault(hazard, set()).update(provinces)
+            previous = hazards
     return {hazard: sorted(codes) for hazard, codes in found.items() if codes}
 
 

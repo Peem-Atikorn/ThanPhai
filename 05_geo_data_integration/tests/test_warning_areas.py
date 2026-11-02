@@ -79,6 +79,29 @@ def test_each_part_keeps_its_own_hazards(gaz):
                                classify_hazards) == {HazardType.RAIN_STORM: sorted(SOUTH_WEST + NORTH), HazardType.FLOOD: NORTH}
 
 
+def test_live_issue_3_flood_only_in_the_south_rain_everywhere(gaz):
+    # Title: unsettled weather in upper Thailand "และ" heavy rain (rain + flood) in the south. Headline: heavy rain
+    # in places in upper Thailand, first the northeast, "ส่วนภาคเหนือ … จะได้รับผลกระทบในระยะถัดไป" later.
+    issue = next(f for f in FIXTURES if f["issue_no"] == "3")
+    assert warning_parts(issue["title"])[1].startswith("และฝนตกหนักถึงหนักมากบริเวณภาคใต้")
+    by_hazard = provinces_by_hazard(gaz, [issue["title"], issue["headline"]], classify_hazards)
+    assert by_hazard[HazardType.FLOOD] == sorted(SOUTH)
+    assert by_hazard[HazardType.RAIN_STORM] == sorted(NORTH + NORTHEAST + CENTRAL + BANGKOK_AREA + EAST + SOUTH)
+
+
+def test_same_impact_takes_the_hazards_of_the_statement_before(gaz):
+    assert provinces_by_hazard(gaz, "ภาคใต้มีฝนตกหนัก ส่วนภาคตะวันออกจะได้รับผลกระทบในระยะถัดไป", classify_hazards) == {
+        HazardType.RAIN_STORM: sorted(SOUTH + EAST)}
+    # Without "ผลกระทบ" a statement with no hazard word still sets nothing (issue 12).
+    assert provinces_by_hazard(gaz, "ภาคใต้มีฝนตกหนัก ส่วนภาคตะวันออกมีฝนฟ้าคะนอง", classify_hazards) == {
+        HazardType.RAIN_STORM: sorted(SOUTH)}
+
+
+def test_and_with_weather_but_no_area_stays_with_its_area(gaz):
+    assert warning_parts("ภาคใต้มีฝนฟ้าคะนอง และมีฝนตกหนักบางแห่ง") == ["ภาคใต้มีฝนฟ้าคะนอง และมีฝนตกหนักบางแห่ง"]
+    assert provinces_by_hazard(gaz, "ภาคใต้มีฝนฟ้าคะนอง และมีฝนตกหนักบางแห่ง", classify_hazards) == {HazardType.RAIN_STORM: sorted(SOUTH)}
+
+
 def test_mostly_is_not_a_new_part():
     assert warning_parts("ฝนตกหนัก ส่วนมากบริเวณจังหวัดตาก") == ["ฝนตกหนัก ส่วนมากบริเวณจังหวัดตาก"]
 

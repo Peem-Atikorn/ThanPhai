@@ -256,6 +256,15 @@ Round 7 (dams, 2026-10-19):
     `provinces_by_hazard()` pairs each part's provinces with that part's own hazard words. A part with none ("ฝนฟ้าคะนอง") sets no warning:
     issue 12 now warns only east and south, for rain and flood.
 
+### Round 19 — TMD warning parts checked live (branch `fix/peem/05-tmd-warning-parts`)
+105. Live 2026-11-02, issue 3 "อากาศแปรปรวนบริเวณประเทศไทยตอนบน และฝนตกหนักถึงหนักมากบริเวณภาคใต้" (impact 5–9 Nov) showed three bugs:
+    the title was joined to the headline, so its heavy rain (flood) in the south also reached the headline's northeast; "ส่วนภาคเหนือ …
+    จะได้รับผลกระทบในระยะถัดไป" named no hazard, so north/central/Bangkok/east got nothing; issues 2 and 3 were both applied (two notices per card).
+    Now: title and headline are cut separately; a title also splits at "และ" + weather word + "บริเวณ" (not "และมีฝนตกหนักบางแห่ง");
+    a part with no hazard word but "ผลกระทบ"/"เช่นเดียวกัน" takes the hazards of the part before it; "ประเทศไทยตอนบน" = all but the south;
+    `latest_issues()` (module 04) keeps the newest issue of each title. Live result: rain_storm 77 provinces, flood the 16 southern ones.
+106. Open question: every warning in the feed applies now (100), so issue 3 puts 924 of 928 districts at WARNING on 2 Nov for weather from 5 Nov.
+
 ## Notes
 - Pressing Enter in the question box did not submit when text was typed by the browser automation tool; clicking "ถาม" works.
   Check with a real Thai keyboard (IME composition can swallow Enter).

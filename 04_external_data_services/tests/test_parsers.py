@@ -20,7 +20,7 @@ from external_data.adapters import (
 )
 from external_data.adapters.base import BANGKOK, in_thailand_bbox
 from external_data.adapters.thaiwater import bank_quality_flag, signed_bank_diff
-from external_data.adapters.tmd import as_list, classify_hazards
+from external_data.adapters.tmd import as_list, classify_hazards, latest_issues
 from thanphai_shared import HazardType
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -123,6 +123,16 @@ def test_tmd_warning_handles_list_and_empty():
     assert len(TmdWarnings().parse_warnings({"Warning": [single, single]}, NOW)) == 2
     assert TmdWarnings().parse_warnings({"Warnings": {}}, NOW) == []
     assert as_list({}) == [] and as_list(None) == []
+
+
+def test_tmd_latest_issue_replaces_earlier_ones():
+    single = load_json("tmd_warning_v2.json")["Warning"]
+    subject = "อากาศแปรปรวนบริเวณประเทศไทยตอนบน (มีผลกระทบในช่วงวันที่ 5-9 พฤศจิกายน 2569)"
+    items = [{**single, "TitleThai": f"{subject} ฉบับที่ 2 (285/2569)", "IssueNo": "2", "AnnounceDate": "2026-11-02 05:46:35"},
+             {**single, "TitleThai": f"{subject} ฉบับที่ 3 (286/2569)", "IssueNo": "3", "AnnounceDate": "2026-11-02 15:13:49"},
+             single]
+    kept = latest_issues(TmdWarnings().parse_warnings({"Warning": items}, NOW))
+    assert [w.issue_no for w in kept] == ["3", "4"]  # issue 4 is another warning (heavy rain, 2026-10-18)
 
 
 def test_tmd_weather_3h_parses_stations():

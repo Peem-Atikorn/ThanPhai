@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -27,6 +28,23 @@ def _credentials() -> dict[str, str]:
 
 def classify_hazards(text: str) -> list[HazardType]:
     return [hazard for hazard, words in HAZARD_KEYWORDS.items() if any(word in text for word in words)]
+
+
+# "… ฉบับที่ 3 (286/2569)": issues of one warning differ only in this tail.
+ISSUE_TAIL = re.compile(r"\s*ฉบับที่\s*\d+\s*(?:\(\s*\d+\s*/\s*\d+\s*\))?\s*$")
+
+
+def latest_issues(warnings: list[OfficialWarning]) -> list[OfficialWarning]:
+    """The newest issue of each warning, newest first. TMD's feed keeps earlier issues next to the one that replaced
+    them (2026-11-02: issues 2 and 3 of the same warning)."""
+    seen: set[str] = set()
+    kept = []
+    for w in sorted(warnings, key=lambda w: w.announced_at, reverse=True):
+        subject = ISSUE_TAIL.sub("", w.title)
+        if subject not in seen:
+            seen.add(subject)
+            kept.append(w)
+    return kept
 
 
 def as_list(value: Any) -> list:

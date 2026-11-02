@@ -24,7 +24,7 @@ from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
-from external_data.adapters.tmd import classify_hazards
+from external_data.adapters.tmd import classify_hazards, latest_issues
 from geo_integration import Gazetteer, provinces_by_hazard, warning_provinces
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
@@ -305,9 +305,9 @@ class HazardService:
         else:
             status["tmd_warnings"] = {"ok": True, "records": len(warnings_result), "checked_at": now}
             warnings = []
-            for w in warnings_result:
+            for w in latest_issues(warnings_result):
                 text = f"{w.title} {w.headline or ''}"
-                by_hazard = provinces_by_hazard(self.gazetteer, text, classify_hazards)
+                by_hazard = provinces_by_hazard(self.gazetteer, [w.title, w.headline or ""], classify_hazards)
                 warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
                                  "provinces_by_hazard": {hazard.value: codes for hazard, codes in by_hazard.items()}})
         # Every warning in TMD's current feed is in force: its EffectEndDate is when the next issue is due, not when
