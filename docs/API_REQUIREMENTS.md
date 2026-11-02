@@ -41,7 +41,7 @@ Every external API the system needs: what it gives us, how to get access, limits
 
 | Service | Endpoint | Data | Status |
 |---|---|---|---|
-| Weather warning news | `/api/WeatherWarningNews/v2/` | Official warnings: `IssueNo`, `EffectStartDate`, `EffectEndDate`, `AnnounceDate`, `TitleThai`, `HeadlineThai`, `WebUrlThai` (PDF). `Warning` is an object when there is one warning and a list when there are several. | ✅ |
+| Weather warning news | `/api/WeatherWarningNews/v2/` | Official warnings: `IssueNo`, `EffectStartDate`, `EffectEndDate`, `AnnounceDate`, `TitleThai`, `HeadlineThai`, `WebUrlThai` (PDF). `Warning` is an object when there is one warning and a list when there are several. There is no province field: module 05 (`warning_provinces`) reads province and TMD region names from the title and headline, and ThanPhai's `/v1/warnings` items carry them as `provinces`. `EffectEndDate` is when the next issue is due, not when the hazard ends. | ✅ |
 | ~~Weather warning news v1~~ | `/api/WeatherWarningNews/v1/` | **Do not use** — still answers 200 OK, but its latest item is from 2022-10-16 (stale) | ⚠️ |
 | 3-hour observations | `/api/Weather3Hours/V2/` | Station obs every 3 h (temp, humidity, rain, wind, pressure). Real-time observations only; no historical archive. | ✅ |
 | 7-day forecast | `/api/WeatherForecast7Days/v2/` | Province-level 7-day forecast | ✅ |
