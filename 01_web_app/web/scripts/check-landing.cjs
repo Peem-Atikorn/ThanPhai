@@ -55,17 +55,33 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   lib.api.boundary = async () => null;
   const Dashboard = load('@/components/Dashboard').default;
   let radarRequests = 0;
-  lib.api.radar = async () => { radarRequests++; return null; };
+  let radarEnabled = true;
+  lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frame: null }; };
   for (const hazard of ['overview', 'flood', 'rain_storm', 'tropical_cyclone']) {
     const radarEffects = [];
     const radarApp = instance(Dashboard, radarEffects);
-    const radarTree = radarApp.render({ activeView: 'hazard', activeHazard: hazard });
+    const props = { activeView: 'hazard', activeHazard: hazard };
+    const radarTree = radarApp.render(props);
     const before = radarRequests;
     const cleanupRadar = radarEffects.find(effect => /\.radar\(/.test(String(effect)))();
     assert.equal(radarRequests - before, ['overview', 'rain_storm', 'tropical_cyclone'].includes(hazard) ? 1 : 0, `Only overview and weather topics request radar: ${hazard}`);
-    if (hazard === 'overview') assert(nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle sits with the other overview layers');
+    if (hazard === 'overview') {
+      assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Radar stays hidden while availability is unknown');
+      await tick();
+      assert(nodes(radarApp.render(props)).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
+    }
     cleanupRadar?.();
   }
+  radarEnabled = false;
+  const disabledRadarEffects = [];
+  const disabledRadarApp = instance(Dashboard, disabledRadarEffects);
+  const disabledRadarProps = { activeView: 'hazard', activeHazard: 'overview' };
+  disabledRadarApp.render(disabledRadarProps);
+  const cleanupDisabledRadar = disabledRadarEffects.find(effect => /\.radar\(/.test(String(effect)))();
+  await tick();
+  assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle stays hidden when backend disables it');
+  assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note')), 'Radar note stays hidden when backend disables radar');
+  cleanupDisabledRadar?.();
   let opened = 0;
   const app = instance(Dashboard);
   let props = { activeView: 'hazard', searchInHeader: true, searchTarget: {}, riverViewRequest: 0 };
