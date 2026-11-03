@@ -72,6 +72,37 @@ QWEN_TIMEOUT_MS=15000
 
 ระบบจะเชื่อมต่อ `QwenExplainer` อัตโนมัติ หากเครื่องทีมออฟไลน์หรือคำตอบไม่ผ่านตัวตรวจ `validate()` ระบบจะสลับไปตอบด้วยเทมเพลตจากกฎโดยอัตโนมัติ (Zero Degradation)
 
+### 4.1 เว็บรันบน VPS แต่ประมวลผลโมเดลที่เครื่องทีม (Tailscale)
+
+VPS ทั่วไปไม่มี GPU และ Qwen 7B บน CPU ตอบช้าเกินเป้า 3 วินาทีมาก ให้ web + api-backend รันบน VPS แล้วส่งงาน LLM มาที่ Ollama บนเครื่องทีม (RTX 3060) ผ่าน Tailscale:
+
+```
+ผู้ใช้ → VPS (web + api-backend) ──Tailscale──→ เครื่องทีม (Ollama + RTX 3060)
+```
+
+1. ติดตั้ง [Tailscale](https://tailscale.com/download) ทั้งบน VPS และเครื่องทีม แล้วล็อกอินบัญชีเดียวกัน ดู IP วง `100.x.x.x` ของเครื่องทีมด้วย `tailscale ip -4`
+2. บนเครื่องทีม (Windows) ให้ Ollama รับการเชื่อมต่อจากนอกเครื่อง แล้วรีสตาร์ต Ollama:
+   ```powershell
+   setx OLLAMA_HOST 0.0.0.0:11434
+   ```
+   และตั้ง Windows Firewall ให้พอร์ต 11434 รับเฉพาะวง Tailscale (รันใน PowerShell แบบ Administrator):
+   ```powershell
+   New-NetFirewallRule -DisplayName "Ollama (Tailscale only)" -Direction Inbound -Protocol TCP -LocalPort 11434 -RemoteAddress 100.64.0.0/10 -Action Allow
+   ```
+3. บน VPS ใส่ใน `.env` (ไม่ต้องใช้ `host.docker.internal` เพราะคอนเทนเนอร์ส่งออกผ่าน host ที่ต่อ Tailscale อยู่แล้ว):
+   ```env
+   LLM_PROVIDER=qwen
+   QWEN_MODEL=thanphai-qwen
+   QWEN_ENDPOINT=http://100.x.x.x:11434
+   QWEN_TIMEOUT_MS=5000
+   ```
+4. ทดสอบจาก VPS: `curl http://100.x.x.x:11434/api/tags` ต้องเห็น `thanphai-qwen`
+
+ข้อควรระวัง:
+- **ห้ามเปิดพอร์ต 11434 สู่อินเทอร์เน็ตตรงๆ** Ollama ไม่มีการยืนยันตัวตน ใครก็ใช้ GPU ของเราได้
+- เครื่องทีมปิดอยู่ = ทุกคำถามรอจนหมด `QWEN_TIMEOUT_MS` แล้วจึงตอบด้วยเทมเพลต จึงตั้ง timeout ให้สั้น (~5 วินาที) ถ้าเครื่องทีมเปิดไม่ตลอด ให้ใช้ `LLM_PROVIDER=gemini` เป็นค่าหลักและสลับเป็น `qwen` เฉพาะช่วงที่เครื่องเปิด
+- ทางเลือกอื่น: reverse SSH tunnel (`ssh -R`) ต้องดูแลไม่ให้หลุดเองและตั้งให้คอนเทนเนอร์เข้าถึงพอร์ตได้ ส่วน Cloudflare Tunnel ต้องตั้ง Cloudflare Access กันคนนอกเพิ่ม
+
 ---
 
 ## 5. การประเมินผล (Benchmarking)
