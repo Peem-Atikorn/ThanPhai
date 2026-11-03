@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from api_backend.hazard_service import HazardService
 from geo_integration.gazetteer import LEVEL_RANK, normalize, split_prefix
-from decision_engine.explainer import GeminiExplainer
+from decision_engine.explainer import create_explainer_from_env
 from hazard_agent import HazardAgent
 from thanphai_shared import HazardType, redact
 
@@ -32,9 +32,9 @@ agent: HazardAgent | None = None
 async def lifespan(app: FastAPI):
     global service, agent
     service = HazardService(DATA_DIR)
-    # Gemini rewrites answers only when GEMINI_API_KEY is set; otherwise answers stay rule-based.
-    explainer = GeminiExplainer.from_env()
-    logging.getLogger("api").info("LLM explainer: %s", explainer.config.model if explainer else "off (no GEMINI_API_KEY)")
+    # Explainer rewrites answers when GEMINI_API_KEY is present or LLM_PROVIDER=qwen is configured; otherwise answers stay rule-based.
+    explainer = create_explainer_from_env()
+    logging.getLogger("api").info("LLM explainer: %s", explainer.config.model if explainer else "off (no LLM provider configured)")
     agent = HazardAgent(service.gazetteer, service, explainer=explainer)
     # Warm the cache in the background so startup does not wait for the providers.
     service.refresh_in_background()

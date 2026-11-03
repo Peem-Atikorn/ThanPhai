@@ -46,6 +46,8 @@ services:
     build:
       context: .
       dockerfile: 02_api_backend/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     environment:
       DATA_DIR: /data/processed
