@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from external_data.adapters.tmd import classify_hazards, read_days
-from geo_integration import Gazetteer, hazard_areas, named_provinces, provinces_by_hazard, warning_parts, warning_provinces
+from geo_integration import (Gazetteer, hazard_areas, named_provinces, provinces_by_hazard, warning_parts, warning_provinces,
+                             warning_statements)
 from geo_integration.warning_areas import REGIONS
 from thanphai_shared import HazardType
 
@@ -133,9 +134,26 @@ def test_mostly_is_not_a_new_part():
 def test_named_provinces_leave_out_regions(gaz):
     # Issue 288/2569 named regions only; rules.yaml gives those a lower level than a province named by name.
     issue = next(f for f in FIXTURES if f["issue_no"] == "3")
-    assert hazard_areas(gaz, [issue["title"], issue["headline"]], classify_hazards, provinces=named_provinces) == {}
+    assert all(not s.named for s in warning_statements(gaz, [issue["title"], issue["headline"]], classify_hazards))
     assert named_provinces(gaz, "ฝนตกหนักบริเวณภาคใต้ โดยเฉพาะจังหวัดสงขลา และกทม.") == ["TH10", "TH90"]
     assert named_provinces(gaz, "ภาคใต้(ฝั่งตะวันตก) และกรุงเทพฯและปริมณฑล") == []
+
+
+# Statements of the PDF of issue 5 (288/2569), page 1, as external_data.adapters.tmd.bulletin_body reads them.
+BULLETIN_5 = json.loads((Path(__file__).with_name("fixtures") / "tmd_bulletin_5.json").read_text(encoding="utf-8"))["body"]
+
+
+def test_bulletin_gives_each_region_its_days_and_flood_advice_stays_in_the_south(gaz):
+    areas = hazard_areas(gaz, BULLETIN_5, classify_hazards, lambda part: read_days(part, date(2026, 11, 3)))
+    upper = NORTH + NORTHEAST + CENTRAL + BANGKOK_AREA + EAST
+    assert sorted(areas[HazardType.RAIN_STORM]) == sorted(upper + SOUTH)
+    assert {areas[HazardType.RAIN_STORM][c] for c in upper} == {(date(2026, 11, 5), date(2026, 11, 7))}
+    assert {areas[HazardType.RAIN_STORM][c] for c in SOUTH} == {(date(2026, 11, 7), date(2026, 11, 9))}
+    # "ขอให้ประชาชนระวัง … น้ำท่วมฉับพลัน" names no area: it is the south's advice, not a flood warning for the north.
+    assert areas[HazardType.FLOOD] == {c: (date(2026, 11, 7), date(2026, 11, 9)) for c in SOUTH}
+    south = [s for s in warning_statements(gaz, BULLETIN_5, classify_hazards) if s.regions == ["ภาคใต้"]]
+    assert [s.hazards for s in south] == [[HazardType.RAIN_STORM], [HazardType.FLOOD]]
+    assert "หนักมาก" in south[1].wording and "น้ำท่วมฉับพลัน" in south[1].wording
 
 
 def test_province_list_with_short_names(gaz):

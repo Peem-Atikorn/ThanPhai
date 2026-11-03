@@ -82,6 +82,21 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle stays hidden when backend disables it');
   assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note')), 'Radar note stays hidden when backend disables radar');
   cleanupDisabledRadar?.();
+  // Issue 288/2569: the overview lists the TMD bulletin by region, with the level its wording gives each one.
+  lib.api.warnings = async () => ({ warnings: [{ title: 'อากาศแปรปรวนบริเวณประเทศไทยตอนบน ฉบับที่ 5', url: 'https://tmd.go.th/x.pdf', hazards: ['rain_storm', 'flood'], by_region: [
+    { from: '2026-11-05', to: '2026-11-07', level: 'WATCH', hazards: ['rain_storm'], areas: ['ประเทศไทยตอนบน'] },
+    { from: '2026-11-07', to: '2026-11-09', level: 'WARNING', hazards: ['rain_storm', 'flood'], areas: ['ภาคใต้'] },
+  ] }] });
+  const bulletinEffects = [];
+  const bulletinApp = instance(Dashboard, bulletinEffects);
+  const bulletinProps = { activeView: 'hazard', activeHazard: 'overview' };
+  bulletinApp.render(bulletinProps);
+  const cleanupBulletin = bulletinEffects.find(effect => /\.warnings\(/.test(String(effect)))();
+  await tick();
+  const regionLines = nodes(bulletinApp.render(bulletinProps)).filter(n => n.type === 'li' && /ประเทศไทยตอนบน|ภาคใต้/.test(content(n)));
+  assert.deepEqual(regionLines.map(n => [content(n).includes('ภาคใต้'), nodes(n).find(c => String(c.props.className || '').includes('risk-badge')).props.className]),
+    [[false, 'risk-badge level-WATCH'], [true, 'risk-badge level-WARNING']], 'Overview lists the TMD bulletin by region with its level');
+  cleanupBulletin?.();
   let opened = 0;
   const app = instance(Dashboard);
   let props = { activeView: 'hazard', searchInHeader: true, searchTarget: {}, riverViewRequest: 0 };

@@ -20,7 +20,7 @@ class DecisionInput:
     official_warning_active: bool = False
     # An official warning whose impact starts more than `lead_days` ahead.
     official_warning_upcoming: bool = False
-    # Every active warning reaches the area only through a region, none names its province.
+    # Every active warning reaches the area only through a region, in wording without rules.yaml strong_words.
     official_warning_regional: bool = False
     observations: dict[str, float | None] = field(default_factory=dict)
     degraded_sources: list[str] = field(default_factory=list)

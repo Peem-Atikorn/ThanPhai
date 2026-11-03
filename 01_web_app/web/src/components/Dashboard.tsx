@@ -4,7 +4,7 @@ import { t as tr, getLocale } from "@/lib/i18n";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
+import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, OfficialWarning, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import WaterQualityPanel, { qualityKey, qualityColor } from "@/components/WaterQualityPanel";
 import Icon from "@/components/Icon";
 import FloatingMascot from "@/components/FloatingMascot";
@@ -58,6 +58,13 @@ function formatTime(iso: string | null | undefined) {
     if (!iso || Number.isNaN(new Date(iso).getTime()))
         return "ยังไม่มีข้อมูล";
     return new Date(iso).toLocaleString(getLocale(), { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" });
+}
+// "5–7 พ.ย." for a bulletin's impact days (ISO dates, no time).
+function dayRange(from: string | null, to: string | null) {
+    const day = (iso: string, month: boolean) => new Date(iso + "T00:00:00+07:00").toLocaleDateString(getLocale(), month ? { day: "numeric", month: "short", timeZone: "Asia/Bangkok" } : { day: "numeric", timeZone: "Asia/Bangkok" });
+    if (!from || !to)
+        return "ตามประกาศ";
+    return from === to ? day(from, true) : from.slice(0, 7) === to.slice(0, 7) ? day(from, false) + "–" + day(to, true) : day(from, true) + " – " + day(to, true);
 }
 const DAM_LEGEND: {
     th: string;
@@ -306,6 +313,17 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         time: number;
     } | null>(null);
     const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
+    // TMD bulletins for the overview, by region; a failed request just leaves the card out.
+    const [nationalWarnings, setNationalWarnings] = useState<OfficialWarning[]>([]);
+    useEffect(() => {
+        if (!overview)
+            return;
+        let cancelled = false;
+        api.warnings().then((d) => { if (!cancelled)
+            setNationalWarnings(d.warnings); }).catch(() => { if (!cancelled)
+            setNationalWarnings([]); });
+        return () => { cancelled = true; };
+    }, [overview, revision]);
     // The last item opened in each group, so its button goes back there.
     const lastInGroup = useRef<Record<string, MapItem>>({});
     const currentItem: MapItem = view === "hazard" ? hazard : view;
@@ -831,6 +849,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               <p className="source-note">{tr("อัปเดต ")}{tr(formatTime(area.data_updated_at))}{tr(" (เวลาไทย)")}</p>
             </> : <div className="area-intro"><h2>{tr(areaIntroductions()[hazard].title)}</h2><p className="section-description">{tr(areaIntroductions()[hazard].description)}</p>{tr(!searchInHeader && <button type="button" className="text-button" onClick={() => searchInput.current?.focus()}>{tr("ค้นหาพื้นที่")}<Icon name="arrow"/></button>)}</div>)}
             {tr(!area && areaStatus === "idle" && layer && <div className="national-summary"><span className={"summary-dot " + (warningCount ? "has-warning" : "")}/><p>{tr(warningCount ? <><strong>{tr(number.format(warningCount))}{tr(" อำเภอ")}</strong>{tr(" อยู่ในระดับเตือนภัยหรือวิกฤต")}</> : "ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤตในข้อมูลชุดนี้")}<small>{tr("ภาพรวม")}{tr(itemTh(hazard))}{tr("ทั่วประเทศ")}</small></p></div>)}
+            {tr(!area && areaStatus === "idle" && hazard === "overview" && nationalWarnings.length > 0 && <div className="official-warning official-warning--regions"><strong><Icon name="info"/>{tr("ประกาศทางการ · กรมอุตุนิยมวิทยา")}</strong>{tr(nationalWarnings.map((w) => <div key={w.title}><p className="official-warning-title">{tr(w.url ? <a href={w.url} target="_blank" rel="noreferrer">{tr(w.title)}</a> : w.title)}</p>{tr(!!w.by_region?.length && <ul className="warning-regions">{tr(w.by_region.map((r) => <li key={r.from + r.level + r.areas.join()}><span className={"risk-badge level-" + r.level}>{tr(levelInfo(r.level).th)}</span><span><b>{tr(r.areas.map((a) => tr(a)).join(" · "))}</b><small>{tr(dayRange(r.from, r.to))}{tr(" · ")}{tr(r.hazards.map((h) => itemTh(h)).join(", "))}</small></span></li>))}</ul>)}</div>))}<small>{tr("สีตามถ้อยคำในประกาศ: ฝนตกหนักบางแห่ง = เฝ้าระวัง, ฝนตกหนักถึงหนักมาก หลายพื้นที่ หรือระบุจังหวัด = เตือนภัย")}</small></div>)}
             {tr(!area && areaStatus === "idle" && hazard === "overview" && overviewBreakdown.length > 0 && <div className="overview-breakdown"><h3>{tr("อำเภอที่เฝ้าระวังขึ้นไป แยกตามภัยที่หนักที่สุด")}</h3><ul>{tr(overviewBreakdown.map(([id, n]) => <li key={id}><button type="button" onClick={() => openItem(id)}><Icon name={id}/><span>{tr(itemTh(id))}</span><strong>{tr(number.format(n))}</strong><Icon name="arrow"/></button></li>))}</ul></div>)}
           </section>
 

@@ -6,6 +6,7 @@ province lists ("จังหวัดเชียงราย พะเยา �
 
 import re
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import date
 from typing import TypeVar
 
@@ -78,12 +79,24 @@ def provinces_by_hazard(gazetteer: Gazetteer, texts: str | Iterable[str], classi
     return {hazard: sorted(areas) for hazard, areas in hazard_areas(gazetteer, texts, classify).items()}
 
 
-def hazard_areas(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Callable[[str], Iterable[H]],
-                 read_days: Callable[[str], Days | None] = lambda _: None,
-                 provinces: Callable[[Gazetteer, str], list[str]] | None = None) -> dict[H, dict[str, Days | None]]:
-    """Hazard -> province code -> (first, last day) the statements naming both give, or None: the warning's own days.
+@dataclass
+class Statement:
+    """One statement of a warning: its hazards, the provinces it reaches and how, its days and its wording."""
 
-    `provinces` reads a statement's areas; `named_provinces` keeps only those it names by province, not by region.
+    hazards: list
+    provinces: set[str]
+    # Provinces named by name ("จังหวัดสงขลา"); the others are reached only through a region.
+    named: set[str]
+    # Regions as written ("ประเทศไทยตอนบน", "ภาคใต้"), for showing the warning by region.
+    regions: list[str]
+    days: Days | None
+    # The words that say how bad it is: this statement's, and the one's it takes hazards, days or areas from.
+    wording: str
+
+
+def warning_statements(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Callable[[str], Iterable[H]],
+                       read_days: Callable[[str], Days | None] = lambda _: None) -> list[Statement]:
+    """The statements of warning texts that name a hazard and an area, in order.
 
     Issue 12 has heavy rain in the east and south, "ส่วน" the lower north only thunderstorms: the north must not
     get the heavy-rain (flood) warning. The title and the headline are cut separately, so the title's heavy rain
@@ -91,24 +104,45 @@ def hazard_areas(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Cal
     nothing, unless it says it gets the same impact ("ได้รับผลกระทบ"): then it takes the hazards, and if it gives
     none of its own the days, of the statement before it in the same text.
 
+    Advice that names hazards but no area belongs to the statement before it: the PDF of issue 288/2569 has
+    "… บริเวณภาคใต้ … ขอให้ประชาชนระวังอันตรายจากฝนที่ตกสะสม ซึ่งอาจทำให้เกิดน้ำท่วมฉับพลัน" (flood in the south).
+    """
+    found: list[Statement] = []
+    for text in [texts] if isinstance(texts, str) else texts:
+        previous: Statement | None = None
+        for part in warning_parts(text):
+            own = list(classify(part))
+            named, regional = _read_provinces(gazetteer, part)
+            same = not own and bool(SAME_IMPACT.search(part)) and previous is not None
+            advice = bool(own) and not (named or regional) and previous is not None
+            hazards = own or (previous.hazards if same else [])
+            days = read_days(part) or (previous.days if same or advice else None)
+            if advice:
+                named, regional, regions = previous.named, previous.provinces - previous.named, previous.regions
+            else:
+                regions = list(dict.fromkeys(m.group() for m in REGION_PATTERN.finditer(COAST_SPELLING.sub(r"ภาคใต้ฝั่ง\1", part))))
+            wording = f"{previous.wording} {part}" if (same or advice) else part
+            statement = Statement(hazards, named | regional, named, regions, days, wording)
+            if hazards and statement.provinces:
+                found.append(statement)
+            previous = statement
+    return found
+
+
+def hazard_areas(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Callable[[str], Iterable[H]],
+                 read_days: Callable[[str], Days | None] = lambda _: None) -> dict[H, dict[str, Days | None]]:
+    """Hazard -> province code -> (first, last day) the statements naming both give, or None: the warning's own days.
+
     Issue 3 (2026-11-02): the title says 5-9 Nov for the south, the headline 5-7 Nov for upper Thailand. A province
     named in several statements gets the span of all of them; one without days there keeps the warning's days.
     """
-    provinces = provinces or warning_provinces
     found: dict[H, dict[str, Days | None]] = {}
-    for text in [texts] if isinstance(texts, str) else texts:
-        previous: tuple[list[H], Days | None] = ([], None)
-        for part in warning_parts(text):
-            own = list(classify(part))
-            same = not own and bool(SAME_IMPACT.search(part))
-            hazards = own or (previous[0] if same else [])
-            days = read_days(part) or (previous[1] if same else None)
-            for hazard in hazards:
-                areas = found.setdefault(hazard, {})
-                for code in provinces(gazetteer, part):
-                    areas[code] = _span(areas[code], days) if code in areas else days
-            previous = (hazards, days)
-    return {hazard: areas for hazard, areas in found.items() if areas}
+    for statement in warning_statements(gazetteer, texts, classify, read_days):
+        for hazard in statement.hazards:
+            areas = found.setdefault(hazard, {})
+            for code in statement.provinces:
+                areas[code] = _span(areas[code], statement.days) if code in areas else statement.days
+    return found
 
 
 def _span(a: Days | None, b: Days | None) -> Days | None:
