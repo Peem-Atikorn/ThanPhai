@@ -14,6 +14,20 @@ def gazetteer():
     return Gazetteer([Area(*row, 13.9, 100.4, 100) for row in rows])
 
 
+@pytest.fixture(scope="module")
+def review_gazetteer():
+    # Names and parent links used in the PR review's tokenizer and prefix examples.
+    return Gazetteer([
+        Area("TH57", "province", "เชียงราย", "Chiang Rai", None, 19.9, 99.8, 100),
+        Area("TH5704", "amphoe", "เทิง", "Thoeng", "TH57", 19.7, 100.2, 100),
+        Area("TH44", "province", "มหาสารคาม", "Maha Sarakham", None, 16.2, 103.3, 100),
+        Area("TH4410", "amphoe", "นาดูน", "Na Dun", "TH44", 15.7, 103.2, 100),
+        Area("TH24", "province", "ฉะเชิงเทรา", "Chachoengsao", None, 13.7, 101.1, 100),
+        Area("TH2407", "amphoe", "สนามชัยเขต", "Sanam Chai Khet", "TH24", 13.6, 101.4, 100),
+        Area("TH2408", "amphoe", "คลองเขื่อน", "Khlong Khuean", "TH24", 13.8, 101.2, 100),
+    ])
+
+
 @pytest.mark.parametrize(("question", "codes"), [
     ("ภาคเหนือมีไฟป่ากี่จุด", {"TH50", "TH57"}),
     ("สรุปสถานการณ์ภัยทั้งประเทศวันนี้", set()),
@@ -65,3 +79,19 @@ def test_regions_cover_all_provinces_once():
 ])
 def test_local_name_context(gazetteer, question, codes):
     assert {a.code for a in gazetteer.find_in_text(question)} == codes
+
+
+@pytest.mark.parametrize(("question", "codes"), [
+    ("เทิงน้ำท่วมไหม", {"TH5704"}),
+    ("ตอนนี้นาดูนมหาสารคามเป็นอย่างไรบ้าง", {"TH4410", "TH44"}),
+])
+def test_review_questions_with_adjacent_area_names_are_tokenized(review_gazetteer, question, codes):
+    assert {a.code for a in review_gazetteer.find_in_text(question)} == codes
+
+
+@pytest.mark.parametrize(("question", "codes"), [
+    ("สนามชัยเขตฉะเชิงเทรา", {"TH2407", "TH24"}),
+    ("คลองเขื่อนฉะเชิงเทรา", {"TH2408", "TH24"}),
+])
+def test_area_name_suffix_is_not_treated_as_prefix_for_next_place(review_gazetteer, question, codes):
+    assert {a.code for a in review_gazetteer.find_in_text(question)} == codes
