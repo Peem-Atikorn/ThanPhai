@@ -35,6 +35,8 @@ STATION_CODE = re.compile(r"(?<![A-Za-z])[A-Z]{1,3}\.\d{1,3}[A-Z]?(?![A-Za-z0-9]
 EXPLAIN_WORDS = ("ทำไม", "เพราะอะไร", "สาเหตุ", "why")
 PREPARE_WORDS = ("เตรียม", "ต้องทำ", "ทำยังไง", "ทำอย่างไร", "ควรทำ", "อพยพ", "prepare", "what should")
 EMERGENCY_WORDS = ("ช่วยด้วย", "ติดอยู่", "บาดเจ็บ", "จมน้ำ", "ฉุกเฉิน", "help", "trapped", "injured")
+SOURCE_WORDS = ("แหล่งข้อมูล", "ข้อมูลจากไหน", "ข้อมูลมาจากไหน", "ที่มาของข้อมูล", "ใช้ข้อมูลจาก", "data source")
+GREETING = re.compile(r"(?:(?:สวัสดี|หวัดดี)(?:\s*(?:ครับ|ค่ะ|คะ))?|hello|hi|hey)[!?.\s]*")
 # Relative Thai/English time words -> (start offset days, end offset days).
 TIME_WORDS = {
     "วันนี้": (0, 1), "today": (0, 1), "คืนนี้": (0, 1), "tonight": (0, 1),
@@ -46,7 +48,7 @@ TIME_WORDS = {
 
 @dataclass
 class Understanding:
-    intent: str  # risk | explain | prepare | emergency | dam | river | out_of_scope
+    intent: str  # risk | explain | prepare | emergency | dam | river | greeting | sources | out_of_scope
     hazards: list[HazardType]
     areas: list[Area]
     window_start: datetime
@@ -113,6 +115,8 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     areas = gazetteer.find_in_text(text)
     if any(w in lowered for w in EMERGENCY_WORDS):
         return Understanding("emergency", detect_hazards(text), areas, start, end, language)
+    if GREETING.fullmatch(lowered.strip()):
+        return Understanding("greeting", [], [], start, end, language)
     if any(w in lowered for w in DAM_WORDS):
         # A real tambon is named "เขื่อน" (TH440310, Maha Sarakham); in a dam question the word is not a place.
         places = [a for a in areas if a.name_th not in DAM_WORDS]
@@ -126,6 +130,9 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
             or (any(w in lowered for w in RIVER_WORDS) and not areas)):
         return Understanding("river", [], areas, start, end, language)
     hazards = detect_hazards(text)
+    # Source words must not swallow questions about hazards, areas, dams, or rivers.
+    if not hazards and not areas and any(w in lowered for w in SOURCE_WORDS):
+        return Understanding("sources", [], [], start, end, language)
     if any(w in lowered for w in PREPARE_WORDS):
         intent = "prepare"
     elif any(w in lowered for w in EXPLAIN_WORDS):

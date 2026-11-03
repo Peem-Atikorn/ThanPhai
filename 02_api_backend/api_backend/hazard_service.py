@@ -1111,6 +1111,9 @@ class HazardService:
     def get_official_warnings(self) -> list[dict]:
         return self.warnings
 
+    def get_sources(self) -> dict[str, dict]:
+        return self.source_status
+
     def overview_layer(self) -> dict:
         """Each district's worst level over all hazards, which hazard it is, and how many hazards are WATCH or above."""
         order = {None: -1, "NORMAL": 0, "WATCH": 1, "WARNING": 2, "CRITICAL": 3}
