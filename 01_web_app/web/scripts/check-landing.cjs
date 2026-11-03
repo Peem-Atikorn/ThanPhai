@@ -80,6 +80,7 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   const cleanupDisabledRadar = disabledRadarEffects.find(effect => /\.radar\(/.test(String(effect)))();
   await tick();
   assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle stays hidden when backend disables it');
+  assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note')), 'Radar note stays hidden when backend disables radar');
   cleanupDisabledRadar?.();
   let opened = 0;
   const app = instance(Dashboard);
