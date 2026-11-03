@@ -208,6 +208,77 @@ def test_missing_area_asks_back():
     assert "ไม่พบชื่อพื้นที่" in answer.text and answer.evidence == []
 
 
+@pytest.fixture
+def duplicate_districts():
+    return Gazetteer([
+        Area("TH31", "province", "บุรีรัมย์", "Buri Ram", None, 15.0, 103.0, 1000),
+        Area("TH3123", "amphoe", "เฉลิมพระเกียรติ", "Chaloem Phra Kiat", "TH31", 14.6, 102.9, 100),
+        Area("TH55", "province", "น่าน", "Nan", None, 18.8, 100.8, 1000),
+        Area("TH5515", "amphoe", "เฉลิมพระเกียรติ", "Chaloem Phra Kiat", "TH55", 19.6, 101.1, 100),
+    ])
+
+
+@pytest.mark.parametrize("question", [
+    "อำเภอเฉลิมพระเกียรติน้ำท่วมไหม",
+    "ทำไมอำเภอเฉลิมพระเกียรติน้ำท่วม",
+    "อำเภอเฉลิมพระเกียรติต้องเตรียมตัวรับน้ำท่วมอย่างไร",
+    "Will it flood in Chaloem Phra Kiat?",
+])
+def test_duplicate_district_asks_before_assessing(duplicate_districts, question):
+    tools = FakeTools()
+
+    def must_not_rewrite(question, facts):
+        raise AssertionError("Clarification must not call the LLM")
+
+    answer = HazardAgent(duplicate_districts, tools, explainer=must_not_rewrite).ask(question, NOW)
+    assert answer.intent == "clarify"
+    assert "อ.เฉลิมพระเกียรติ จ.บุรีรัมย์" in answer.text
+    assert "อ.เฉลิมพระเกียรติ จ.น่าน" in answer.text
+    assert answer.area is None and answer.evidence == []
+    assert tools.calls == []
+
+
+@pytest.mark.parametrize(("question", "code"), [
+    ("อำเภอเฉลิมพระเกียรติ จังหวัดบุรีรัมย์น้ำท่วมไหม", "TH3123"),
+    ("อำเภอเฉลิมพระเกียรติ จังหวัดน่านน้ำท่วมไหม", "TH5515"),
+    ("Will it flood in Chaloem Phra Kiat, Nan?", "TH5515"),
+])
+def test_province_resolves_duplicate_district(duplicate_districts, question, code):
+    tools = FakeTools()
+    answer = HazardAgent(duplicate_districts, tools).ask(question, NOW)
+    assert answer.intent == "risk" and answer.area["code"] == code
+    assert tools.calls == [code]
+
+
+def test_duplicate_tambon_still_asks_for_location(duplicate_districts):
+    gazetteer = Gazetteer(duplicate_districts.areas + [
+        Area("TH312301", "tambon", "บ้านใหม่", "Ban Mai", "TH3123", 14.6, 102.9, 10),
+        Area("TH551501", "tambon", "บ้านใหม่", "Ban Mai", "TH5515", 19.6, 101.1, 10),
+    ])
+    tools = FakeTools()
+    answer = HazardAgent(gazetteer, tools).ask("ตำบลบ้านใหม่น้ำท่วมไหม", NOW)
+    assert answer.intent == "clarify" and tools.calls == []
+    assert "จ.บุรีรัมย์" in answer.text and "จ.น่าน" in answer.text
+
+
+def test_same_name_at_two_levels_does_not_need_clarification():
+    # Same-name district and subdistrict: without a prefix the gazetteer selects the district.
+    gazetteer = Gazetteer(GAZ.areas + [
+        Area("TH140601", "tambon", "เสนา", "Sena", "TH1406", 14.3, 100.4, 10),
+    ])
+    tools = FakeTools()
+    answer = HazardAgent(gazetteer, tools).ask("เสนาน้ำท่วมไหม", NOW)
+    assert answer.intent == "risk" and answer.area["code"] == "TH1406"
+    assert tools.calls == ["TH1406"]
+
+
+def test_emergency_with_duplicate_district_keeps_emergency_response(duplicate_districts):
+    tools = FakeTools()
+    answer = HazardAgent(duplicate_districts, tools).ask("ช่วยด้วย น้ำท่วมอำเภอเฉลิมพระเกียรติ", NOW)
+    assert answer.intent == "emergency" and tools.calls == []
+    assert "1784" in answer.text and "1669" in answer.text
+
+
 def test_out_of_scope():
     assert agent.ask("ราคาทองวันนี้เท่าไหร่", NOW).intent == "out_of_scope"
 
