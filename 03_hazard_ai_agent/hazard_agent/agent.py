@@ -89,6 +89,30 @@ def _window_th(u: Understanding) -> str:
     return f"ช่วง {s.day}/{s.month}–{e.day}/{e.month}"
 
 
+def _warning_applies(warning: dict, u: Understanding) -> bool:
+    """Match each hazard's own province and inclusive impact dates to the question window."""
+    province = u.area.code[:4]
+    start = u.window_start.date()
+    # Question windows are half-open; an impact ending today still includes all of today.
+    end = (u.window_end - timedelta(microseconds=1)).date()
+    for hazard in {h.value for h in u.hazards} & set(warning.get("hazards", [])):
+        if "provinces_by_hazard" in warning:
+            provinces = warning["provinces_by_hazard"].get(hazard, [])
+        else:
+            # Older tools have no scope metadata. Keep their warnings until they supply it.
+            provinces = warning.get("provinces", [province])
+        if province not in provinces:
+            continue
+        whole = (warning.get("impact_from"), warning.get("impact_to"))
+        first, last = warning.get("impact_by_hazard", {}).get(hazard, {}).get(province, whole)
+        if first and date.fromisoformat(first) > end:
+            continue
+        if last and date.fromisoformat(last) < start:
+            continue
+        return True
+    return False
+
+
 MCM_PER_DAY_TO_M3S = 1_000_000 / 86_400  # 1 million m³ a day ≈ 11.6 m³ every second
 
 
@@ -366,7 +390,7 @@ class HazardAgent:
         missing = {h.value for h in u.hazards} - {a["hazard"] for a in assessments}
         for hazard in sorted(missing):
             lines.append(f"• {HAZARD_TH[hazard]}: ยังไม่มีแบบจำลองหรือข้อมูลสำหรับพื้นที่นี้")
-        related = [w for w in warnings if set(w.get("hazards", [])) & {h.value for h in u.hazards}]
+        related = [w for w in warnings if _warning_applies(w, u)]
         for w in related[:2]:
             lines.append(f"⚠ ประกาศกรมอุตุนิยมวิทยา: {w['title'].strip()}")
         if u.future and related:
