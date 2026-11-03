@@ -154,7 +154,7 @@ export default function FloatingMascot({ topic, status, children }: { topic: Map
     move({ x: position.x + (event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0), y: position.y + (event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0) });
   }
 
-  if (!viewport) return <div ref={home} className="mascot-home" aria-hidden="true" />;
+  if (!viewport) return <><div ref={home} className="mascot-home" aria-hidden="true" /></>;
   const placement = placeMascotChat(position, viewport, panelHeight);
   const stripFrame = phase === "think" || phase === "error" ? 2 : phase === "happy" ? 3 : phase === "wave" || phase === "drag" ? 1 : 0;
   const spriteStyle: CSSProperties = {

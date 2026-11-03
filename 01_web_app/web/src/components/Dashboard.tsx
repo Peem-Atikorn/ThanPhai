@@ -304,8 +304,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         tiles: string;
         time: number;
     } | null>(null);
-    const [radarStatus, setRadarStatus] = useState<"loading" | "ok" | "error">("loading");
-    const showRadar = view === "hazard" && radarOn && (overview || RADAR_LAYERS.includes(hazard));
+    const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
     // The last item opened in each group, so its button goes back there.
     const lastInGroup = useRef<Record<string, MapItem>>({});
     const currentItem: MapItem = view === "hazard" ? hazard : view;
@@ -375,10 +374,9 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         // A failed radar request just leaves the map without radar; the station data still shows.
         api.radar().then((r) => { if (!cancelled) {
             setRadar(r);
-            setRadarStatus(r ? "ok" : "error");
         } }).catch(() => { if (!cancelled) {
             setRadar(null);
-            setRadarStatus("error");
+            setRadar(null);
         } });
         return () => { cancelled = true; };
     }, [showRadar, revision]);
@@ -739,7 +737,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
           </div>)}
         {tr(overview && <aside className="layer-toolbar" aria-label={tr("ชั้นข้อมูลบนแผนที่")}>
           <div className="layer-toolbar-buttons" role="group" aria-label={tr("เปิดปิดชั้นข้อมูลภาพรวม")}>
-            <button type="button" data-layer="radar" aria-pressed={radarOn} onClick={() => setRadarOn(on => !on)}><Icon name="radar"/><span>{tr("เรดาร์ฝน")}<small>{tr(!radarOn ? "ปิด" : radarStatus === "loading" ? "กำลังโหลด…" : radarStatus === "error" ? "โหลดไม่สำเร็จ" : "เปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
             <button type="button" data-layer="pm25" aria-pressed={pmOn} onClick={() => setPmOn(on => !on)}><Icon name="air_quality"/><span>{tr("ฝุ่น PM2.5")}<small>{tr(!pmOn ? "ปิด" : airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ" : "เปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
             <OverlayControls data={overlays.data} enabled={overlays.enabled} onToggle={overlays.toggle}/>
           </div>
@@ -786,7 +783,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
           {tr(hideToolbar && overview && !selectedRiskLevel && mapControls)}
           {tr(overview && !selectedRiskLevel && <div className="overview-overlay-summary">
             <OverlayLegends data={overlays.data} enabled={overlays.enabled}/>
-            {tr(radarOn && <section><h4>{tr("เรดาร์ฝน")}</h4><p>{tr("สีฟ้าบนแผนที่ = กลุ่มฝน \u00B7 ")}{tr(radarStatus === "loading" ? "กำลังโหลด…" : radarStatus === "error" ? "โหลดไม่สำเร็จ" : "ภาพเรดาร์ล่าสุด")}</p><small>RainViewer · {tr(formatTime(radar ? new Date(radar.time * 1000).toISOString() : null))}{tr(" (เวลาไทย)")}</small></section>)}
             {tr(pmOn && <section><h4>{tr("ฝุ่น PM2.5 \u00B7 เฉลี่ย 24 ชม.")}</h4><ul className="overlay-levels">{tr(PM25_BANDS.map(b => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}</li>))}</ul><p>{tr(airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ · แสดงข้อมูลเดิมถ้ามี" : !airStations?.length ? "ยังไม่มีข้อมูลสถานี" : tr("") + tr(airStations.length) + tr(" สถานี \u00B7 แต่ละสถานีอาจรายงานคนละเวลา"))}</p><small>{tr("Air4Thai (กรมควบคุมมลพิษ) \u00B7 เวลาล่าสุด ")}{tr(formatTime(airStations?.map(s => s.time).sort().at(-1)))}{tr(" (เวลาไทย)")}</small></section>)}
           </div>)}
           {tr(view === "water-quality" ? <div className="map-summary"><div className="legend-heading"><h3>{tr("สถานีวัดคุณภาพน้ำ")}</h3><span>{tr(visibleQuality.length)}{tr(" สถานี")}</span></div><p className="source-note"><span style={{ color: "#e07b16" }}>●</span>{tr(" มีค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#2f7fb5" }}>●</span>{tr(" ไม่พบค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#8a97a3" }}>●</span>{tr(" ไม่มีค่าความเค็มและออกซิเจน")}</p><div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(quality.updated))}{tr(" (เวลาไทย)")}</span></div></div> : view === "rivers" ? <div className="map-summary">

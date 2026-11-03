@@ -94,9 +94,8 @@ export default function LandingExperience() {
       <a className="skip-link" href="#risk-map">{tr("ข้ามไปยังแผนที่ความเสี่ยง")}</a>
       <section className="journey-hero" id="home" aria-labelledby="hero-title">
         <header className="journey-header">
-          <Link className="journey-brand" href="/" prefetch={false} onClick={(event) => { event.preventDefault(); window.location.assign("/"); }} aria-label={tr("ทันภัย หน้าแรก")}><span className="journey-brand-mark"><Icon name="shield" width={30} height={30}/></span><span>{tr("ทันภัย")}<small>THANPHAI</small></span></Link>
+          <Link className="journey-brand" href="/" prefetch={false} onClick={(event) => { event.preventDefault(); window.location.assign("/"); }} aria-label={tr("ทันภัย หน้าแรก")}><span className="journey-brand-mark"><Icon name="shield" width={30} height={30}/></span><span>{tr("ทันภัย")}</span></Link>
           <div className="journey-header-message">
-            <span className="command-eyebrow">THAILAND · HAZARD INTELLIGENCE</span>
             <h1 id="hero-title">{tr("รู้ภัยก่อน ")}<span>{tr("ปลอดภัยกว่า")}</span></h1>
             <p>{tr("ติดตามสถานการณ์ เข้าใจความเสี่ยง เตรียมพร้อมในพื้นที่ของคุณ")}</p>
           </div>

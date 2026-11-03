@@ -1,4 +1,7 @@
 /* Glass navigation expands beside the map; its children belong to the category. */
+.landscape-shell .journey-header-message { align-self: center; min-width: 0; }
+.landscape-shell .journey-header-message h1,
+.landscape-shell .journey-header-message h1 span { color: var(--cc-accent); }
 .landscape-shell .journey-bottom { grid-template-columns: 76px minmax(0,1fr); gap: 14px; transition: grid-template-columns 380ms cubic-bezier(.22,1,.36,1); }
 .landscape-shell.navigation-expanded .journey-bottom { grid-template-columns: 76px minmax(0,1fr); }
 .landscape-shell .journey-category-bar { position: relative; top: auto; width: 100%; padding: 6px; gap: 4px; max-height: 100%; overscroll-behavior: contain; scrollbar-width: thin; background: linear-gradient(150deg, rgb(49 60 64 / .88), rgb(27 35 39 / .92)); box-shadow: inset 0 1px rgb(255 255 255 / .07), 0 12px 30px rgb(0 0 0 / .12); }

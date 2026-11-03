@@ -54,6 +54,18 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   lib.api.area = async () => ({ area: { code: '13', level: 'province', name_th: 'ปทุมธานี', parents: [] }, assessments: [], forecast: [], rivers: [{ status: 'NORMAL' }], river_province: { code: '13', name_th: 'ปทุมธานี' }, official_warnings: [], degraded_services: [] });
   lib.api.boundary = async () => null;
   const Dashboard = load('@/components/Dashboard').default;
+  let radarRequests = 0;
+  lib.api.radar = async () => { radarRequests++; return null; };
+  for (const hazard of ['overview', 'flood', 'rain_storm', 'tropical_cyclone']) {
+    const radarEffects = [];
+    const radarApp = instance(Dashboard, radarEffects);
+    const radarTree = radarApp.render({ activeView: 'hazard', activeHazard: hazard });
+    const before = radarRequests;
+    const cleanupRadar = radarEffects.find(effect => /\.radar\(/.test(String(effect)))();
+    assert.equal(radarRequests - before, ['rain_storm', 'tropical_cyclone'].includes(hazard) ? 1 : 0, `Only weather topics request radar: ${hazard}`);
+    if (hazard === 'overview') assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Overview has no nonfunctional radar toggle');
+    cleanupRadar?.();
+  }
   let opened = 0;
   const app = instance(Dashboard);
   let props = { activeView: 'hazard', searchInHeader: true, searchTarget: {}, riverViewRequest: 0 };

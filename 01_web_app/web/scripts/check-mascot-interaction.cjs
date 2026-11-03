@@ -20,7 +20,7 @@ const jsx = (type, props) => ({ type, props: props ?? {} });
 const cache = {};
 function load(id) {
   if (id === 'react') return react;
-  if (id === 'react/jsx-runtime') return { jsx, jsxs: jsx };
+  if (id === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
   if (id === 'react-dom') return { createPortal: node => node };
   if (id === '@/components/Icon') return { default: () => null };
   if (id === '@/lib/i18n') return { t: text => text };
@@ -38,9 +38,10 @@ const fakePanel = { scrollHeight: 340, querySelector: () => ({ focus() {} }) };
 const fakeHome = { getBoundingClientRect: () => ({ left: 980, top: 550, width: 280, height: 220 }) };
 const props = { topic: 'flood', status: 'idle', children: jsx('form', { 'data-preserved': 'existing-chat' }) };
 let tree;
+const rootTypes = [];
 function render() {
   for (let i = 0; i < 8; i++) {
-    dirty = false; cursor = 0; tree = FloatingMascot(props);
+    dirty = false; cursor = 0; tree = FloatingMascot(props); rootTypes.push(tree.type);
     for (const element of all(tree)) if (element.props.ref) element.props.ref.current = element.props.className === 'mascot-character' ? fakeButton : element.props.className === 'mascot-home' ? fakeHome : fakePanel;
     const pending = effects; effects = []; pending.forEach(effect => effect());
     if (!dirty) return;
@@ -52,6 +53,7 @@ const dialog = () => all(tree).find(node => node.props.id === 'thanphai-mascot-c
 const event = (x, y, type = 'pointerup') => ({ clientX: x, clientY: y, pointerId: 1, isPrimary: true, button: 0, currentTarget: fakeButton, type });
 storage.set('thanphai-mascot-position-v1', JSON.stringify({ x: 900, y: 500 }));
 render();
+assert.ok(rootTypes.every(type => type === rootTypes[0]), 'The home keeps the same React parent through hydration so its ResizeObserver remains attached');
 assert.ok(all(tree).some(node => node.props.className === 'mascot-home'), 'Every topic reserves a framed home separate from the data list');
 assert.equal(character().props.style.left, 1060, 'The mascot starts in the center of its right-sidebar home');
 assert.equal(character().props.style.top, 594, 'The mascot stands inside its home, above the lower border');
