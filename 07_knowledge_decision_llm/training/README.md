@@ -63,9 +63,11 @@ ollama run thanphai-qwen "สวัสดีครับ"
 ใน `.env` ของโปรเจกต์:
 ```env
 LLM_PROVIDER=qwen
-QWEN_ENDPOINT=http://127.0.0.1:11434
 QWEN_MODEL=thanphai-qwen
-QWEN_TIMEOUT_MS=3000
+# เมื่อรันผ่าน Docker Compose ให้ใช้ host.docker.internal (ตั้งค่าไว้เป็นค่าเริ่มต้น)
+# หากรันโดยตรงบนเครื่อง host ใช้ http://127.0.0.1:11434
+QWEN_ENDPOINT=http://host.docker.internal:11434
+QWEN_TIMEOUT_MS=15000
 ```
 
 ระบบจะเชื่อมต่อ `QwenExplainer` อัตโนมัติ หากเครื่องทีมออฟไลน์หรือคำตอบไม่ผ่านตัวตรวจ `validate()` ระบบจะสลับไปตอบด้วยเทมเพลตจากกฎโดยอัตโนมัติ (Zero Degradation)

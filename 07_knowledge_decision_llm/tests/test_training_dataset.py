@@ -2,11 +2,11 @@ import json
 
 from decision_engine.explainer import validate
 from training.generate_explainer_dataset import generate_single_example
-from training.generate_intent_dataset import DEFAULT_AREAS, generate_intent_samples
+from training.generate_intent_dataset import DEFAULT_AREAS, DEFAULT_PROVINCES, generate_intent_samples
 
 
 def test_generate_intent_samples_format():
-    samples = generate_intent_samples(DEFAULT_AREAS, count=20, seed=123)
+    samples = generate_intent_samples(DEFAULT_AREAS, DEFAULT_PROVINCES, count=50, seed=123)
     assert len(samples) >= 15
     for s in samples:
         assert "instruction" in s

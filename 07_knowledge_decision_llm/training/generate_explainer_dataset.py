@@ -2,6 +2,7 @@
 
 Uses the official decision_engine.explainer.validate() to ensure 100% of generated pairs
 have zero hallucinated numbers, zero modified hazard levels, and zero ungrounded advice.
+Strictly conforms to rules.yaml thresholds and SYSTEM_INSTRUCTION rules.
 
 Saves:
   train_explainer.jsonl
@@ -15,73 +16,81 @@ from pathlib import Path
 
 from decision_engine.explainer import SYSTEM_INSTRUCTION, validate
 
+# Aligned with decision_engine/rules.yaml
 HAZARD_FACT_SPECS = [
     ("น้ำท่วม", "flood", [
-        ("ปกติ", "ระดับน้ำต่ำกว่าตลิ่ง {v:.2f} ม.", (0.5, 3.0)),
-        ("เฝ้าระวัง", "ระดับน้ำใกล้ตลิ่งเหลือ {v:.2f} ม.", (0.1, 0.49)),
-        ("เตือนภัย", "ระดับน้ำล้นตลิ่ง {v:.2f} ม.", (0.1, 0.8)),
-        ("วิกฤต", "ระดับน้ำล้นตลิ่งวิกฤต {v:.2f} ม.", (1.0, 3.5)),
+        ("ปกติ", "ระดับน้ำต่ำกว่าตลิ่ง {v:.2f} ม.", (0.31, 3.0)),
+        ("เฝ้าระวัง", "ระดับน้ำใกล้ตลิ่งเหลือ {v:.2f} ม.", (0.0, 0.30)),
+        ("เตือนภัย", "ระดับน้ำล้นตลิ่ง {v:.2f} ม.", (0.01, 0.49)),
+        ("วิกฤต", "ระดับน้ำล้นตลิ่งวิกฤต {v:.2f} ม.", (0.50, 3.5)),
     ]),
     ("ฝนหนัก/พายุ", "rain_storm", [
         ("ปกติ", "ฝนสะสม 24 ชม. {v:.1f} มม.", (0.0, 35.0)),
-        ("เฝ้าระวัง", "ฝนสะสม 24 ชม. {v:.1f} มม.", (35.1, 89.9)),
-        ("เตือนภัย", "ฝนสะสม 24 ชม. {v:.1f} มม.", (90.0, 140.0)),
-        ("วิกฤต", "ฝนสะสม 24 ชม. {v:.1f} มม. ฝนตกหนักมาก", (140.1, 250.0)),
+        ("เฝ้าระวัง", "ฝนสะสม 24 ชม. {v:.1f} มม. (ฝนหนัก)", (35.1, 90.0)),
+        ("เตือนภัย", "ฝนสะสม 24 ชม. {v:.1f} มม. (ฝนหนักมาก)", (90.1, 200.0)),
     ]),
     ("ไฟป่า/ไฟหญ้า", "fire", [
-        ("ปกติ", "จุดความร้อน {v} จุด", (0, 0)),
-        ("เฝ้าระวัง", "จุดความร้อนสะสม {v} จุด", (1, 4)),
-        ("เตือนภัย", "จุดความร้อนสะสม {v} จุด", (5, 15)),
-        ("วิกฤต", "จุดความร้อนสะสมหนาแน่น {v} จุด", (16, 50)),
+        ("ปกติ", "จุดความร้อน {v} จุด", (0, 2)),
+        ("เฝ้าระวัง", "จุดความร้อนสะสม {v} จุด", (3, 9)),
+        ("เตือนภัย", "จุดความร้อนสะสม {v} จุด", (10, 40)),
     ]),
     ("ภัยแล้ง", "drought", [
-        ("ปกติ", "ดัชนีฝนแล้ง SPI {v:.2f}", (-0.99, 1.5)),
-        ("เฝ้าระวัง", "ดัชนีฝนแล้ง SPI {v:.2f} เริ่มแล้ง", (-1.49, -1.0)),
-        ("เตือนภัย", "ดัชนีฝนแล้ง SPI {v:.2f} แล้งรุนแรง", (-1.99, -1.5)),
-        ("วิกฤต", "ดัชนีฝนแล้ง SPI {v:.2f} แล้งจัดผิดปกติ", (-3.0, -2.0)),
+        ("ปกติ", "ดัชนีฝนแล้ง SPI-3 {v:.2f}", (-0.99, 1.5)),
+        ("เฝ้าระวัง", "ดัชนีฝนแล้ง SPI-3 {v:.2f} (เริ่มแล้ง)", (-1.49, -1.0)),
+        ("เตือนภัย", "ดัชนีฝนแล้ง SPI-3 {v:.2f} (แล้งรุนแรง)", (-1.99, -1.5)),
+        ("วิกฤต", "ดัชนีฝนแล้ง SPI-3 {v:.2f} (แล้งจัดผิดปกติ)", (-3.0, -2.0)),
     ]),
     ("ฝุ่น PM2.5", "air_quality", [
-        ("ปกติ", "ค่าฝุ่น {v:.1f} มคก./ลบ.ม.", (5.0, 37.5)),
-        ("เฝ้าระวัง", "ค่าฝุ่น {v:.1f} มคก./ลบ.ม. เริ่มมีผลต่อสุขภาพ", (37.6, 75.0)),
-        ("เตือนภัย", "ค่าฝุ่น {v:.1f} มคก./ลบ.ม. มีผลกระทบต่อสุขภาพ", (75.1, 150.0)),
+        ("ปกติ", "ค่าฝุ่น PM2.5 {v:.1f} มคก./ลบ.ม.", (5.0, 37.5)),
+        ("เฝ้าระวัง", "ค่าฝุ่น PM2.5 {v:.1f} มคก./ลบ.ม. (เริ่มมีผลต่อสุขภาพ)", (37.6, 75.0)),
+        ("เตือนภัย", "ค่าฝุ่น PM2.5 {v:.1f} มคก./ลบ.ม. (มีผลกระทบต่อสุขภาพ)", (75.1, 150.0)),
     ]),
     ("ความร้อนจัด", "heat", [
         ("ปกติ", "ดัชนีความร้อน {v:.1f} °C", (27.0, 39.3)),
-        ("เฝ้าระวัง", "ดัชนีความร้อน {v:.1f} °C ระดับอันตราย", (39.4, 51.9)),
-        ("เตือนภัย", "ดัชนีความร้อน {v:.1f} °C ระดับอันตรายยิ่ง", (52.0, 58.0)),
+        ("เฝ้าระวัง", "ดัชนีความร้อน {v:.1f} °C", (39.4, 41.9)),
+        ("เตือนภัย", "ดัชนีความร้อน {v:.1f} °C", (42.0, 51.9)),
+        ("วิกฤต", "ดัชนีความร้อน {v:.1f} °C", (52.0, 58.0)),
     ]),
     ("แผ่นดินไหว", "earthquake", [
         ("ปกติ", "ไม่พบแรงสั่นสะเทือนที่มีนัยสำคัญ", None),
-        ("เฝ้าระวัง", "แรงสั่นสะเทือนระดับรู้สึกได้ {v:.1f} แมกนิจูด", (3.0, 4.5)),
-        ("เตือนภัย", "แรงสั่นสะเทือนรุนแรง {v:.1f} แมกนิจูด", (4.6, 6.5)),
+        ("เฝ้าระวัง", "แรงสั่นสะเทือนระดับรู้สึกได้ {v:.1f} MMI", (4.0, 5.9)),
+        ("เตือนภัย", "แรงสั่นสะเทือนรุนแรง {v:.1f} MMI", (6.0, 6.9)),
+        ("วิกฤต", "แรงสั่นสะเทือนเสียหาย {v:.1f} MMI", (7.0, 8.5)),
     ]),
     ("คลื่นลมแรง", "marine", [
         ("ปกติ", "คลื่นสูง {v:.1f} ม.", (0.5, 1.9)),
-        ("เฝ้าระวัง", "คลื่นสูง {v:.1f} ม. เรือเล็กระวัง", (2.0, 2.9)),
-        ("เตือนภัย", "คลื่นสูง {v:.1f} ม. คลื่นจัด", (3.0, 3.9)),
-        ("วิกฤต", "คลื่นสูง {v:.1f} ม. ทะเลมีคลื่นจัดมาก", (4.0, 6.0)),
+        ("เฝ้าระวัง", "คลื่นสูง {v:.1f} ม. (เรือเล็กระวัง)", (2.0, 2.9)),
+        ("เตือนภัย", "คลื่นสูง {v:.1f} ม. (คลื่นจัด)", (3.0, 3.9)),
+        ("วิกฤต", "คลื่นสูง {v:.1f} ม. (ทะเลมีคลื่นจัดมาก)", (4.0, 6.0)),
     ]),
     ("พายุหมุนเขตร้อน", "tropical_cyclone", [
         ("ปกติ", "ไม่มีพายุหมุนเขตร้อนในระยะส่งผลกระทบ", None),
-        ("เฝ้าระวัง", "อยู่ในรัศมีขอบพายุ ความเร็วลม {v} กม./ชม.", (40, 60)),
-        ("เตือนภัย", "อยู่ในรัศมีลมแรงพายุ ความเร็วลม {v} กม./ชม.", (61, 117)),
+        ("เฝ้าระวัง", "อยู่ในรัศมีขอบพายุ ความเร็วลม {v} กม./ชม.", (63, 92)),
+        ("เตือนภัย", "อยู่ในรัศมีลมแรงพายุ ความเร็วลม {v} กม./ชม.", (93, 118)),
+        ("วิกฤต", "อยู่ในรัศมีลมแรงพายุไต้ฝุ่น ความเร็วลม {v} กม./ชม.", (119, 180)),
     ]),
     ("ดินถล่ม", "landslide", [
         ("ปกติ", "พื้นที่ไม่มีสัญญาณดินถล่ม", None),
-        ("เฝ้าระวัง", "พื้นที่ลาดชันเสี่ยง มีฝนสะสม {v:.1f} มม.", (60.0, 99.0)),
-        ("เตือนภัย", "ฝนตกหนักต่อเนื่อง {v:.1f} มม. เสี่ยงดินถล่มสูง", (100.0, 200.0)),
+        ("เฝ้าระวัง", "พื้นที่ลาดชันเสี่ยง มีฝนสะสม {v:.1f} มม.", (60.0, 100.0)),
+        ("เตือนภัย", "ฝนตกหนักต่อเนื่อง {v:.1f} มม. เสี่ยงดินถล่ม", (100.1, 150.0)),
+        ("วิกฤต", "ฝนตกหนักต่อเนื่อง {v:.1f} มม. เสี่ยงดินถล่มรุนแรง", (150.1, 250.0)),
     ]),
 ]
 
 SAMPLE_AREAS = [
     ("อำเภอเสนา", "พระนครศรีอยุธยา"),
     ("อำเภอบางบาล", "พระนครศรีอยุธยา"),
+    ("อำเภอบางปะอิน", "พระนครศรีอยุธยา"),
     ("อำเภอหาดใหญ่", "สงขลา"),
+    ("อำเภอเมืองสงขลา", "สงขลา"),
+    ("อำเภอสองพี่น้อง", "สุพรรณบุรี"),
+    ("อำเภอบางปลาม้า", "สุพรรณบุรี"),
+    ("อำเภอปากเกร็ด", "นนทบุรี"),
+    ("อำเภอบางกรวย", "นนทบุรี"),
+    ("อำเภอบางบัวทอง", "นนทบุรี"),
     ("อำเภอเมืองเชียงใหม่", "เชียงใหม่"),
     ("อำเภอเมืองภูเก็ต", "ภูเก็ต"),
     ("อำเภอเมืองขอนแก่น", "ขอนแก่น"),
-    ("อำเภอสองพี่น้อง", "สุพรรณบุรี"),
-    ("อำเภอปากเกร็ด", "นนทบุรี"),
 ]
 
 
@@ -109,7 +118,7 @@ def generate_single_example(area_name: str, prov_name: str) -> tuple[str, str, s
 
         fact_lines.append(f"• {th_label}: {lvl} — {detail}")
 
-        # Construct concise safe answer sentence
+        # Construct concise safe answer sentence without emergency numbers (appended by system per rule 4)
         if num_str:
             answer_parts.append(f"{th_label}อยู่ในระดับ{lvl} ({detail})")
         else:
@@ -119,7 +128,8 @@ def generate_single_example(area_name: str, prov_name: str) -> tuple[str, str, s
     facts_text = "\n".join(fact_lines)
 
     question = f"สถานการณ์ที่{area_name}เป็นอย่างไรบ้าง"
-    answer_text = " ".join(answer_parts) + " หากเกิดเหตุฉุกเฉินสามารถโทร 1784"
+    # Strict rule 4: Do not include emergency contacts or advice in rewritten answer
+    answer_text = " ".join(answer_parts)
 
     # Strict check using validate()
     problems = validate(answer_text, facts_text, question)
@@ -131,6 +141,7 @@ def generate_single_example(area_name: str, prov_name: str) -> tuple[str, str, s
 def generate_explainer_dataset(target_count: int = 3000, seed: int = 42) -> list[dict]:
     random.seed(seed)
     samples = []
+    seen_inputs = set()
     attempts = 0
     max_attempts = target_count * 5
 
@@ -140,11 +151,14 @@ def generate_explainer_dataset(target_count: int = 3000, seed: int = 42) -> list
         item = generate_single_example(area_name, prov_name)
         if item is not None:
             question, facts, answer = item
-            samples.append({
-                "instruction": SYSTEM_INSTRUCTION,
-                "input": f"คำถามผู้ใช้: {question}\n\nข้อเท็จจริง (ห้ามเปลี่ยน):\n{facts}",
-                "output": answer,
-            })
+            inp = f"คำถามผู้ใช้: {question}\n\nข้อเท็จจริง (ห้ามเปลี่ยน):\n{facts}"
+            if inp not in seen_inputs:
+                seen_inputs.add(inp)
+                samples.append({
+                    "instruction": SYSTEM_INSTRUCTION,
+                    "input": inp,
+                    "output": answer,
+                })
 
     return samples
 
@@ -162,7 +176,7 @@ def main():
     print(f"Generating {args.count} safe explainer examples with strict validation...")
     samples = generate_explainer_dataset(target_count=args.count)
 
-    test_count = max(500, args.test_count)
+    test_count = max(500, min(args.test_count, len(samples) // 3))
     test_samples = samples[:test_count]
     train_samples = samples[test_count:]
 
@@ -177,7 +191,7 @@ def main():
         for s in test_samples:
             f.write(json.dumps(s, ensure_ascii=False) + "\n")
 
-    print(f"Successfully generated {len(train_samples)} training and {len(test_samples)} test samples.")
+    print(f"Successfully generated {len(train_samples)} training and {len(test_samples)} test samples (100% deduplicated).")
     print(f"Verified 100% Zero Defects against validate(). Saved to {train_path} and {test_path}")
 
 

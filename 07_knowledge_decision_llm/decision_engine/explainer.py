@@ -168,23 +168,62 @@ def validate(answer: str, facts: str, question: str = "") -> list[str]:
     return problems
 
 
-class GeminiExplainer:
-    # Same question on the same facts gives the same answer until the data refreshes; saves free-tier quota.
+class BaseExplainer:
     CACHE_SIZE = 256
-    # After a 429 (free tier allows only a few requests per minute), stop calling for a while instead of
-    # making every user wait for a call that will fail.
-    RATE_LIMIT_PAUSE_SECONDS = 60
     MAX_CONCURRENT_CALLS = 4
+    RATE_LIMIT_PAUSE_SECONDS = 60
 
-    def __init__(self, client, config: ExplainerConfig | None = None):
-        self.client = client
-        self.config = config or ExplainerConfig()
+    def __init__(self, config=None):
+        self.config = config
         self._cache: OrderedDict[tuple[str, str], str] = OrderedDict()
         self._paused_until = 0.0
-        self._lock = threading.Lock()  # ask() runs in worker threads
-        # ask() runs in the shared thread pool; a slow Gemini (up to the timeout) must not take every thread
-        # and stall the data refreshes. Beyond this many calls at once, answer with the template instead.
+        self._lock = threading.Lock()
         self._slots = threading.BoundedSemaphore(self.MAX_CONCURRENT_CALLS)
+
+    def _call_model(self, question: str, facts: str) -> str:
+        raise NotImplementedError
+
+    def _handle_error(self, exc: Exception) -> None:
+        log.warning("%s call failed: %s: %s", self.__class__.__name__, type(exc).__name__, exc)
+        with self._lock:
+            self._paused_until = time.monotonic() + 2.0
+
+    def __call__(self, question: str, facts: str) -> str | None:
+        key = (" ".join(question.lower().split()), facts)
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+            if time.monotonic() < self._paused_until:
+                return None
+        if not self._slots.acquire(blocking=False):
+            log.info("%s busy (%d calls in flight); template answer", self.__class__.__name__, self.MAX_CONCURRENT_CALLS)
+            return None
+        try:
+            answer = self._call_model(question, facts)
+        except Exception as exc:
+            self._handle_error(exc)
+            return None
+        finally:
+            self._slots.release()
+
+        problems = validate(answer, facts, question)
+        if problems:
+            log.warning("%s answer rejected: %s", self.__class__.__name__, "; ".join(problems))
+            return None
+        with self._lock:
+            self._cache[key] = answer
+            if len(self._cache) > self.CACHE_SIZE:
+                self._cache.popitem(last=False)
+        return answer
+
+
+class GeminiExplainer(BaseExplainer):
+    RATE_LIMIT_PAUSE_SECONDS = 60
+
+    def __init__(self, client, config: ExplainerConfig | None = None):
+        super().__init__(config or ExplainerConfig())
+        self.client = client
 
     @classmethod
     def from_env(cls) -> "GeminiExplainer | None":
@@ -198,91 +237,63 @@ class GeminiExplainer:
         client = genai.Client(http_options=types.HttpOptions(timeout=config.timeout_ms))
         return cls(client, config)
 
-    def __call__(self, question: str, facts: str) -> str | None:
-        from google.genai import errors, types
+    def _call_model(self, question: str, facts: str) -> str:
+        from google.genai import types
 
-        key = (" ".join(question.lower().split()), facts)
-        with self._lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-                return self._cache[key]
-            if time.monotonic() < self._paused_until:
-                return None
-        if not self._slots.acquire(blocking=False):
-            log.info("gemini busy (%d calls in flight); template answer", self.MAX_CONCURRENT_CALLS)
-            return None
-        try:
-            response = self.client.models.generate_content(
-                model=self.config.model,
-                contents=f"คำถามผู้ใช้: {question}\n\nข้อเท็จจริง (ห้ามเปลี่ยน):\n{facts}",
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    max_output_tokens=self.config.max_output_tokens,
-                    thinking_config=types.ThinkingConfig(thinking_level=self.config.thinking_level),
-                ),
-            )
-            answer = (response.text or "").strip()
-        except errors.ClientError as exc:  # 4xx: bad key, quota, blocked request
+        response = self.client.models.generate_content(
+            model=self.config.model,
+            contents=f"คำถามผู้ใช้: {question}\n\nข้อเท็จจริง (ห้ามเปลี่ยน):\n{facts}",
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                max_output_tokens=self.config.max_output_tokens,
+                thinking_config=types.ThinkingConfig(thinking_level=self.config.thinking_level),
+            ),
+        )
+        return (response.text or "").strip()
+
+    def _handle_error(self, exc: Exception) -> None:
+        from google.genai import errors
+
+        if isinstance(exc, errors.ClientError):
             if getattr(exc, "code", None) == 429:
                 with self._lock:
                     self._paused_until = time.monotonic() + self.RATE_LIMIT_PAUSE_SECONDS
                 log.warning("gemini rate limited; template answers for %ss", self.RATE_LIMIT_PAUSE_SECONDS)
             else:
                 log.warning("gemini client error %s: %s", getattr(exc, "code", "?"), exc)
-            return None
-        except (errors.ServerError, errors.APIError) as exc:  # 5xx or other API failure
+        elif isinstance(exc, (errors.ServerError, errors.APIError)):
             log.warning("gemini unavailable: %s", exc)
-            return None
-        except Exception as exc:  # timeouts and network errors surface as httpx/OS errors
+        else:
             log.warning("gemini call failed: %s: %s", type(exc).__name__, exc)
-            return None
-        finally:
-            self._slots.release()
-        problems = validate(answer, facts, question)
-        if problems:
-            log.warning("gemini answer rejected: %s", "; ".join(problems))
-            return None
-        with self._lock:
-            self._cache[key] = answer
-            if len(self._cache) > self.CACHE_SIZE:
-                self._cache.popitem(last=False)
-        return answer
 
 
 @dataclass
 class QwenConfig:
-    model: str = "qwen2.5:7b"
-    endpoint: str = "http://127.0.0.1:11434"
-    timeout_ms: int = 3000
+    model: str = "thanphai-qwen"
+    endpoint: str = "http://host.docker.internal:11434"
+    timeout_ms: int = 15000
     max_output_tokens: int = 512
     temperature: float = 0.0
 
     @classmethod
     def from_env(cls) -> "QwenConfig":
         return cls(
-            model=os.getenv("QWEN_MODEL", os.getenv("LLM_MODEL", cls.model)),
+            model=os.getenv("QWEN_MODEL", cls.model),
             endpoint=os.getenv("QWEN_ENDPOINT", os.getenv("OLLAMA_HOST", cls.endpoint)).rstrip("/"),
             timeout_ms=int(os.getenv("QWEN_TIMEOUT_MS", str(cls.timeout_ms))),
         )
 
 
-class QwenExplainer:
+class QwenExplainer(BaseExplainer):
     """Local Qwen explainer (via Ollama or OpenAI-compatible server).
 
     Uses the exact same validate() logic as Gemini. If Qwen fails, times out, or produces an
     answer that fails validation, returns None so the agent falls back to deterministic rule templates.
     """
 
-    CACHE_SIZE = 256
-    MAX_CONCURRENT_CALLS = 4
-
     def __init__(self, config: QwenConfig | None = None, requester=None):
-        self.config = config or QwenConfig.from_env()
+        super().__init__(config or QwenConfig.from_env())
         self.requester = requester or self._http_request
-        self._cache: OrderedDict[tuple[str, str], str] = OrderedDict()
-        self._paused_until = 0.0
-        self._lock = threading.Lock()
-        self._slots = threading.BoundedSemaphore(self.MAX_CONCURRENT_CALLS)
 
     @classmethod
     def from_env(cls) -> "QwenExplainer | None":
@@ -292,6 +303,9 @@ class QwenExplainer:
         if provider != "qwen" and not os.getenv("QWEN_ENDPOINT"):
             return None
         return cls(config=QwenConfig.from_env())
+
+    def _call_model(self, question: str, facts: str) -> str:
+        return self.requester(question, facts)
 
     def _http_request(self, question: str, facts: str) -> str:
         prompt = f"คำถามผู้ใช้: {question}\n\nข้อเท็จจริง (ห้ามเปลี่ยน):\n{facts}"
@@ -342,39 +356,6 @@ class QwenExplainer:
             return data["response"].strip()
         return ""
 
-    def __call__(self, question: str, facts: str) -> str | None:
-        key = (" ".join(question.lower().split()), facts)
-        with self._lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-                return self._cache[key]
-            if time.monotonic() < self._paused_until:
-                return None
-
-        if not self._slots.acquire(blocking=False):
-            log.info("qwen busy (%d calls in flight); template answer", self.MAX_CONCURRENT_CALLS)
-            return None
-
-        try:
-            answer = self.requester(question, facts)
-        except Exception as exc:
-            log.warning("qwen call failed: %s: %s", type(exc).__name__, exc)
-            with self._lock:
-                self._paused_until = time.monotonic() + 2.0
-            return None
-        finally:
-            self._slots.release()
-
-        problems = validate(answer, facts, question)
-        if problems:
-            log.warning("qwen answer rejected: %s", "; ".join(problems))
-            return None
-
-        with self._lock:
-            self._cache[key] = answer
-            if len(self._cache) > self.CACHE_SIZE:
-                self._cache.popitem(last=False)
-        return answer
 
 
 def create_explainer_from_env() -> "GeminiExplainer | QwenExplainer | None":

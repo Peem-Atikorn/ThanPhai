@@ -46,10 +46,13 @@ services:
     build:
       context: .
       dockerfile: 02_api_backend/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     environment:
       DATA_DIR: /data/processed
       CORS_ORIGINS: http://localhost:3000
+      QWEN_ENDPOINT: ${QWEN_ENDPOINT:-http://host.docker.internal:11434}
     volumes:
       # Built by scripts/build_admin_areas.py from the HDX download.
       - ./data/processed:/data/processed:ro

@@ -20,13 +20,14 @@ GOOD_ANSWER = "อำเภอเสนาตอนนี้น้ำท่ว�
 
 def test_qwen_config():
     cfg = QwenConfig()
-    assert cfg.model == "qwen2.5:7b"
-    assert cfg.endpoint == "http://127.0.0.1:11434"
-    assert cfg.timeout_ms == 3000
+    assert cfg.model == "thanphai-qwen"
+    assert cfg.endpoint == "http://host.docker.internal:11434"
+    assert cfg.timeout_ms == 15000
     assert cfg.temperature == 0.0
 
 
 def test_qwen_config_from_env(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "gemini-3.5-flash-lite")  # must be ignored by Qwen
     monkeypatch.setenv("QWEN_MODEL", "qwen-custom:7b")
     monkeypatch.setenv("QWEN_ENDPOINT", "http://gpu-host:11434/")
     monkeypatch.setenv("QWEN_TIMEOUT_MS", "2500")
@@ -99,7 +100,7 @@ def test_create_explainer_from_env_qwen(monkeypatch):
 
     explainer = create_explainer_from_env()
     assert isinstance(explainer, QwenExplainer)
-    assert explainer.config.model == "qwen2.5:7b"
+    assert explainer.config.model == "thanphai-qwen"
 
 
 def test_create_explainer_from_env_none(monkeypatch):

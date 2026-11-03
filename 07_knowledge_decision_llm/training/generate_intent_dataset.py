@@ -2,7 +2,7 @@
 
 Saves Question -> JSON pairs for Unsloth / Qwen training:
   train_intent.jsonl
-  test_intent.jsonl (>= 500 held-out samples)
+  test_intent.jsonl (>= 500 held-out samples, completely disjoint)
 """
 
 import argparse
@@ -34,22 +34,49 @@ TIME_PATTERNS = [
     ("สัปดาห์นี้", {"days": 7, "future": True}),
 ]
 
+# Official DOPA / ThanPhai codes:
+# TH1412 = เสนา, TH1406 = บางปะอิน, TH1405 = บางบาล
+# TH9011 = หาดใหญ่, TH9001 = เมืองสงขลา
+# TH7207 = สองพี่น้อง, TH7204 = บางปลาม้า
+# TH1206 = ปากเกร็ด, TH1202 = บางกรวย, TH1205 = บางบัวทอง
 DEFAULT_AREAS = [
-    {"code": "TH1406", "name_th": "เสนา", "province_th": "พระนครศรีอยุธยา"},
-    {"code": "TH1405", "name_th": "บางบาล", "province_th": "พระนครศรีอยุธยา"},
-    {"code": "TH1001", "name_th": "พระนคร", "province_th": "กรุงเทพมหานคร"},
-    {"code": "TH9001", "name_th": "หาดใหญ่", "province_th": "สงขลา"},
-    {"code": "TH5001", "name_th": "เมืองเชียงใหม่", "province_th": "เชียงใหม่"},
-    {"code": "TH8301", "name_th": "เมืองภูเก็ต", "province_th": "ภูเก็ต"},
-    {"code": "TH4001", "name_th": "เมืองขอนแก่น", "province_th": "ขอนแก่น"},
-    {"code": "TH3401", "name_th": "เมืองอุบลราชธานี", "province_th": "อุบลราชธานี"},
-    {"code": "TH2001", "name_th": "เมืองชลบุรี", "province_th": "ชลบุรี"},
-    {"code": "TH7204", "name_th": "สองพี่น้อง", "province_th": "สุพรรณบุรี"},
-    {"code": "TH1202", "name_th": "ปากเกร็ด", "province_th": "นนทบุรี"},
-    {"code": "TH5801", "name_th": "เมืองแม่ฮ่องสอน", "province_th": "แม่ฮ่องสอน"},
-    {"code": "TH5701", "name_th": "เมืองเชียงราย", "province_th": "เชียงราย"},
-    {"code": "TH7101", "name_th": "เมืองกาญจนบุรี", "province_th": "กาญจนบุรี"},
-    {"code": "TH8001", "name_th": "เมืองนครศรีธรรมราช", "province_th": "นครศรีธรรมราช"},
+    {"code": "TH1412", "name_th": "เสนา", "level": "amphoe", "province_th": "พระนครศรีอยุธยา"},
+    {"code": "TH1406", "name_th": "บางปะอิน", "level": "amphoe", "province_th": "พระนครศรีอยุธยา"},
+    {"code": "TH1405", "name_th": "บางบาล", "level": "amphoe", "province_th": "พระนครศรีอยุธยา"},
+    {"code": "TH9011", "name_th": "หาดใหญ่", "level": "amphoe", "province_th": "สงขลา"},
+    {"code": "TH9001", "name_th": "เมืองสงขลา", "level": "amphoe", "province_th": "สงขลา"},
+    {"code": "TH7207", "name_th": "สองพี่น้อง", "level": "amphoe", "province_th": "สุพรรณบุรี"},
+    {"code": "TH7204", "name_th": "บางปลาม้า", "level": "amphoe", "province_th": "สุพรรณบุรี"},
+    {"code": "TH1206", "name_th": "ปากเกร็ด", "level": "amphoe", "province_th": "นนทบุรี"},
+    {"code": "TH1202", "name_th": "บางกรวย", "level": "amphoe", "province_th": "นนทบุรี"},
+    {"code": "TH1205", "name_th": "บางบัวทอง", "level": "amphoe", "province_th": "นนทบุรี"},
+    {"code": "TH1001", "name_th": "พระนคร", "level": "amphoe", "province_th": "กรุงเทพมหานคร"},
+    {"code": "TH5001", "name_th": "เมืองเชียงใหม่", "level": "amphoe", "province_th": "เชียงใหม่"},
+    {"code": "TH8301", "name_th": "เมืองภูเก็ต", "level": "amphoe", "province_th": "ภูเก็ต"},
+    {"code": "TH4001", "name_th": "เมืองขอนแก่น", "level": "amphoe", "province_th": "ขอนแก่น"},
+    {"code": "TH3401", "name_th": "เมืองอุบลราชธานี", "level": "amphoe", "province_th": "อุบลราชธานี"},
+    {"code": "TH2001", "name_th": "เมืองชลบุรี", "level": "amphoe", "province_th": "ชลบุรี"},
+    {"code": "TH5801", "name_th": "เมืองแม่ฮ่องสอน", "level": "amphoe", "province_th": "แม่ฮ่องสอน"},
+    {"code": "TH5701", "name_th": "เมืองเชียงราย", "level": "amphoe", "province_th": "เชียงราย"},
+    {"code": "TH7101", "name_th": "เมืองกาญจนบุรี", "level": "amphoe", "province_th": "กาญจนบุรี"},
+    {"code": "TH8001", "name_th": "เมืองนครศรีธรรมราช", "level": "amphoe", "province_th": "นครศรีธรรมราช"},
+]
+
+DEFAULT_PROVINCES = [
+    {"code": "TH14", "name_th": "พระนครศรีอยุธยา", "level": "province", "province_th": "พระนครศรีอยุธยา"},
+    {"code": "TH90", "name_th": "สงขลา", "level": "province", "province_th": "สงขลา"},
+    {"code": "TH72", "name_th": "สุพรรณบุรี", "level": "province", "province_th": "สุพรรณบุรี"},
+    {"code": "TH12", "name_th": "นนทบุรี", "level": "province", "province_th": "นนทบุรี"},
+    {"code": "TH10", "name_th": "กรุงเทพมหานคร", "level": "province", "province_th": "กรุงเทพมหานคร"},
+    {"code": "TH50", "name_th": "เชียงใหม่", "level": "province", "province_th": "เชียงใหม่"},
+    {"code": "TH83", "name_th": "ภูเก็ต", "level": "province", "province_th": "ภูเก็ต"},
+    {"code": "TH40", "name_th": "ขอนแก่น", "level": "province", "province_th": "ขอนแก่น"},
+    {"code": "TH34", "name_th": "อุบลราชธานี", "level": "province", "province_th": "อุบลราชธานี"},
+    {"code": "TH20", "name_th": "ชลบุรี", "level": "province", "province_th": "ชลบุรี"},
+    {"code": "TH58", "name_th": "แม่ฮ่องสอน", "level": "province", "province_th": "แม่ฮ่องสอน"},
+    {"code": "TH57", "name_th": "เชียงราย", "level": "province", "province_th": "เชียงราย"},
+    {"code": "TH71", "name_th": "กาญจนบุรี", "level": "province", "province_th": "กาญจนบุรี"},
+    {"code": "TH80", "name_th": "นครศรีธรรมราช", "level": "province", "province_th": "นครศรีธรรมราช"},
 ]
 
 INSTRUCTION_PROMPT = (
@@ -58,31 +85,118 @@ INSTRUCTION_PROMPT = (
     "hazards (รายชื่อภัย), areas (รหัสและชื่อพื้นที่), time_window (days, future)"
 )
 
+OUT_OF_SCOPE_QUESTIONS = [
+    "วันนี้กินอะไรดี",
+    "ขอสูตรทำต้มยำกุ้งหน่อย",
+    "ราคาน้ำมันวันนี้ขึ้นไหม",
+    "ผลบอลพรีเมียร์ลีกเมื่อคืนเป็นยังไง",
+    "สอนเขียนโค้ด Python หน่อย",
+    "แนะนำสถานที่เที่ยววันหยุด",
+    "หวยงวดนี้ออกอะไร",
+    "สวัสดีครับ สบายดีไหม",
+    "คุณชื่ออะไร ทำอะไรได้บ้าง",
+    "เปิดเพลงให้ฟังหน่อย",
+    "หุ้นวันนี้บวกหรือลบ",
+    "อัตราแลกเปลี่ยนดอลลาร์เป็นบาทเท่าไหร่",
+    "วิธีสมัครสอบ ก.พ. ทำยังไง",
+    "ร้านกาแฟแถวสยามร้านไหนอร่อย",
+    "วันหยุดราชการเดือนหน้ามีวันไหนบ้าง",
+    "iPhone รุ่นใหม่ออกเมื่อไหร่",
+    "ขอวิธีลดน้ำหนักแบบเร่งด่วน",
+    "แมวพันธุ์ไหนเลี้ยงง่ายสุด",
+    "หนังเข้าใหม่สัปดาห์นี้มีเรื่องอะไรบ้าง",
+    "สอนคำศัพท์ภาษาอังกฤษสำหรับสัมภาษณ์งาน",
+    "วิธีจองตั๋วรถไฟออนไลน์",
+    "โปรโมชันตั๋วเครื่องบินไปญี่ปุ่นช่วงนี้มีไหม",
+    "สภาพอากาศที่ลอนดอนเป็นอย่างไร",
+    "แนะนำร้านอาหารครอบครัวแถวบางนา",
+    "วิธีแก้ปวดหัวไมเกรนเบื้องต้น",
+    "การจัดโต๊ะทำงานตามหลักฮวงจุ้ย",
+    "วิธีล้างแอร์บ้านด้วยตัวเอง",
+    "เกมมือถือน่าเล่นประจำเดือนนี้",
+    "ตรวจสลากกินแบ่งรัฐบาลย้อนหลัง",
+    "วิธีทำไข่เจียวให้กรอบฟู",
+    "ขอคำอวยพรวันเกิดเพื่อนสนิท",
+    "ราคาผักสดในตลาดไทวันนี้",
+    "สรุปข่าวเด่นประจำวันให้ฟังหน่อย",
+    "แนะนำซีรีส์เกาหลีที่น่าดูใน Netflix",
+    "วิธีปลูกต้นไม้ในคอนโด",
+    "วิธีทำพาสปอร์ตใหม่ต้องเตรียมเอกสารอะไรบ้าง",
+    "รถไฟฟ้าสายสีชมพูเปิดกี่โมง",
+    "สอนวิธีชงกาแฟดริปหน่อย",
+    "หมาไม่ยอมกินข้าวทำยังไงดี",
+    "อาการนอนไม่หลับเกิดจากอะไร",
+    "แนะนำหนังสือพัฒนาตนเองน่าอ่าน",
+    "งานหนังสือจัดที่ไหนถึงวันไหน",
+    "วิธีผูกเนคไทแบบง่าย",
+    "วิธีทำ resume ภาษาอังกฤษ",
+    "แนะนำหูฟังไร้สายราคาประหยัด",
+    "รถไฟฟ้าใต้ดินปิดกี่โมง",
+    "วิธีคำนวณภาษีเงินได้บุคคลธรรมดา",
+    "ร้านตัดผมชายสไตล์วินเทจแถวลาดพร้าว",
+    "วิธีทำขนมปังอบเนยสด",
+    "สอนเล่นกีตาร์คอร์ดง่ายๆ หน่อย",
+]
 
-def load_gazetteer_areas(gazetteer_path: Path) -> list[dict]:
+
+def load_gazetteer_areas(gazetteer_path: Path) -> tuple[list[dict], list[dict]]:
+    """Loads gazetteer and separates amphoes from provinces with parent province lookup."""
     if gazetteer_path.exists():
         try:
             data = json.loads(gazetteer_path.read_text(encoding="utf-8"))
-            areas = []
-            for item in data:
-                areas.append({
-                    "code": item.get("code", ""),
-                    "name_th": item.get("name_th", ""),
-                    "province_th": item.get("province_th", item.get("name_th", "")),
-                })
-            if areas:
-                return areas
+            # 1. Map provinces
+            prov_map = {
+                item["code"]: item["name_th"]
+                for item in data
+                if item.get("level") == "province"
+            }
+            provinces = [
+                {
+                    "code": item["code"],
+                    "name_th": item["name_th"],
+                    "level": "province",
+                    "province_th": item["name_th"],
+                }
+                for item in data
+                if item.get("level") == "province"
+            ]
+            # 2. Map amphoes
+            amphoes = [
+                {
+                    "code": item["code"],
+                    "name_th": item["name_th"],
+                    "level": "amphoe",
+                    "province_th": prov_map.get(item.get("parent_code"), item["name_th"]),
+                }
+                for item in data
+                if item.get("level") == "amphoe"
+            ]
+            if amphoes and provinces:
+                return amphoes, provinces
         except Exception:
             pass
-    return DEFAULT_AREAS
+    return DEFAULT_AREAS, DEFAULT_PROVINCES
 
 
-def generate_intent_samples(areas: list[dict], count: int = 10000, seed: int = 42) -> list[dict]:
+def generate_intent_samples(
+    amphoe_areas: list[dict], province_areas: list[dict], count: int = 10000, seed: int = 42
+) -> list[dict]:
     random.seed(seed)
-    samples = []
+    seen_questions: set[str] = set()
+    samples: list[dict] = []
 
-    # 1. Risk questions
-    risk_templates = [
+    def add_sample(question: str, output_obj: dict):
+        q = question.strip()
+        if q not in seen_questions:
+            seen_questions.add(q)
+            samples.append({
+                "instruction": INSTRUCTION_PROMPT,
+                "input": q,
+                "output": json.dumps(output_obj, ensure_ascii=False),
+            })
+
+    # 1. Risk questions on Amphoes
+    risk_amphoe_templates = [
         "{time}{area}{hazard}ไหม",
         "{area}ตอนนี้{hazard}หรือยัง",
         "{time}มีเตือนภัย{hazard}ที่{area}หรือเปล่า",
@@ -90,36 +204,52 @@ def generate_intent_samples(areas: list[dict], count: int = 10000, seed: int = 4
         "{area}{time}มีโอกาสเกิด{hazard}ไหมครับ",
         "{time}ที่{area}ระดับ{hazard}รุนแรงไหม",
     ]
-
-    for _ in range(int(count * 0.65)):
-        area = random.choice(areas)
+    for _ in range(int(count * 0.45)):
+        area = random.choice(amphoe_areas)
         hazard_key = random.choice(list(HAZARDS_INFO.keys()))
         hazard_word = random.choice(HAZARDS_INFO[hazard_key])
         time_word, time_meta = random.choice(TIME_PATTERNS)
-        template = random.choice(risk_templates)
+        template = random.choice(risk_amphoe_templates)
 
         area_str = random.choice([
             area["name_th"],
             f"อำเภอ{area['name_th']}",
             f"อ.{area['name_th']}",
-            f"จ.{area['province_th']}",
-            f"{area['name_th']} {area['province_th']}",
+            f"อ.{area['name_th']} จ.{area['province_th']}",
         ])
-
-        question = template.format(time=time_word, area=area_str, hazard=hazard_word).strip()
-        output_obj = {
+        question = template.format(time=time_word, area=area_str, hazard=hazard_word)
+        out = {
             "intent": "risk",
             "hazards": [hazard_key],
-            "areas": [area],
+            "areas": [{"code": area["code"], "name_th": area["name_th"], "level": "amphoe"}],
             "time_window": time_meta,
         }
-        samples.append({
-            "instruction": INSTRUCTION_PROMPT,
-            "input": question,
-            "output": json.dumps(output_obj, ensure_ascii=False),
-        })
+        add_sample(question, out)
 
-    # 2. Explain questions
+    # 2. Risk questions on Provinces (tagged with province code!)
+    risk_prov_templates = [
+        "จ.{province}{time}{hazard}ไหม",
+        "จังหวัด{province}{time}มีเตือนภัย{hazard}หรือเปล่า",
+        "{time}{province}เสี่ยง{hazard}ระดับไหน",
+        "สถานการณ์{hazard}ในจังหวัด{province}ตอนนี้",
+    ]
+    for _ in range(int(count * 0.20)):
+        prov = random.choice(province_areas)
+        hazard_key = random.choice(list(HAZARDS_INFO.keys()))
+        hazard_word = random.choice(HAZARDS_INFO[hazard_key])
+        time_word, time_meta = random.choice(TIME_PATTERNS)
+        template = random.choice(risk_prov_templates)
+
+        question = template.format(time=time_word, province=prov["name_th"], hazard=hazard_word)
+        out = {
+            "intent": "risk",
+            "hazards": [hazard_key],
+            "areas": [{"code": prov["code"], "name_th": prov["name_th"], "level": "province"}],
+            "time_window": time_meta,
+        }
+        add_sample(question, out)
+
+    # 3. Explain questions
     explain_templates = [
         "ทำไม{area}ถึงแจ้งเตือน{level}",
         "เพราะอะไร{area}ถึงประกาศระดับ{level}",
@@ -127,7 +257,7 @@ def generate_intent_samples(areas: list[dict], count: int = 10000, seed: int = 4
     ]
     levels = ["เฝ้าระวัง", "เตือนภัย", "วิกฤต"]
     for _ in range(int(count * 0.10)):
-        area = random.choice(areas)
+        area = random.choice(amphoe_areas)
         hazard_key = random.choice(list(HAZARDS_INFO.keys()))
         level = random.choice(levels)
         template = random.choice(explain_templates)
@@ -136,86 +266,62 @@ def generate_intent_samples(areas: list[dict], count: int = 10000, seed: int = 4
             hazard=random.choice(HAZARDS_INFO[hazard_key]),
             level=level,
         )
-        output_obj = {
+        out = {
             "intent": "explain",
             "hazards": [hazard_key],
-            "areas": [area],
+            "areas": [{"code": area["code"], "name_th": area["name_th"], "level": "amphoe"}],
             "time_window": {"days": 1, "future": False},
         }
-        samples.append({
-            "instruction": INSTRUCTION_PROMPT,
-            "input": question,
-            "output": json.dumps(output_obj, ensure_ascii=False),
-        })
+        add_sample(question, out)
 
-    # 3. Prepare questions
+    # 4. Prepare questions
     prepare_templates = [
         "วิธีเตรียมตัวรับมือ{hazard}",
         "ต้องเตรียมอะไรบ้างเมื่อเกิด{hazard}",
         "มีแนวทางรับมือ{hazard}อย่างไร",
         "ต้องอพยพอย่างไรเมื่อมี{hazard}",
+        "คำแนะนำการเตรียมถุงยังชีพสำหรับ{hazard}",
     ]
     for _ in range(int(count * 0.10)):
         hazard_key = random.choice(list(HAZARDS_INFO.keys()))
         hazard_word = random.choice(HAZARDS_INFO[hazard_key])
         template = random.choice(prepare_templates)
         question = template.format(hazard=hazard_word)
-        output_obj = {
+        out = {
             "intent": "prepare",
             "hazards": [hazard_key],
             "areas": [],
             "time_window": {"days": 3, "future": False},
         }
-        samples.append({
-            "instruction": INSTRUCTION_PROMPT,
-            "input": question,
-            "output": json.dumps(output_obj, ensure_ascii=False),
-        })
+        add_sample(question, out)
 
-    # 4. Emergency questions
+    # 5. Emergency questions
     emergency_templates = [
-        "ช่วยด้วย น้ำท่วมบ้านมิดหลังคาแล้ว ที่{area}",
+        "ช่วยด้วย น้ำท่วมบ้านมิดหลังคาแล้ว ที่อำเภอ{area}",
         "มีคนติดอยู่ในบ้านที่{area} ระดับน้ำสูงมาก ช่วยด้วย",
         "ฉุกเฉิน เกิดดินถล่มทับเส้นทางที่{area} มีผู้บาดเจ็บ",
     ]
     for _ in range(int(count * 0.05)):
-        area = random.choice(areas)
+        area = random.choice(amphoe_areas)
         template = random.choice(emergency_templates)
         question = template.format(area=area["name_th"])
-        output_obj = {
+        out = {
             "intent": "emergency",
             "hazards": ["flood" if "น้ำ" in question else "landslide"],
-            "areas": [area],
+            "areas": [{"code": area["code"], "name_th": area["name_th"], "level": "amphoe"}],
             "time_window": {"days": 1, "future": False},
         }
-        samples.append({
-            "instruction": INSTRUCTION_PROMPT,
-            "input": question,
-            "output": json.dumps(output_obj, ensure_ascii=False),
-        })
+        add_sample(question, out)
 
-    # 5. Out of scope questions
-    out_of_scope_samples = [
-        "วันนี้กินอะไรดี",
-        "ขอสูตรทำต้มยำกุ้งหน่อย",
-        "ราคาน้ำมันวันนี้ขึ้นไหม",
-        "ผลบอลเมื่อคืนเป็นยังไง",
-        "สอนเขียนโค้ด Python หน่อย",
-        "แนะนำสถานที่เที่ยววันหยุด",
-        "หวยงวดนี้ออกอะไร",
-    ]
-    for q in out_of_scope_samples:
-        output_obj = {
+    # 6. Out of scope questions (diverse set)
+    for q in OUT_OF_SCOPE_QUESTIONS:
+        out = {
             "intent": "out_of_scope",
             "hazards": [],
             "areas": [],
             "time_window": {"days": 3, "future": False},
         }
-        samples.append({
-            "instruction": INSTRUCTION_PROMPT,
-            "input": q,
-            "output": json.dumps(output_obj, ensure_ascii=False),
-        })
+        add_sample(q, out)
 
     random.shuffle(samples)
     return samples
@@ -232,10 +338,10 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    areas = load_gazetteer_areas(Path(args.gazetteer))
-    samples = generate_intent_samples(areas, count=args.count)
+    amphoes, provinces = load_gazetteer_areas(Path(args.gazetteer))
+    samples = generate_intent_samples(amphoes, provinces, count=args.count)
 
-    test_count = max(500, args.test_count)
+    test_count = max(500, min(args.test_count, len(samples) // 3))
     test_samples = samples[:test_count]
     train_samples = samples[test_count:]
 
@@ -250,7 +356,7 @@ def main():
         for s in test_samples:
             f.write(json.dumps(s, ensure_ascii=False) + "\n")
 
-    print(f"Generated {len(train_samples)} training and {len(test_samples)} test samples.")
+    print(f"Generated {len(train_samples)} training and {len(test_samples)} test samples (100% deduplicated).")
     print(f"Saved to {train_path} and {test_path}")
 
 
