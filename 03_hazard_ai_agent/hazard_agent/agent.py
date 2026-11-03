@@ -259,6 +259,15 @@ class HazardAgent:
                     "• พรุ่งนี้ฝนตกที่จังหวัดขอนแก่นไหม\n"
                     "• ต้องเตรียมตัวอย่างไรเมื่อเกิดไฟป่า")
             return AgentAnswer(text, u.intent, None, [])
+        if "mueang province required" in u.notes:
+            text = ("อำเภอเมืองของจังหวัดไหนครับ กรุณาระบุจังหวัด เช่น อำเภอเมืองเชียงใหม่"
+                    if not any(a.level == "province" for a in u.areas)
+                    else "ไม่พบอำเภอเมืองในพื้นที่ที่ระบุ กรุณาระบุชื่ออำเภอและจังหวัดครับ")
+            return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards], notes=u.notes)
+        if u.regions:
+            text = (f"คำถามนี้ครอบคลุม{' / '.join(u.regions)} ทันภัยยังไม่สรุปข้อมูลทั้งภาคในคำตอบนี้ "
+                    "กรุณาระบุจังหวัดหรืออำเภอที่ต้องการครับ")
+            return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards])
         if u.intent == "sources":
             return self._sources()
         if u.intent == "dam":
