@@ -137,3 +137,66 @@ def test_decode_png_radar():
     bad_arr = decode_png_radar(b"not a png")
     assert bad_arr.shape == (256, 256)
     assert bad_arr.max() == 0.0
+
+
+def test_decode_png_radar_universal_blue_color_mapping():
+    import io
+    from PIL import Image
+    from risk_models.nowcast import decode_png_radar
+
+    # Create a real PNG with Universal Blue palette colors:
+    # 0xffee00 is (255, 238, 0) -> 35.0 dBZ
+    # 0xff4400 is (255, 68, 0) -> 45.0 dBZ
+    im = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    # Fill region 1 with 35 dBZ color
+    for y in range(30, 40):
+        for x in range(30, 40):
+            im.putpixel((x, y), (255, 238, 0, 255))
+    # Fill region 2 with 45 dBZ color
+    for y in range(50, 60):
+        for x in range(50, 60):
+            im.putpixel((x, y), (255, 68, 0, 255))
+
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    png_bytes = buf.getvalue()
+
+    arr = decode_png_radar(png_bytes)
+    assert arr.shape == (256, 256)
+    assert arr[35, 35] == pytest.approx(35.0, abs=0.5)
+    assert arr[55, 55] == pytest.approx(45.0, abs=0.5)
+    assert arr[0, 0] == 0.0
+
+
+def test_subpixel_motion_and_noise_speed_cap():
+    from scipy import ndimage
+    from risk_models.nowcast import estimate_motion
+
+    y, x = np.ogrid[:100, :100]
+    frame1 = np.exp(-((x - 50)**2 + (y - 50)**2) / (2 * 8**2)) * 50.0
+    # Sub-pixel shift: dy = 0.4, dx = 0.7
+    frame2 = ndimage.shift(frame1, [0.4, 0.7], mode="constant", cval=0.0)
+
+    motion = estimate_motion(frame1, frame2, pixel_size_km=1.0, interval_min=10.0)
+    assert motion.dy == pytest.approx(0.4, abs=0.15)
+    assert motion.dx == pytest.approx(0.7, abs=0.15)
+    assert motion.speed_kmh > 0.0
+
+    # Unrealistic noise shift (> 120 km/h)
+    noisy_shift = estimate_motion(frame1, ndimage.shift(frame1, [30.0, 30.0]), pixel_size_km=9.5, interval_min=10.0)
+    assert noisy_shift.speed_kmh == 0.0
+    assert noisy_shift.direction_th == "ทิศทางไม่แน่นอน"
+
+
+def test_detect_rain_cells_with_web_mercator():
+    from risk_models.nowcast import detect_rain_cells
+
+    frame = np.zeros((256, 256), dtype=float)
+    # Put rain cell at Bangkok coordinates on tile 4/12/7: (py=98, px=119)
+    frame[95:102, 116:123] = 45.0
+
+    cells = detect_rain_cells(frame, threshold=20.0, min_pixels=4, z=4, tx=12, ty=7, filter_thailand=True)
+    assert len(cells) == 1
+    # Lat should be ~13.7 deg N, Lon ~100.5 deg E
+    assert 13.0 <= cells[0].centroid_lat <= 14.5
+    assert 99.5 <= cells[0].centroid_lon <= 101.5

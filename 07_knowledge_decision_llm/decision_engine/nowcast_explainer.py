@@ -11,7 +11,7 @@ import re
 import urllib.request
 from typing import Any, Callable
 
-from .explainer import QwenConfig
+from .explainer import QwenConfig, call_qwen_api
 
 EMERGENCY_NUMBERS = ["1784", "1669", "199", "191", "1193", "1195", "1197", "1584"]
 
@@ -50,8 +50,11 @@ class NowcastSummary:
 
 def build_template_answer(summary: NowcastSummary) -> str:
     """Generate a safe, deterministic template sentence without LLM."""
-    if summary.speed_kmh < 2.0 or not summary.location_desc or summary.direction_th in ["ไม่มีกลุ่มฝน", "ทิศทางไม่แน่นอน"]:
+    if not summary.location_desc or summary.direction_th in ["ไม่มีกลุ่มฝน", "ทิศทางไม่แน่นอน"]:
         return "ไม่พบกลุ่มฝนที่มีนัยสำคัญในระยะคาดการณ์ 1 ชั่วโมงข้างหน้า"
+
+    if summary.speed_kmh < 2.0 or summary.direction_th in ["เกือบอยู่กับที่", "อยู่กับที่"]:
+        return f"กลุ่มฝน{summary.intensity_desc}{summary.location_desc} มีการเคลื่อนตัวช้าหรือเกือบอยู่กับที่ โปรดเฝ้าระวังฝนสะสมและน้ำท่วมฉับพลัน"
 
     speed_val = int(round(summary.speed_kmh))
     targets_part = ""
@@ -85,7 +88,7 @@ def validate_nowcast_explanation(
     found_nums = set(raw_nums)
 
     allowed_nums = set()
-    if summary.speed_kmh > 0:
+    if summary.speed_kmh >= 2.0:
         allowed_nums.add(str(int(round(summary.speed_kmh))))
         allowed_nums.add(f"{summary.speed_kmh:.1f}")
         allowed_nums.add(str(int(summary.speed_kmh)))
@@ -100,11 +103,17 @@ def validate_nowcast_explanation(
     expected_dir = summary.direction_th
     # Remove location_desc from answer first so phrases like "ทางตะวันตกของกรุงเทพฯ" do not trigger false direction mismatch
     text_for_dir_check = answer.replace(summary.location_desc, "")
-    for d in ALL_DIRECTIONS:
-        if d in text_for_dir_check and d != expected_dir:
-            if d not in expected_dir:
-                problems.append(f"Contains direction mismatch: found {d}, expected {expected_dir}")
+    if expected_dir in ["เกือบอยู่กับที่", "อยู่กับที่"]:
+        for d in ALL_DIRECTIONS:
+            if d in text_for_dir_check:
+                problems.append(f"Contains direction mismatch: found {d}, expected stationary")
                 break
+    else:
+        for d in ALL_DIRECTIONS:
+            if d in text_for_dir_check and d != expected_dir:
+                if d not in expected_dir:
+                    problems.append(f"Contains direction mismatch: found {d}, expected {expected_dir}")
+                    break
 
     # 4. Verify target districts mentioned against facts
     allowed_districts = {t.amphoe_th for t in summary.targets}
@@ -145,30 +154,20 @@ class NowcastExplainer:
         if self.requester:
             return self.requester(prompt)
 
-        url = f"{self.config.endpoint.rstrip('/')}/api/generate"
-        payload = json.dumps({
-            "model": self.config.model,
-            "prompt": prompt,
-            "system": self.SYSTEM_PROMPT,
-            "stream": False,
-            "options": {"temperature": self.config.temperature},
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        return call_qwen_api(
+            endpoint=self.config.endpoint,
+            model=self.config.model,
+            system_instruction=self.SYSTEM_PROMPT,
+            user_prompt=prompt,
+            temperature=self.config.temperature,
+            max_tokens=256,
+            timeout_ms=self.config.timeout_ms,
         )
-        timeout_s = max(1.0, self.config.timeout_ms / 1000.0)
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data.get("response", "").strip()
 
     def explain(self, summary: NowcastSummary, gazetteer: Any = None) -> str:
         """Explain nowcast summary using Qwen; falls back to template on any error or validation failure."""
         template = build_template_answer(summary)
-        if summary.speed_kmh < 2.0 or not summary.location_desc:
+        if not summary.location_desc or summary.direction_th in ["ไม่มีกลุ่มฝน", "ทิศทางไม่แน่นอน"]:
             return template
 
         # Check if Qwen is explicitly enabled via LLM_PROVIDER=qwen
@@ -178,10 +177,15 @@ class NowcastExplainer:
             return template
 
         targets_str = ", ".join(f"{t.amphoe_th} ในอีก {t.eta_min} นาที" for t in summary.targets) or "ไม่มีอำเภอเสี่ยงโดยตรง"
+        speed_str = (
+            f"ความเร็ว: {int(round(summary.speed_kmh))} กม./ชม.\n"
+            if summary.speed_kmh >= 2.0
+            else "ความเร็ว: น้อยกว่า 2 กม./ชม. (เกือบอยู่กับที่)\n"
+        )
         prompt = (
             f"ตำแหน่ง: {summary.location_desc}\n"
             f"ทิศทาง: {summary.direction_th}\n"
-            f"ความเร็ว: {int(round(summary.speed_kmh))} กม./ชม.\n"
+            f"{speed_str}"
             f"ความแรง: {summary.intensity_desc}\n"
             f"อำเภอเป้าหมาย: {targets_str}\n\n"
             f"จงสรุปสถานการณ์สั้นๆ 1-2 ประโยค:"

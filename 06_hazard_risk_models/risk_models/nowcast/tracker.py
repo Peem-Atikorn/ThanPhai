@@ -34,7 +34,7 @@ def track_cells_to_districts(
     v_east = (speed_kmh / 60.0) * math.sin(rad)
 
     hits: list[dict[str, Any]] = []
-    seen_districts: set[tuple[int, str]] = set()
+    seen_cell_districts: set[tuple[int, str]] = set()
 
     for cell in cells:
         lat0 = cell.centroid_lat
@@ -55,8 +55,9 @@ def track_cells_to_districts(
 
             for d in districts:
                 name = d.get("name_th") or d.get("name") or ""
-                key = (cell.id, name)
-                if key in seen_districts:
+                code = d.get("code") or name
+                key = (cell.id, code)
+                if key in seen_cell_districts:
                     continue
 
                 d_lat_dist = d["lat"]
@@ -64,10 +65,11 @@ def track_cells_to_districts(
 
                 dist_km = haversine_km(proj_lat, proj_lon, d_lat_dist, d_lon_dist)
                 if dist_km <= impact_radius_km:
-                    seen_districts.add(key)
+                    seen_cell_districts.add(key)
                     hits.append(
                         {
                             "cell_id": cell.id,
+                            "code": d.get("code", ""),
                             "amphoe_th": name,
                             "eta_min": t,
                             "distance_km": round(dist_km, 1),
@@ -75,6 +77,6 @@ def track_cells_to_districts(
                         }
                     )
 
-    # Sort by arrival time
+    # Sort by arrival time ascending
     hits.sort(key=lambda h: h["eta_min"])
     return hits

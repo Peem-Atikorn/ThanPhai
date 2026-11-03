@@ -1,7 +1,25 @@
+import math
 import numpy as np
 from scipy import ndimage
 
 from . import RainCell
+
+# Approximate bounding box covering Thailand land territory and immediate border/coastal waters
+THAILAND_MIN_LAT = 5.5
+THAILAND_MAX_LAT = 21.0
+THAILAND_MIN_LON = 97.0
+THAILAND_MAX_LON = 106.0
+
+
+def pixel_to_latlon_mercator(cy: float, cx: float, z: int, tx: int, ty: int, tile_size: int = 256) -> tuple[float, float]:
+    """Inverse Web Mercator projection (EPSG:3857) converting tile pixel (cy, cx) to (lat, lon)."""
+    w_pixels = tile_size * (2 ** z)
+    gx = tx * tile_size + cx
+    gy = ty * tile_size + cy
+    lon = (gx / w_pixels) * 360.0 - 180.0
+    n = math.pi - (2.0 * math.pi * gy) / w_pixels
+    lat = math.degrees(math.atan(math.sinh(n)))
+    return lat, lon
 
 
 def detect_rain_cells(
@@ -12,11 +30,17 @@ def detect_rain_cells(
     origin_lon: float = 97.3,
     pixel_deg_lat: float = 0.03,
     pixel_deg_lon: float = 0.03,
+    z: int | None = None,
+    tx: int | None = None,
+    ty: int | None = None,
+    filter_thailand: bool = False,
 ) -> list[RainCell]:
     """Segment frame into rain cells using connected components.
-    
+
     threshold: dBZ or mm/h threshold to consider as rain cell
     min_pixels: minimum cell area
+    z, tx, ty: Web Mercator tile zoom and coordinates for exact inverse Mercator projection.
+    filter_thailand: if True, filter out rain cells outside Thailand territory (e.g. Andaman Sea / Myanmar).
     """
     binary_mask = frame >= threshold
     labeled, num_features = ndimage.label(binary_mask)
@@ -24,7 +48,6 @@ def detect_rain_cells(
         return []
 
     cells: list[RainCell] = []
-    # Calculate centers of mass for all labels
     centroids = ndimage.center_of_mass(frame, labeled, range(1, num_features + 1))
     if isinstance(centroids, tuple):
         centroids = [centroids]
@@ -39,9 +62,16 @@ def detect_rain_cells(
         peak = float(np.max(frame[mask]))
         mean = float(np.mean(frame[mask]))
 
-        # Approximate lat/lon from top-left origin (lat decreases downward)
-        cell_lat = origin_lat - (cy * pixel_deg_lat)
-        cell_lon = origin_lon + (cx * pixel_deg_lon)
+        if z is not None and tx is not None and ty is not None:
+            cell_lat, cell_lon = pixel_to_latlon_mercator(cy, cx, z=z, tx=tx, ty=ty, tile_size=frame.shape[0])
+        else:
+            # Approximate linear offset from top-left origin (fallback/testing)
+            cell_lat = origin_lat - (cy * pixel_deg_lat)
+            cell_lon = origin_lon + (cx * pixel_deg_lon)
+
+        if filter_thailand:
+            if not (THAILAND_MIN_LAT <= cell_lat <= THAILAND_MAX_LAT and THAILAND_MIN_LON <= cell_lon <= THAILAND_MAX_LON):
+                continue
 
         cells.append(
             RainCell(
@@ -59,3 +89,4 @@ def detect_rain_cells(
     # Sort by peak intensity descending
     cells.sort(key=lambda c: c.peak_intensity, reverse=True)
     return cells
+
