@@ -60,6 +60,26 @@ def test_gps_lookup_uses_containing_boundary(client):
     assert c.get("/v1/areas/locate", params={"lat": 91, "lon": 100}).status_code == 422
 
 
+def test_gps_lookup_accepts_small_boundary_offset_but_rejects_distant_points(client, monkeypatch):
+    import geopandas as gpd
+    from shapely.geometry import box
+    from geo_integration.area_mapper import AreaMapper
+
+    c, svc, _ = client
+    area = svc.mapper.tambon.iloc[0]
+    boundary = gpd.GeoDataFrame(
+        {"code": [area["tambon_code"]], "parent_code": [area["amphoe_code"]]},
+        geometry=[box(100, 13, 100.01, 13.01)], crs="EPSG:4326",
+    )
+    monkeypatch.setattr(svc, "mapper", AreaMapper(boundary))
+    # About 540 m outside the synthetic boundary, within the mapper's 2 km limit.
+    response = c.get("/v1/areas/locate", params={"lat": 13.005, "lon": 100.015})
+    assert response.status_code == 200
+    assert response.json()["code"] == area["tambon_code"]
+    assert response.json()["lat"] == 13.005 and response.json()["lon"] == 100.015
+    assert c.get("/v1/areas/locate", params={"lat": 13.005, "lon": 100.04}).status_code == 404
+
+
 def test_area_hazards_for_amphoe(client):
     c, _, sena = client
     body = c.get(f"/v1/areas/{sena}/hazards").json()

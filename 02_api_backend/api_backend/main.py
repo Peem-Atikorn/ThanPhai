@@ -134,7 +134,7 @@ async def locate_area(lat: float = Query(..., ge=-90, le=90), lon: float = Query
     if service is None:
         raise HTTPException(503, "starting")
     svc = service
-    matched = await asyncio.to_thread(svc.mapper.assign_points, [lat], [lon], False)
+    matched = await asyncio.to_thread(svc.mapper.assign_points, [lat], [lon], nearest=True)
     area = svc.gazetteer.by_code.get(matched.iloc[0]["tambon_code"])
     if area is None:
         raise HTTPException(404, "location outside covered administrative boundaries")

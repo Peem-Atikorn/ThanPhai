@@ -184,5 +184,26 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   assert(nodes(tree).some(n => n.props.className === 'header-snapshot'), 'summary has its own header slot');
   assert(!nodes(tree).some(n => n.props.className === 'journey-top-cta'), 'Explore button is removed');
   assert(nodes(tree).some(n => n.props.className === 'journey-search-icon'), 'Area search stays available');
-  console.log('PASS: landing/search regression, overlay defaults/toggles, unavailable/pending/empty/stale legends, independent loading, pending-to-ready polling and cleanup; actual components/hooks with API fixtures.');
+  const WaterQualityPanel = load('@/components/WaterQualityPanel').default;
+  const i18n = load('@/lib/i18n');
+  const previousDocument = global.document;
+  global.document = {documentElement: {lang: 'th'}};
+  const qualityStation = {id:'quality-1',name_th:'สถานีทดสอบ',river_th:'แม่น้ำทดสอบ',amphoe_th:'อำเภอทดสอบ',province_th:'จังหวัดทดสอบ',agency_th:'หน่วยงานทดสอบ',time:'2026-11-03T08:00:00Z',salinity_gl:0.8,do_mgl:2,ph:null,turbidity_ntu:null,tds_mgl:null,conductivity_uscm:null,temp_c:null,lat:13,lon:100,exceeds:{salinity:{text:'> 0.5'},do:{text:'< 3'}}};
+  const qualityProps = {stations:[qualityStation],selected:qualityStation.id,onSelect(){},onClose(){},status:'success',degraded:false,source:'แหล่งข้อมูลทดสอบ',onRetry(){}};
+  try {
+    i18n.setLanguage('en');
+    tree = WaterQualityPanel(qualityProps);
+    const qualityStatus = nodes(tree).find(n => n.props.className === 'quality-status');
+    assert.equal(content(qualityStatus), 'Above threshold: Salinity, Dissolved oxygen', 'dynamic threshold summary translates the prefix and each parameter');
+    assert(content(tree).includes('สถานีทดสอบ') && content(tree).includes('แหล่งข้อมูลทดสอบ'), 'provider station/source names stay intact');
+    assert(content(tree).includes('Province จังหวัดทดสอบ'), 'translated prefixes are separated from original place names');
+    assert(content(tree).includes('0.80') && content(tree).includes('—'), 'measurements keep their values and missing metrics are not zero');
+    assert(content(tree).includes('> 0.5') && content(tree).includes('< 3'), 'API threshold text stays intact');
+    i18n.setLanguage('th');
+    assert.equal(content(nodes(WaterQualityPanel(qualityProps)).find(n => n.props.className === 'quality-status')), 'เกินเกณฑ์: ความเค็ม, ออกซิเจนละลายน้ำ');
+  } finally {
+    i18n.setLanguage('th');
+    global.document = previousDocument;
+  }
+  console.log('PASS: landing/search, overlays and polling, risk summaries, water-quality TH/EN thresholds and source/value preservation.');
 })().catch(error => { console.error(error); process.exit(1); });
