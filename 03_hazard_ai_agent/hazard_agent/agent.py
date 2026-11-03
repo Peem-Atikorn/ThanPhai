@@ -16,6 +16,28 @@ from thanphai_shared import HazardType
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
 HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5", "heat": "ความร้อนจัด", "earthquake": "แผ่นดินไหว", "marine": "คลื่นลมแรง", "tropical_cyclone": "พายุหมุนเขตร้อน", "landslide": "ดินถล่ม"}
+SOURCE_TH = {
+    "thaiwater_waterlevel": "ThaiWater (สสน.) — ระดับน้ำ",
+    "thaiwater_rain_24h": "ThaiWater (สสน.) — ฝนสะสม",
+    "thaiwater_dams": "ThaiWater (สสน.) — เขื่อน",
+    "thaiwater_waterquality": "ThaiWater (สสน.) — คุณภาพน้ำ",
+    "thaiwater_storms": "ThaiWater (สสน.) — พายุ",
+    "thaiwater_media": "ThaiWater (สสน.) — ภาพเรดาร์และพยากรณ์",
+    "nasa_firms": "NASA FIRMS — จุดความร้อน",
+    "air4thai": "กรมควบคุมมลพิษ (Air4Thai) — ฝุ่น PM2.5",
+    "tmd_warnings": "กรมอุตุนิยมวิทยา — ประกาศเตือน",
+    "tmd_nwp_daily": "กรมอุตุนิยมวิทยา — พยากรณ์ฝน",
+    "tmd_earthquakes": "กรมอุตุนิยมวิทยา — แผ่นดินไหว",
+    "usgs_earthquakes": "USGS — แผ่นดินไหว",
+    "gdacs": "GDACS — เหตุภัยพิบัติ",
+    "gdacs_cyclones": "GDACS — พายุหมุนเขตร้อน",
+    "gistda_flood": "GISTDA — น้ำท่วมจากดาวเทียม",
+    "air_model": "Open-Meteo / CAMS — แบบจำลองฝุ่น",
+    "heat_model": "Open-Meteo — ดัชนีความร้อน",
+    "marine_model": "Open-Meteo Marine — แบบจำลองคลื่น",
+    "open_meteo_waves": "Open-Meteo Marine — ทิศทางคลื่น",
+    "fire_model": "แบบจำลองไฟป่าของทันภัย",
+}
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
@@ -56,6 +78,7 @@ class HazardTools(Protocol):
     def get_assessments(self, area_code: str) -> list[dict]: ...
     def get_all_assessments(self) -> list[dict]: ...
     def get_official_warnings(self) -> list[dict]: ...
+    def get_sources(self) -> dict[str, dict]: ...
 
 
 @dataclass
@@ -231,6 +254,12 @@ class HazardAgent:
         u = understand(question, self.gazetteer, now.astimezone(BANGKOK))
         if u.intent == "emergency":
             return AgentAnswer(EMERGENCY_TH, u.intent, None, [h.value for h in u.hazards])
+        if u.intent == "greeting":
+            text = ("สวัสดีครับ ทันภัยช่วยติดตามภัยในประเทศไทย ลองถามได้ เช่น\n"
+                    "• ตอนนี้อำเภอเสนาน้ำท่วมไหม\n"
+                    "• พรุ่งนี้ฝนตกที่จังหวัดขอนแก่นไหม\n"
+                    "• ต้องเตรียมตัวอย่างไรเมื่อเกิดไฟป่า")
+            return AgentAnswer(text, u.intent, None, [])
         if "mueang province required" in u.notes:
             text = ("อำเภอเมืองของจังหวัดไหนครับ กรุณาระบุจังหวัด เช่น อำเภอเมืองเชียงใหม่"
                     if not any(a.level == "province" for a in u.areas)
@@ -240,12 +269,15 @@ class HazardAgent:
             text = (f"คำถามนี้ครอบคลุม{' / '.join(u.regions)} ทันภัยยังไม่สรุปข้อมูลทั้งภาคในคำตอบนี้ "
                     "กรุณาระบุจังหวัดหรืออำเภอที่ต้องการครับ")
             return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards])
+        if u.intent == "sources":
+            return self._sources()
         if u.intent == "dam":
             return self._dams(question, u)
         if u.intent == "river":
             return self._rivers(question, u)
         if u.intent == "out_of_scope":
-            text = "ทันภัยตอบได้เฉพาะเรื่องฝนหนัก/พายุ น้ำท่วม ภัยแล้ง และไฟป่าในประเทศไทยครับ ลองถามเช่น \"น้ำจะท่วมอำเภอบางบัวทองไหม\""
+            text = (f"ทันภัยตอบได้เฉพาะเรื่อง{' · '.join(HAZARD_TH.values())}ในประเทศไทยครับ "
+                    'ลองถามเช่น "น้ำจะท่วมอำเภอบางบัวทองไหม"')
             return AgentAnswer(text, u.intent, None, [])
         if u.intent in ("overview", "ranking"):
             return self._national(question, u)
@@ -296,22 +328,44 @@ class HazardAgent:
                         worst = next(item for item in items if rank.get(item.get("level"), -1) == worst_level)
                         worst_count = sum(rank.get(item.get("level"), -1) == worst_level for item in items)
                         provinces.append((worst_level, worst_count, names.get(code, code), code, worst))
+                if not provinces:
+                    lines.append(f"{HAZARD_TH[hazard]}: ไม่มีผลประเมินรายอำเภอ")
+                    continue
                 provinces.sort(key=lambda item: (-item[0], -item[1], item[2]))
                 lines.append(f"{HAZARD_TH[hazard]} — 5 จังหวัดที่ระดับสูงสุด:")
                 lines.extend(f"• จ.{name}: {LEVEL_TH[item.get('level')]} {count} อำเภอ" for _, count, name, _, item in provinces[:5])
                 evidence.extend(item for _, _, _, _, item in provinces[:5])
         else:
             for hazard in sorted(hazards):
+                hazard_items = [items for (_, h), items in grouped.items() if h == hazard]
+                if not hazard_items:
+                    lines.append(f"{HAZARD_TH[hazard]}: ไม่มีผลประเมินรายอำเภอ")
+                    continue
                 counts = {level: 0 for level in ("NORMAL", "WATCH", "WARNING", "CRITICAL", None)}
-                for (_, h), items in grouped.items():
-                    if h == hazard:
-                        for item in items:
-                            if item.get("level") in counts:
-                                counts[item.get("level")] += 1
+                for items in hazard_items:
+                    for item in items:
+                        if item.get("level") in counts:
+                            counts[item.get("level")] += 1
                 lines.append(f"{HAZARD_TH[hazard]}: " + " · ".join(f"{LEVEL_TH[level]} {count} อำเภอ" for level, count in counts.items()))
         scope = " / ".join(u.regions) if u.regions else "ทั้งประเทศ"
         text = f"ภาพรวม{scope}จากผลประเมินล่าสุด\n" + "\n".join(lines) + "\nระดับภัยมาจากกฎประเมินและข้อมูลที่มีอยู่"
         return AgentAnswer(text, u.intent, None, sorted(hazards), evidence, [], ["get_all_assessments()"])
+
+    def _sources(self) -> AgentAnswer:
+        get = getattr(self.tools, "get_sources", None)
+        sources = get() if get else {}
+        calls = ["get_sources()"] if get else []
+        if not sources:
+            return AgentAnswer("ยังไม่มีข้อมูลแหล่งที่มาในขณะนี้ กรุณาลองใหม่อีกครั้ง", "sources", None, [], tool_calls=calls)
+        lines = ["แหล่งข้อมูลที่ทันภัยติดตามอยู่:"]
+        evidence = []
+        for source, state in sorted(sources.items()):
+            label = SOURCE_TH.get(source, source)
+            ok = state.get("ok")
+            status = "พร้อมใช้งาน" if ok is True else "ไม่พร้อมใช้งาน" if ok is False else "ยังไม่ทราบสถานะ"
+            lines.append(f"• {label}: {status}")
+            evidence.append({"source": source, "ok": ok, "checked_at": state.get("checked_at")})
+        return AgentAnswer("\n".join(lines), "sources", None, [], evidence=evidence, tool_calls=calls)
 
     def _dams(self, question: str, u: Understanding) -> AgentAnswer:
         """Dam storage, straight from the data (no LLM rewrite, so every number is exactly as reported)."""

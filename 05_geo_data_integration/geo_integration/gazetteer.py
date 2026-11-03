@@ -5,7 +5,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from pythainlp.corpus import thai_words
 from pythainlp.tokenize import word_tokenize
+from pythainlp.util import dict_trie
 
 from geo_integration.regions import REGION_CODES, find_regions, mask_regions
 
@@ -65,6 +67,7 @@ def split_prefix(text: str) -> tuple[str | None, str]:
 class Gazetteer:
     def __init__(self, areas: list[Area]):
         self.areas = areas
+        self._trie = dict_trie(set(thai_words()) | {area.name_th for area in areas})
         self.by_code = {a.code: a for a in areas}
         self.index: dict[str, list[Area]] = {}
         for area in areas:
@@ -121,10 +124,11 @@ class Gazetteer:
         lowered = mask_regions(text).lower().strip()
         boundaries = {0}
         offset = 0
-        for token in word_tokenize(lowered, engine="newmm", keep_whitespace=True):
+        for token in word_tokenize(lowered, custom_dict=self._trie, engine="newmm", keep_whitespace=True):
             offset += len(token)
             boundaries.add(offset)
         particle_spans = [(m.start(), m.end()) for p in PARTICLES for m in re.finditer(re.escape(p), lowered)]
+        boundaries.update(start for start, _ in particle_spans)
         hits: list[tuple[int, int, str | None, list[Area]]] = []
         for key, areas in self.index.items():
             # Cheap substring test first: building a regex for all ~12,000 names took ~0.8 s per question.
@@ -137,12 +141,13 @@ class Gazetteer:
             pattern = rf"(?<![a-z]){re.escape(key)}(?![a-z])" if key.isascii() else re.escape(key)
             for match in re.finditer(pattern, lowered):
                 start = match.start()
-                level = self._prefix_level_before(lowered, start)
+                level = self._prefix_level_before(lowered, start, boundaries)
                 if level and not any(a.level == level for a in areas):
                     continue  # An explicit district prefix must not select a same-name tambon.
                 if level is None and (start not in boundaries or match.end() not in boundaries):
                     continue
-                if level is None and re.search(r"(?:เขื่อน|อ่างเก็บน้ำ)\s*$", lowered[:start]):
+                dam_prefix = re.search(r"(?:เขื่อน|อ่างเก็บน้ำ)\s*$", lowered[:start])
+                if level is None and dam_prefix and dam_prefix.start() in boundaries:
                     continue
                 if len(key) >= min_len or level or (start == 0 and len(key) >= 2) or any(a.level == "tambon" for a in areas):
                     hits.append((start, start + len(key), level, areas))
@@ -203,13 +208,15 @@ class Gazetteer:
         return sorted(ordered, key=lineage_key)
 
     @staticmethod
-    def _prefix_level_before(text: str, start: int) -> str | None:
+    def _prefix_level_before(text: str, start: int, boundaries: set[int]) -> str | None:
         before = text[:start].rstrip()
         for prefix in TH_PREFIXES:
-            if before.endswith(prefix):
+            prefix_start = len(before) - len(prefix)
+            if prefix_start in boundaries and before.endswith(prefix):
                 return LEVEL_HINTS[prefix]
         for prefix in EN_PREFIXES:
-            if before.endswith(prefix):
+            prefix_start = len(before) - len(prefix)
+            if prefix_start in boundaries and before.endswith(prefix):
                 return LEVEL_HINTS[prefix]
         return None
 

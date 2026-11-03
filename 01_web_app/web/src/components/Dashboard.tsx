@@ -298,6 +298,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(true);
+    const [radarAvailable, setRadarAvailable] = useState(false);
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
     const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
     const [radar, setRadar] = useState<{
@@ -372,8 +373,9 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             return;
         let cancelled = false;
         // A failed radar request just leaves the map without radar; the station data still shows.
-        api.radar().then((r) => { if (!cancelled) {
-            setRadar(r);
+        api.radar().then((result) => { if (!cancelled) {
+            setRadarAvailable(result.enabled);
+            setRadar(result.frame);
         } }).catch(() => { if (!cancelled) {
             setRadar(null);
         } });
@@ -737,7 +739,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         {tr(overview && <aside className="layer-toolbar" aria-label={tr("ชั้นข้อมูลบนแผนที่")}>
           <div className="layer-toolbar-buttons" role="group" aria-label={tr("เปิดปิดชั้นข้อมูลภาพรวม")}>
             <button type="button" data-layer="pm25" aria-pressed={pmOn} onClick={() => setPmOn(on => !on)}><Icon name="air_quality"/><span>{tr("ฝุ่น PM2.5")}<small>{tr(!pmOn ? "ปิด" : airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ" : "เปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
-            <button type="button" data-layer="radar" aria-pressed={radarOn} onClick={() => setRadarOn(on => !on)}><Icon name="radar"/><span>{tr("เรดาร์ฝน")}<small>{tr(radarOn ? "เปิด" : "ปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
+            {radarAvailable && <button type="button" data-layer="radar" aria-pressed={radarOn} onClick={() => setRadarOn(on => !on)}><Icon name="radar"/><span>{tr("เรดาร์ฝน")}<small>{tr(radarOn ? "เปิด" : "ปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>}
             <OverlayControls data={overlays.data} enabled={overlays.enabled} onToggle={overlays.toggle}/>
           </div>
         </aside>)}
@@ -756,7 +758,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               <p>{tr(view === "water-quality" ? "ความเค็ม ออกซิเจนละลายน้ำ และค่าคุณภาพน้ำรายสถานี" : view === "dams" ? "ปริมาณน้ำและการระบายน้ำของเขื่อนขนาดใหญ่ทั่วประเทศ" : view === "rivers" ? "ระดับน้ำเทียบตลิ่งและปริมาณน้ำไหลผ่านจากสถานีวัดน้ำ" : hazardDescriptions[hazard])}</p>
             </div>
             <div className="map-heading-actions">
-            {tr(view === "hazard" && !overview && RADAR_LAYERS.includes(hazard) && <button type="button" title={tr("เรดาร์บนแผนที่")} className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar"/>{tr("เรดาร์บนแผนที่")}{tr(radarOn ? " · เปิด" : " · ปิด")}</button>)}
+            {tr(view === "hazard" && radarAvailable && !overview && RADAR_LAYERS.includes(hazard) && <button type="button" title={tr("เรดาร์บนแผนที่")} className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar"/>{tr("เรดาร์บนแผนที่")}{tr(radarOn ? " · เปิด" : " · ปิด")}</button>)}
             {tr(view === "hazard" && hazard === "rain_storm" && <button type="button" className="images-link" title={tr("ภาพเรดาร์ คาดการณ์ฝน และพายุ")} onClick={showWeatherImages}><Icon name="radar"/>{tr("ภาพเรดาร์ \u00B7 คาดการณ์ฝน \u00B7 พายุ")}</button>)}
             <button className="icon-button" onClick={() => setRevision((value) => value + 1)} disabled={view === "water-quality" ? quality.status === "loading" : layerLoading} aria-label={tr("โหลดข้อมูลแผนที่ใหม่")} title={tr("โหลดข้อมูลแผนที่ใหม่")}><Icon name="refresh" className={layerLoading ? "spinning" : ""}/></button>
             </div>
@@ -799,7 +801,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             <div className="legend-heading"><h3>{tr("ระดับความเสี่ยง")}</h3><span>{tr(displayedLayer ? number.format(displayedLayer.features.length) + " อำเภอ" : "รอข้อมูล")}</span></div>
             <ul className="risk-legend">{tr(counts.map((level) => <li key={level.id}><span className="legend-dot" style={{ background: level.color }}/><span>{tr(level.th)}</span><strong>{tr(layer ? number.format(level.n) : "—")}</strong></li>))}</ul>
             {tr(hazard === "air_quality" && <div className="pm-legend"><h3>{tr("จุดสถานีวัด PM2.5 (กรมควบคุมมลพิษ) \u00B7 ตัวเลขคือค่าเฉลี่ย 24 ชม. \u00B7 วงใหญ่ = หลายสถานี แสดงค่าสูงสุด")}</h3><ul>{tr(PM25_BANDS.map((b, i) => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}<small>{tr(i === 0 ? "0–15" : i === PM25_BANDS.length - 1 ? "> 75" : `${PM25_BANDS[i - 1].max}–${b.max}`)}</small></li>))}</ul>{tr(airStations && <p className="source-note">{tr(number.format(airStations.length))}{tr(" สถานีที่มีค่าล่าสุดไม่เกิน 6 ชม. \u00B7 อำเภอที่ไม่มีสถานีใช้ค่าจากแบบจำลอง")}</p>)}</div>)}
-            {tr(showRadar && <p className="source-note radar-note">{tr(radar ? <>{tr("เรดาร์ฝนล่าสุด ")}{tr(new Date(radar.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. \u00B7 ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</> : "ยังโหลดเรดาร์ไม่ได้")}</p>)}
+            {tr(showRadar && radarAvailable && <p className="source-note radar-note">{tr(radar ? <>{tr("เรดาร์ฝนล่าสุด ")}{tr(new Date(radar.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. \u00B7 ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</> : "ยังโหลดเรดาร์ไม่ได้")}</p>)}
             <div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(layer?.meta.data_updated_at))}{tr(" (เวลาไทย)")}{tr(pending && " · กำลังโหลดข้อมูลดาวเทียมและพยากรณ์เพิ่มเติม")}</span></div>
             {tr(!!layer?.meta.degraded_services.length && <p className="data-notice">{tr("ข้อมูลบางแหล่งไม่พร้อมใช้งาน: ")}{tr(layer.meta.degraded_services.join(", "))}</p>)}
           </div>)}

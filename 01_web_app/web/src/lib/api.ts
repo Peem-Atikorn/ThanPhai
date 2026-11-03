@@ -275,14 +275,12 @@ export const api = {
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
   media: () => get<Media>(`/v1/media`),
   airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
-  /** Latest RainViewer radar frame as a tile URL template, or null when there is none. */
-  radar: async (): Promise<{ tiles: string; time: number } | null> => {
-    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", { cache: "no-store" });
+  /** Latest RainViewer frame. `enabled` is false when the team-only backend switch is off. */
+  radar: async (): Promise<{ enabled: boolean; frame: { tiles: string; time: number } | null }> => {
+    const res = await fetch("/api/v1/radar", { cache: "no-store" });
+    if (res.status === 404) return { enabled: false, frame: null };
     if (!res.ok) throw new Error(`${res.status}`);
-    const maps: { host: string; radar: { past: { time: number; path: string }[] } } = await res.json();
-    const last = maps.radar.past.at(-1);
-    // 256 px tiles, colour scheme 2 (Universal Blue, the only one left), smoothed, snow shown.
-    return last ? { tiles: `${maps.host}${last.path}/256/{z}/{x}/{y}/2/1_1.png`, time: last.time } : null;
+    return { enabled: true, frame: (await res.json()).frame };
   },
   earthquakes: () => get<{ earthquakes: Earthquake[] }>(`/v1/earthquakes`),
   regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
