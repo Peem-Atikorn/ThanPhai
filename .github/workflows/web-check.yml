@@ -1,5 +1,4 @@
-# Type-check, lint and run the landing check for the web app (module 01).
-# check:landing comes with PR #6; until that merges the step is skipped (--if-present).
+# Type-check, lint and run all maintained web regression checks (module 01).
 name: web-check
 
 on:
@@ -29,5 +28,5 @@ jobs:
         run: npx next typegen && npx tsc --noEmit
       - name: Lint
         run: npx eslint src scripts
-      - name: Landing check
-        run: npm run check:landing --if-present
+      - name: Regression checks
+        run: npm run check

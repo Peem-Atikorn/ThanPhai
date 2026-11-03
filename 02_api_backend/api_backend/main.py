@@ -16,6 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from api_backend.hazard_service import HazardService
+from geo_integration.gazetteer import LEVEL_RANK, normalize, split_prefix
 from decision_engine.explainer import GeminiExplainer
 from hazard_agent import HazardAgent
 from thanphai_shared import HazardType, redact
@@ -115,8 +116,30 @@ def search_areas(q: str = Query(..., min_length=1, max_length=100)) -> list[dict
         raise HTTPException(503, "starting")
     gaz = service.gazetteer
     found = gaz.resolve_phrase(q) or gaz.find_in_text(q)
+    level, term = split_prefix(q)
+    needle = normalize(term)
+    if len(needle) >= 2:
+        candidates = [a for a in gaz.areas if (level is None or a.level == level)
+                      and any(needle in normalize(name) for name in (a.name_th, a.name_en))]
+        candidates.sort(key=lambda a: (not any(normalize(name).startswith(needle) for name in (a.name_th, a.name_en)),
+                                       LEVEL_RANK[a.level], a.name_th, a.code))
+        seen = {a.code for a in found}
+        found = [*found, *(a for a in candidates if a.code not in seen)]
     return [{"code": a.code, "level": a.level, "name_th": a.name_th, "name_en": a.name_en,
              "parents": [p.name_th for p in gaz.parents(a)], "lat": a.lat, "lon": a.lon} for a in found[:20]]
+
+
+@app.get("/v1/areas/locate")
+async def locate_area(lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180)) -> dict:
+    if service is None:
+        raise HTTPException(503, "starting")
+    svc = service
+    matched = await asyncio.to_thread(svc.mapper.assign_points, [lat], [lon], nearest=True)
+    area = svc.gazetteer.by_code.get(matched.iloc[0]["tambon_code"])
+    if area is None:
+        raise HTTPException(404, "location outside covered administrative boundaries")
+    return {"code": area.code, "level": area.level, "name_th": area.name_th, "name_en": area.name_en,
+            "parents": [p.name_th for p in svc.gazetteer.parents(area)], "lat": lat, "lon": lon}
 
 
 @app.get("/v1/areas/{code}/hazards")

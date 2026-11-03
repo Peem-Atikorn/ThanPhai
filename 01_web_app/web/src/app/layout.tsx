@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import "./landing.css";
+import "./command-center.css";
+import "./workspace-navigation.css";
+import "./mascot.css";
 
 const notoThai = Noto_Sans_Thai({
   variable: "--font-noto-thai",

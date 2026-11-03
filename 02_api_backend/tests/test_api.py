@@ -40,6 +40,46 @@ def test_search(client):
     assert hits[0]["code"] == sena and "พระนครศรีอยุธยา" in hits[0]["parents"]
 
 
+def test_search_suggests_partial_names(client):
+    c, _, _ = client
+    hits = c.get("/v1/areas/search", params={"q": "เชียงให"}).json()
+    assert any(a["name_th"] == "เชียงใหม่" and a["level"] == "province" for a in hits)
+    provinces = c.get("/v1/areas/search", params={"q": "จังหวัดเชียง"}).json()
+    assert provinces and all(a["level"] == "province" for a in provinces)
+
+
+def test_gps_lookup_uses_containing_boundary(client):
+    c, svc, _ = client
+    polygon = svc.mapper.tambon.iloc[0]
+    point = polygon.geometry.representative_point()
+    response = c.get("/v1/areas/locate", params={"lat": point.y, "lon": point.x})
+    assert response.status_code == 200
+    assert response.json()["code"] == polygon["tambon_code"]
+    assert response.json()["parents"]
+    assert c.get("/v1/areas/locate", params={"lat": 0, "lon": 0}).status_code == 404
+    assert c.get("/v1/areas/locate", params={"lat": 91, "lon": 100}).status_code == 422
+
+
+def test_gps_lookup_accepts_small_boundary_offset_but_rejects_distant_points(client, monkeypatch):
+    import geopandas as gpd
+    from shapely.geometry import box
+    from geo_integration.area_mapper import AreaMapper
+
+    c, svc, _ = client
+    area = svc.mapper.tambon.iloc[0]
+    boundary = gpd.GeoDataFrame(
+        {"code": [area["tambon_code"]], "parent_code": [area["amphoe_code"]]},
+        geometry=[box(100, 13, 100.01, 13.01)], crs="EPSG:4326",
+    )
+    monkeypatch.setattr(svc, "mapper", AreaMapper(boundary))
+    # About 540 m outside the synthetic boundary, within the mapper's 2 km limit.
+    response = c.get("/v1/areas/locate", params={"lat": 13.005, "lon": 100.015})
+    assert response.status_code == 200
+    assert response.json()["code"] == area["tambon_code"]
+    assert response.json()["lat"] == 13.005 and response.json()["lon"] == 100.015
+    assert c.get("/v1/areas/locate", params={"lat": 13.005, "lon": 100.04}).status_code == 404
+
+
 def test_area_hazards_for_amphoe(client):
     c, _, sena = client
     body = c.get(f"/v1/areas/{sena}/hazards").json()

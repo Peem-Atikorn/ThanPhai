@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check:landing": "node scripts/check-landing.cjs"
+    "check:landing": "node scripts/check-landing.cjs",
+    "check": "npm run check:landing && node scripts/check-language-copy.cjs && node scripts/check-mascot.cjs --assets && node scripts/check-mascot-interaction.cjs"
   },
   "dependencies": {
     "maplibre-gl": "^6.15.0",
