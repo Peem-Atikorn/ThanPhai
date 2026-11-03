@@ -12,7 +12,7 @@ const hooks = {
   useRef(initial) { const i = current.cursor++; return current.state[i] ??= { current: initial }; },
   useMemo(fn) { current.cursor++; return fn(); },
   useCallback(fn) { current.cursor++; return fn; },
-  useEffect() { current.cursor++; },
+  useEffect(fn) { current.cursor++; current.effects?.push(fn); },
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) { return (getServerSnapshot ?? getSnapshot)(); },
 };
 const jsx = (type, props) => ({ type, props: props || {} });
@@ -23,6 +23,8 @@ function load(id) {
   if (id === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'fragment' };
   if (id === 'react-dom') return { createPortal: node => node };
   if (id === 'next/dynamic') return { __esModule: true, default: () => () => null };
+  if (id === 'next/link') return { __esModule: true, default: 'a' };
+  if (id.endsWith('.json')) return JSON.parse(fs.readFileSync(path.join(root, 'src', id.slice(2)), 'utf8'));
   if (cache[id]) return cache[id].exports;
   let file = path.join(root, 'src', id.slice(2));
   file += fs.existsSync(file + '.tsx') ? '.tsx' : '.ts';
@@ -31,9 +33,9 @@ function load(id) {
   new Function('module', 'exports', 'require', js)(mod, mod.exports, load);
   return mod.exports;
 }
-function instance(Component) {
+function instance(Component, effects) {
   const state = [];
-  return { state, render(props = {}) { current = { state, cursor: 0 }; this.tree = Component(props); return this.tree; } };
+  return { state, render(props = {}) { current = { state, cursor: 0, effects }; this.tree = Component(props); return this.tree; } };
 }
 function nodes(node, result = []) {
   if (Array.isArray(node)) { node.forEach(n => nodes(n, result)); return result; }
@@ -54,12 +56,11 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   const Dashboard = load('@/components/Dashboard').default;
   let opened = 0;
   const app = instance(Dashboard);
-  let props = { activeView: 'hazard', searchInHeader: true, searchTarget: {}, onOpenAreaSearch: () => opened++, riverViewRequest: 0 };
+  let props = { activeView: 'hazard', searchInHeader: true, searchTarget: {}, riverViewRequest: 0 };
   let tree = app.render(props);
   const starter = nodes(tree).find(n => n.type === 'button' && content(n).startsWith('ค้นหาพื้นที่'));
-  assert(starter, 'empty-area search button remains available in header-search mode');
-  starter.props.onClick();
-  assert.equal(opened, 1, 'empty-area search opens the same dialog');
+  assert(!starter, 'header search replaces the empty-area search button');
+  assert.equal(nodes(tree).find(n => n.props.mode === 'hazard' && 'dark' in n.props).props.dark, true, 'new browsers default to the dark basemap');
 
   // User searches/selects a province, then opens the province station list.
   nodes(tree).find(n => n.type === 'input' && n.props.id === 'area-search').props.onChange({ target: { value: 'ปทุมธานี' } });
@@ -74,17 +75,17 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   callout.props.onClick();
   props = { ...props, activeView: 'rivers' };
   tree = app.render(props);
-  assert(nodes(tree).some(n => n.props.className === 'filter-chip'), 'province shortcut keeps its province filter');
+  assert(nodes(tree).some(n => n.props.className === 'location-scope'), 'province shortcut keeps its province filter');
   props = { ...props, activeView: 'hazard' }; app.render(props);
   props = { ...props, activeView: 'rivers', riverViewRequest: 1 };
   tree = app.render(props);
-  assert(!nodes(tree).some(n => n.props.className === 'filter-chip'), 'top river category clears stale province filter');
+  assert(nodes(tree).some(n => n.props.className === 'location-scope'), 'top river category preserves selected location');
   props = { ...props, activeView: 'hazard' }; tree = app.render(props);
   nodes(tree).find(n => n.type === 'button' && /river-callout/.test(n.props.className || '')).props.onClick();
   props = { ...props, activeView: 'rivers' }; tree = app.render(props);
-  assert(nodes(tree).some(n => n.props.className === 'filter-chip'), 'a new province shortcut still works after reset');
+  assert(nodes(tree).some(n => n.props.className === 'location-scope'), 'a new province shortcut still works after reset');
   props = { ...props, riverViewRequest: 2 }; tree = app.render(props);
-  assert(!nodes(tree).some(n => n.props.className === 'filter-chip'), 'reselecting rivers also clears the province filter');
+  assert(nodes(tree).some(n => n.props.className === 'location-scope'), 'reselecting rivers preserves the province filter');
 
   const landing = instance(load('@/components/LandingExperience').default);
   tree = landing.render();
@@ -96,19 +97,80 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   assert(searchDialog, 'search dialog remains available');
   searchDialog.props.ref.current = { showModal() { opened++; } };
   headerSearch.props.onClick();
-  assert.equal(opened, 2, 'header search button opens the search dialog');
+  assert.equal(opened, 1, 'header search button opens the search dialog');
   const groups = nodes(tree).filter(n => n.type === 'button' && /journey-category-button/.test(n.props.className || ''));
   assert.deepEqual(groups.map(n => n.props['data-category']), lib.GROUPS.map(g => g.id), 'top bar shows every map group');
-  // Opening rivers from the dashboard's sub-tabs makes the water group return there, with a fresh nationwide list.
+  // Opening rivers from the dashboard's sub-tabs makes the water group return there, with the same selected location.
   nodes(tree).find(n => n.type === Dashboard).props.onViewChange('rivers'); tree = landing.render();
   nodes(tree).find(n => n.props['data-category'] === 'overview').props.onClick(); tree = landing.render();
   assert.equal(nodes(tree).find(n => n.type === Dashboard).props.activeView, 'hazard', 'overview group opens the overview map');
   nodes(tree).find(n => n.props['data-category'] === 'water').props.onClick(); tree = landing.render();
   const dashboard = nodes(tree).find(n => n.type === Dashboard).props;
   assert.equal(dashboard.activeView, 'rivers', 'water group returns to the last opened item');
-  assert.equal(dashboard.riverViewRequest, 1, 'top button emits explicit river reset request');
+  assert.equal(dashboard.riverViewRequest, undefined, 'category changes do not reset selected location');
   const source = fs.readFileSync(path.join(root, 'src/components/Dashboard.tsx'), 'utf8');
   for (const unused of ['initialQuery', 'initialHazard', 'initialView']) assert(!source.includes(unused), 'unused prop removed: ' + unused);
   assert(!content(tree).includes('ผลการค้นหาในแดชบอร์ด'), 'guide describes current dialog flow');
-  console.log('PASS: dialog entry, province river reset (including reselect), visible header search interaction, guide, unused props; actual component handlers with mocked hooks/API.');
+  const { OverlayControls, OverlayLegends, DEFAULT_OVERLAYS } = load('@/components/OverviewLayers');
+  assert.deepEqual(DEFAULT_OVERLAYS, { flood: false, cyclones: true, waves: false });
+  const overlay = (status, count = 1) => ({ type: 'FeatureCollection', features: Array.from({length: count}, () => ({type: 'Feature', geometry: null, properties: {}})), overlay: {status, source: 'Test provider', updated_at: '2026-10-22T12:00:00Z'}, degraded_services: [] });
+  let toggled;
+  const controls = instance(OverlayControls);
+  const controlProps = { data: {flood: overlay('unavailable', 0), cyclones: overlay('ok', 0), waves: overlay('pending', 0)}, enabled: DEFAULT_OVERLAYS, onToggle: id => toggled = id };
+  tree = controls.render(controlProps);
+  assert(content(tree).includes('พายุหมุน') && content(tree).includes('ไม่พบพายุ'), 'cyclone control stays available and explains an empty successful layer');
+  assert(nodes(tree).find(n => n.type === 'button' && content(n).includes('น้ำท่วม')).props.disabled, 'unavailable source disables layer with explanation');
+  const waveToggle = nodes(tree).find(n => n.type === 'button' && content(n).includes('คลื่น'));
+  assert(content(waveToggle).includes('กำลังโหลด'), 'pending layer has loading feedback');
+  waveToggle.props.onClick();
+  assert.equal(toggled, 'waves', 'toggle changes only the requested layer');
+  tree = OverlayLegends({data: {flood: overlay('ok'), cyclones: overlay('ok', 0), waves: overlay('ok')}, enabled: {flood: true, cyclones: true, waves: false}});
+  assert(content(tree).includes('Test provider') && content(tree).includes('เวลาไทย'), 'enabled layer credits include timestamp and source');
+  assert(!content(tree).includes('เส้นทึบ') && !content(tree).includes('ลูกศร'), 'disabled and empty overlays have no legend');
+  tree = OverlayLegends({data: {waves: {...overlay('ok'), degraded_services: ['open_meteo_waves']}}, enabled: {waves: true}});
+  assert(content(tree).includes('ข้อมูลเดิม'), 'stale data is explicitly identified');
+  const { useOverviewLayers } = load('@/components/OverviewLayers');
+  const effects = [];
+  const timers = [];
+  const originalTimeout = global.setTimeout, originalClear = global.clearTimeout;
+  global.setTimeout = (fn, delay) => { const timer = {fn, delay}; timers.push(timer); return timer; };
+  global.clearTimeout = timer => { timer.cleared = true; };
+  const calls = [];
+  lib.api.overlay = async id => { calls.push(id); return overlay(id === 'waves' && calls.filter(x => x === id).length === 1 ? 'pending' : 'ok'); };
+  const state = instance(() => useOverviewLayers(true, 0), effects);
+  state.render();
+  const cleanup = effects[0]();
+  await tick();
+  assert.deepEqual(calls, ['flood', 'cyclones', 'waves'], 'each overlay loads independently');
+  assert.equal(state.render().data.waves.overlay.status, 'pending');
+  assert.equal(timers[0].delay, 60000, 'pending overlay polls after one minute');
+  await timers[0].fn(); await tick();
+  assert.equal(state.render().data.waves.overlay.status, 'ok', 'pending layer recovers to ready');
+  cleanup();
+  assert(timers.every(timer => timer.cleared), 'leaving overview cancels polling');
+  global.setTimeout = originalTimeout; global.clearTimeout = originalClear;
+  const RiskSnapshot = load('@/components/RiskSnapshot').default;
+  tree = RiskSnapshot({ total: null, counts: [] });
+  assert.equal(nodes(tree).filter(n => n.type === 'strong' && content(n) === '—').length, 4, 'unloaded summary does not invent zero risk');
+  tree = RiskSnapshot({ total: 928, counts: [{id:'CRITICAL',n:2,color:'#d7263d',th:'วิกฤต'}, {id:'WARNING',n:13,color:'#f77f00',th:'เตือนภัย'}, {id:'WATCH',n:41,color:'#f6c90e',th:'เฝ้าระวัง'}] });
+  assert.deepEqual(nodes(tree).filter(n => n.type === 'strong').map(content), ['928','2','13','41'], 'summary retains the exact API-derived counts');
+  assert(content(tree).includes('อำเภอในแผนที่') && content(tree).includes('เฝ้าระวัง'), 'summary uses explicit Thai labels');
+  const scenic = instance(load('@/components/LandingExperience').default);
+  const { riskAreasAtLevel } = load('@/lib/risk-overview');
+  const polygon = {type:'Polygon',coordinates:[[[100,14],[102,14],[102,16],[100,16],[100,14]]]};
+  const risks = {type:'FeatureCollection',features:[
+    {type:'Feature',geometry:polygon,properties:{code:'TH2',name_th:'สอง',province_th:'ขอนแก่น',level:'WARNING',worst_hazard:'flood'}},
+    {type:'Feature',geometry:polygon,properties:{code:'TH1',name_th:'หนึ่ง',province_th:'กระบี่',level:'WARNING',worst_hazard:'heat'}},
+    {type:'Feature',geometry:polygon,properties:{code:'TH3',name_th:'สาม',level:'CRITICAL',worst_hazard:'fire'}}]};
+  const warningAreas = riskAreasAtLevel(risks, 'WARNING');
+  assert.deepEqual(warningAreas.map(a=>a.code), ['TH1','TH2'], 'risk list filters levels and sorts provinces');
+  assert.deepEqual(warningAreas[0].center, [101,15], 'map points use district bounding centres');
+  assert.equal(warningAreas[1].hazard, 'flood', 'list identifies the highest hazard');
+  assert.deepEqual(riskAreasAtLevel(null, 'WATCH'), [], 'unavailable layers have no invented alerts');
+  tree = scenic.render();
+  assert(!nodes(tree).some(n => n.props.className === 'scenic-map-toggle'), 'map is always raised without an extra expand step');
+  assert(nodes(tree).some(n => n.props.className === 'header-snapshot'), 'summary has its own header slot');
+  assert(!nodes(tree).some(n => n.props.className === 'journey-top-cta'), 'Explore button is removed');
+  assert(nodes(tree).some(n => n.props.className === 'journey-search-icon'), 'Area search stays available');
+  console.log('PASS: landing/search regression, overlay defaults/toggles, unavailable/pending/empty/stale legends, independent loading, pending-to-ready polling and cleanup; actual components/hooks with API fixtures.');
 })().catch(error => { console.error(error); process.exit(1); });

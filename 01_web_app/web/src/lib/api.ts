@@ -17,12 +17,13 @@ export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
 /** A map layer: one hazard, or "overview" (each district's worst level over all hazards). */
 export type MapLayerId = Hazard | "overview";
 /** Everything the toolbar can show: hazard layers plus the dam and river views. */
-export type MapItem = MapLayerId | "dams" | "rivers";
+export type MapView = "hazard" | "dams" | "rivers" | "water-quality";
+export type MapItem = MapLayerId | Exclude<MapView, "hazard">;
 
 /** Toolbar groups: one button each; groups with several items show them as sub-tabs. */
 export const GROUPS: { id: string; th: string; icon: "shield" | "flood" | "rain_storm" | "fire" | "heat" | "landslide"; items: MapItem[] }[] = [
   { id: "overview", th: "ภาพรวม", icon: "shield", items: ["overview"] },
-  { id: "water", th: "น้ำ", icon: "flood", items: ["flood", "dams", "rivers"] },
+  { id: "water", th: "น้ำ", icon: "flood", items: ["flood", "dams", "rivers", "water-quality"] },
   { id: "weather", th: "ฝนและพายุ", icon: "rain_storm", items: ["rain_storm", "tropical_cyclone", "marine"] },
   { id: "smoke", th: "ไฟและฝุ่น", icon: "fire", items: ["air_quality", "fire"] },
   { id: "hot", th: "ร้อนและแล้ง", icon: "heat", items: ["heat", "drought"] },
@@ -30,7 +31,7 @@ export const GROUPS: { id: string; th: string; icon: "shield" | "flood" | "rain_
 ];
 export const groupOf = (item: MapItem) => GROUPS.find((g) => g.items.includes(item))!;
 export const itemTh = (item: MapItem) =>
-  item === "overview" ? "ทุกภัย" : item === "dams" ? "เขื่อน" : item === "rivers" ? "แม่น้ำ" : HAZARDS.find((h) => h.id === item)!.th;
+  item === "water-quality" ? "คุณภาพน้ำ" : item === "overview" ? "ทุกภัย" : item === "dams" ? "เขื่อน" : item === "rivers" ? "แม่น้ำ" : HAZARDS.find((h) => h.id === item)!.th;
 
 /** Pollution Control Department PM2.5 bands (24-hour average, since 2023-06-01), with Air4Thai's colours. */
 export const PM25_BANDS: { max: number; th: string; color: string; text: string }[] = [
@@ -114,6 +115,27 @@ export function damColor(d: Dam): string {
   if (d.status === "HIGH") return (d.storage_percent ?? 0) > 100 ? "#ad2337" : "#e07b16";
   if (d.status === "LOW_CRITICAL") return "#d4a600";
   return d.status === "NORMAL" ? "#2f7fb5" : "#8a97a3";
+}
+
+export interface WaterQualityStation {
+  id: string | null;
+  name_th: string | null;
+  river_th: string | null;
+  province_code: string | null;
+  province_th: string | null;
+  amphoe_th: string | null;
+  agency_th: string | null;
+  lat: number | null;
+  lon: number | null;
+  time: string | null;
+  salinity_gl: number | null;
+  do_mgl: number | null;
+  ph: number | null;
+  turbidity_ntu: number | null;
+  tds_mgl: number | null;
+  conductivity_uscm: number | null;
+  temp_c: number | null;
+  exceeds: Record<string, { text: string | null; color: string | null }>;
 }
 
 export interface River {
@@ -236,12 +258,20 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+export type OverlayId = "flood" | "cyclones" | "waves";
+export type MapOverlay = GeoJSON.FeatureCollection & {
+  overlay: { status: "ok" | "pending" | "error" | "unavailable"; source: string; updated_at: string | null };
+  degraded_services: string[];
+};
+
 export const api = {
+  overlay: (id: OverlayId) => get<MapOverlay>(`/v1/map/overlays/${id}`),
   layer: (hazard: MapLayerId) => get<GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } }>(`/v1/map/layers/${hazard}`),
   area: (code: string) => get<AreaHazards>(`/v1/areas/${code}/hazards`),
   dams: () => get<{ dams: Dam[]; data_updated_at: string | null }>(`/v1/dams`),
   damHistory: (id: string, series: "storage" | "released" | "inflow") => get<DamHistory>(`/v1/dams/${encodeURIComponent(id)}/history?series=${series}`),
   rivers: () => get<{ rivers: River[]; data_updated_at: string | null }>(`/v1/rivers`),
+  waterQuality: () => get<{ stations: WaterQualityStation[]; source: string; data_updated_at: string | null; degraded_services: string[] }>(`/v1/water-quality`),
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
   media: () => get<Media>(`/v1/media`),
   airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
@@ -258,6 +288,7 @@ export const api = {
   regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),
   search: (q: string) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }[]>(`/v1/areas/search?q=${encodeURIComponent(q)}`),
+  locate: (lat: number, lon: number) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }>(`/v1/areas/locate?lat=${lat}&lon=${lon}`),
   ask: async (question: string): Promise<AskAnswer> => {
     const res = await fetch("/api/v1/ask", {
       method: "POST",

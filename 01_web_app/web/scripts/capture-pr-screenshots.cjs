@@ -80,10 +80,7 @@ let browser, socket;
   await evaluate('document.querySelector(".journey-search-icon").click()');
   await until('document.querySelector(".journey-search-dialog").open');
   await evaluate('document.querySelector(".journey-search-dialog").close()');
-  const starter = await evaluate(`(() => { const button=[...document.querySelectorAll('.area-intro .text-button')].find(b=>b.textContent.includes('ค้นหาพื้นที่')); if(!button)return false; button.click();return true; })()`);
-  assert(starter, 'Missing area-intro search entry.');
-  await until('document.querySelector(".journey-search-dialog").open');
-  await evaluate('document.querySelector(".journey-search-dialog").close()');
+  assert(await evaluate('!document.querySelector(".area-intro .text-button")'), 'Old panel search entry must be removed.');
   fs.mkdirSync(output, {recursive:true});
   const captured = [];
   for (const category of ['overview','water','weather','smoke','hot','geo']) {
@@ -105,13 +102,13 @@ let browser, socket;
     await sleep(150);
     assert(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Horizontal overflow at ' + width);
     assert(await evaluate('!!document.querySelector(".journey-search-icon") && document.querySelector(".journey-search-icon").getBoundingClientRect().width > 0'), 'Header search must remain visible at ' + width);
-    if (width <= 520) assert(await evaluate('getComputedStyle(document.querySelector(".journey-top-cta")).display === "none"'), 'Explore action should yield space to search at ' + width);
+    assert(await evaluate('getComputedStyle(document.querySelector(".journey-top-cta")).display !== "none"'), 'Explore remains beside search at ' + width);
   }
   const {data} = await page('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
   fs.writeFileSync(path.join(output,'rivers-mobile.png'),Buffer.from(data,'base64'));
   const sections = captured.map(c=>`### ${c}\n\n![${c}](${c}.png)`).join('\n\n');
   fs.writeFileSync(path.join(output,'README.md'),`# PR screenshots\n\nCaptured from ${url.href} at ${new Date().toISOString()}. Actual running app and data; no API/map stubs. Desktop viewport: 1440 × 1100, full-page capture up to 6000 px high.\n\n${sections}\n\n### Mobile\n\n![Mobile](rivers-mobile.png)\n`);
-  console.log('PASS: six map groups, white panel bodies, both search entries, and viewport overflow checks.');
+  console.log('PASS: six map groups, white panel bodies, header search entry, and viewport overflow checks.');
   console.log('Screenshots saved to: ' + output);
   await send('Browser.close').catch(()=>{});
 })().catch(error => { console.error(error.message); process.exitCode=1; }).finally(() => { socket?.close(); if (browser && browser.exitCode == null) browser.kill(); });

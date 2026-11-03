@@ -1,9 +1,11 @@
 /* ThanPhai landing: editorial typography, a coastal hero and soft floating panels. */
 .journey-shell { --background: #f6f5f1; --foreground: #222b2c; --brand: #244c5b; --brand-hover: #173a48; --muted: #65716f; --line: #e3e4df; background: var(--background); }
 .journey-shell a { text-decoration: none; }
-.journey-hero { position: relative; isolation: isolate; margin: 8px; padding: 22px 28px 24px; border: 1px solid #fff9; border-radius: 28px; overflow: clip; background: #dbe5e8; }
-.journey-hero::before { position: absolute; z-index: -2; inset: 0; content: ""; background: url('/images/thanphai-chaophraya.webp') center 43% / cover no-repeat; }
-.journey-hero::after { position: absolute; z-index: -1; inset: 0; content: ""; background: linear-gradient(90deg, rgb(250 245 232 / .72), rgb(251 245 233 / .22) 51%, transparent 76%), linear-gradient(0deg, rgb(240 236 226 / .85), transparent 35%); }
+.journey-hero { --hero-photo: url('/images/thanphai-chaophraya.webp'); --hero-position: center 43%; --hero-mobile-position: 65% top; --hero-photo-height: clamp(38rem, 85svh, 60rem); position: relative; isolation: isolate; margin: 8px; padding: 22px 28px 24px; border: 1px solid #fff9; border-radius: 28px; overflow: clip; background: var(--background); }
+/* Keep the scene independent of long station lists and data panels. */
+.journey-hero::before, .journey-hero::after { position: absolute; inset: 0 0 auto; height: var(--hero-photo-height); content: ""; pointer-events: none; }
+.journey-hero::before { z-index: -2; background: var(--hero-photo) var(--hero-position) / cover no-repeat; }
+.journey-hero::after { z-index: -1; background: linear-gradient(180deg, var(--background) 0%, transparent 50%, var(--background) 100%); }
 .journey-header { max-width: 1640px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .journey-brand { display: inline-flex; align-items: center; gap: 10px; color: #152e34; flex-shrink: 0; font-size: 23px; font-weight: 750; line-height: 1.1; }
 .journey-brand-mark { display: grid; place-items: center; width: 42px; height: 44px; border: 1px solid #23454c; border-radius: 14px 14px 20px 20px; }
@@ -50,8 +52,8 @@
   .journey-primary { font-size: 12px; gap: 16px; padding: 10px 18px; }
 
   .journey-photo-note { bottom: auto; top: 390px; right: 22px; max-width: 150px; text-align: right; font-size: 11px; }
-  .journey-hero::before { background-position: 60% top; background-size: auto 640px; background-color: #cfdbda; }
-  .journey-hero::after { background: linear-gradient(90deg, #faf4e9c4, #faf4e933 80%), linear-gradient(0deg, #e4e6e0 25%, transparent 72%); }
+  .journey-hero { --hero-photo-height: clamp(32rem, 85svh, 44rem); }
+  .journey-hero::before { background-position: var(--hero-mobile-position); }
   .journey-guide-dialog { padding: 36px 24px 26px; }
   .journey-guide-dialog .journey-section-label { max-width: 220px; }
 }
@@ -66,7 +68,7 @@
 .journey-category-button > span { min-width: 0; }
 .journey-category-button strong { display: block; font-size: 13px; font-weight: 600; line-height: 1.6; }
 .journey-category-button small { display: block; font-size: 11px; line-height: 1.6; color: #596b64; }
-.journey-category-button.is-active, .journey-category-button.is-active:hover { background: #244c5b; color: #fff; box-shadow: inset 0 1px 2px #ffffff40; }
+.journey-category-button.is-active, .journey-category-button.is-active:hover { background: var(--category-color); color: #fff; box-shadow: inset 0 1px 2px #ffffff40; }
 @media (max-width: 1100px) {
   .journey-category-button { gap: 7px; padding: 10px 7px; }
   .journey-category-button strong { font-size: 11px; }
@@ -107,7 +109,7 @@
 .journey-live-shell .journey-header-message h1 { font-family: var(--font-noto-thai), sans-serif; font-size: clamp(24px, 2.5vw, 38px); font-weight: 600; line-height: 1.65; letter-spacing: -.025em; margin-top: 8px; text-wrap: balance; }
 .journey-header-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 @media (max-width: 1100px) {
-  .journey-header { display: grid; grid-template-columns: 1fr auto; gap: 14px; }
+  .journey-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; }
   .journey-header-actions { display: flex; grid-column: 2; grid-row: 1; }
   .journey-header-message { grid-column: 1 / -1; grid-row: 2; padding: 8px 0 0; }
 }
@@ -117,23 +119,26 @@
 
 /* Muted category colors for hover and selected map layers. */
 .journey-category-button[data-category="flood"], .journey-live-shell[data-active-category="flood"] { --category-color: #2F6685; --category-tint: #E5EEF3; }
-.journey-category-button[data-category="rain_storm"], .journey-live-shell[data-active-category="rain_storm"] { --category-color: #655B83; --category-tint: #ECE9F2; }
+.journey-category-button[data-category="rain_storm"], .journey-live-shell[data-active-category="rain_storm"] { --category-color: #446D8A; --category-tint: #E8EFF5; }
 .journey-category-button[data-category="fire"], .journey-live-shell[data-active-category="fire"] { --category-color: #B6533A; --category-tint: #F7E9E3; }
 .journey-category-button[data-category="drought"], .journey-live-shell[data-active-category="drought"] { --category-color: #8A6A32; --category-tint: #F3EEDD; }
 .journey-category-button[data-category="dams"], .journey-live-shell[data-active-category="dams"] { --category-color: #3D7567; --category-tint: #E5EFEA; }
-.journey-category-button[data-category="rivers"], .journey-live-shell[data-active-category="rivers"] { --category-color: #287785; --category-tint: #E2EFF1; }
+.journey-category-button[data-category="rivers"], .journey-live-shell:is([data-active-category="rivers"], [data-active-category="water-quality"]) { --category-color: #287785; --category-tint: #E2EFF1; }
 .journey-live-shell[data-active-category="air_quality"] { --category-color: #6C6A5E; --category-tint: #EFEEE8; }
-.journey-live-shell[data-active-category="heat"] { --category-color: #A8552B; --category-tint: #F6E8DF; }
+.journey-live-shell[data-active-category="heat"] { --category-color: #B83E52; --category-tint: #F9E8EC; }
 .journey-live-shell[data-active-category="earthquake"], .journey-live-shell[data-active-category="landslide"] { --category-color: #6B5A45; --category-tint: #EFEAE2; }
-.journey-live-shell[data-active-category="marine"], .journey-live-shell[data-active-category="tropical_cyclone"] { --category-color: #2E6478; --category-tint: #E3EDF1; }
+.journey-live-shell[data-active-category="tropical_cyclone"] { --category-color: #70527D; --category-tint: #F0EAF3; }
+.journey-live-shell[data-active-category="marine"] { --category-color: #287C88; --category-tint: #E3F1F3; }
+.journey-live-shell:is([data-active-category="flood"], [data-active-category="dams"], [data-active-category="rivers"], [data-active-category="rain_storm"], [data-active-category="tropical_cyclone"], [data-active-category="marine"], [data-active-category="heat"], [data-active-category="drought"], [data-active-category="air_quality"], [data-active-category="fire"]) .hazard-subtabs button.is-active { background: var(--category-color); border-color: var(--category-color); }
 /* The category bar shows map groups; each group takes the color of its first item. */
 .journey-category-button[data-category="overview"], .journey-live-shell[data-active-category="overview"] { --category-color: #244C5B; --category-tint: #E5EEF3; }
 .journey-category-button[data-category="water"] { --category-color: #2F6685; --category-tint: #E5EEF3; }
-.journey-category-button[data-category="weather"] { --category-color: #655B83; --category-tint: #ECE9F2; }
+.journey-category-button[data-category="weather"] { --category-color: #446D8A; --category-tint: #E8EFF5; }
 .journey-category-button[data-category="smoke"] { --category-color: #6C6A5E; --category-tint: #EFEEE8; }
-.journey-category-button[data-category="hot"] { --category-color: #A8552B; --category-tint: #F6E8DF; }
+.journey-category-button[data-category="hot"] { --category-color: #B83E52; --category-tint: #F9E8EC; }
 .journey-category-button[data-category="geo"] { --category-color: #6B5A45; --category-tint: #EFEAE2; }
 .journey-category-button { display: flex; align-items: center; justify-content: center; gap: 11px; min-height: 60px; min-width: 0; padding: 10px 12px; border: 0; border-radius: 999px; background: transparent; color: #344b49; text-align: left; transition: background-color .18s ease, color .18s ease, box-shadow .18s ease; }
+.journey-category-button.is-active { --category-color: inherit; }
 .journey-category-button:hover:not(:disabled, .is-active) { background: var(--category-tint); color: var(--category-color); }
 
 .journey-category-button.is-active small { color: #fff; }
@@ -184,8 +189,8 @@
   .journey-dashboard :is(.map-heading, .map-summary, .area-panel, .assistant-panel, .dam-panel) { padding: 18px 16px; }
   .journey-dashboard .map-heading h2 { font-size: 16px; }
   .journey-dashboard .map-heading { flex-wrap: wrap; }
-  .journey-dashboard .map-heading-copy { flex-basis: 100%; }
-  .journey-dashboard .map-heading-actions { width: 100%; }
+  .journey-dashboard .map-heading:has(.images-link) .map-heading-copy { flex-basis: 100%; }
+  .journey-dashboard .map-heading:has(.images-link) .map-heading-actions { width: 100%; }
   .journey-dashboard .map-heading .images-link { margin-left: 0; margin-right: auto; }
   .journey-dashboard .risk-legend { gap: 5px; }
   .journey-dashboard .risk-legend li { gap: 5px; padding: 9px 5px; border-radius: 10px; font-size: 10px; }
@@ -200,95 +205,20 @@
   .journey-brand-mark { width: 32px; height: 36px; }
 }
 
-/* AI Bangkok flood illustration, separate from current situation data. */
-.journey-live-shell[data-active-category="flood"] .journey-hero::before {
-  background-image: url('/images/thanphai-bangkok-flood.webp');
-  background-position: center center;
-  background-size: cover;
-}
-.journey-live-shell[data-active-category="flood"] .journey-hero::after {
-  background: linear-gradient(180deg, #edf3f5cc 0%, #edf3f566 22%, #e5eef30d 52%, #e5eef3a6 100%);
-}
-@media (max-width: 760px) {
-  .journey-live-shell[data-active-category="flood"] .journey-hero::before { background-position: 42% top; }
-}
-
-/* Generated Bangkok monsoon scene, with visible rain and a muted violet palette. */
-.journey-live-shell[data-active-category="rain_storm"] .journey-hero::before {
-  background-image: url('/images/thanphai-bangkok-storm.webp');
-  background-position: center center;
-  background-size: cover;
-}
-.journey-live-shell[data-active-category="rain_storm"] .journey-hero::after {
-  background: linear-gradient(180deg, #f0eef5b3 0%, #f0eef54d 22%, #ece9f20d 52%, #ece9f299 100%);
-}
-.journey-live-shell[data-active-category="rain_storm"] .journey-header-message h1 { color: #203e37; text-shadow: 0 1px 12px #ffffff80; }
-.journey-live-shell[data-active-category="rain_storm"] .journey-brand { color: #152e34; text-shadow: none; }
-.journey-live-shell[data-active-category="rain_storm"] .journey-brand-mark { border-color: #23454c; background: #ffffff40; }
-.journey-live-shell[data-active-category="rain_storm"] .journey-photo-note { color: #203e37; text-shadow: 0 1px 5px #ffffff80; }
-@media (max-width: 760px) {
-  .journey-live-shell[data-active-category="rain_storm"] .journey-hero::before { background-position: 62% top; }
-}
-
-/* AI Chao Phraya illustration, coordinated with the river category. */
-.journey-live-shell[data-active-category="rivers"] .journey-hero::before {
-  background-image: url('/images/thanphai-chaophraya.webp');
-  background-position: center center;
-  background-size: cover;
-}
-.journey-live-shell[data-active-category="rivers"] .journey-hero::after {
-  background: linear-gradient(180deg, #f2f6f1b3 0%, #f2f6f14d 22%, #e2eff10d 52%, #e2eff199 100%);
-}
-.journey-live-shell[data-active-category="rivers"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #173c48; }
-@media (max-width: 760px) {
-  .journey-live-shell[data-active-category="rivers"] .journey-hero::before { background-position: 75% top; }
-}
-
-/* AI illustration inspired by Bhumibol Dam, with a distinct asset URL. */
-.journey-live-shell[data-active-category="dams"] .journey-hero::before {
-  background-image: url('/images/thanphai-bhumibol.webp');
-  background-position: center center;
-  background-size: cover;
-}
-.journey-live-shell[data-active-category="dams"] .journey-hero::after {
-  background: linear-gradient(180deg, #f3f6edb3 0%, #f3f6ed4d 22%, #e5efea0d 52%, #e5efea99 100%);
-}
-.journey-live-shell[data-active-category="dams"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #173f38; }
-@media (max-width: 760px) {
-  .journey-live-shell[data-active-category="dams"] .journey-hero::before { background-position: 75% top; }
-}
-
-/* Generated dry-season Thai landscape, coordinated with the drought palette. */
-.journey-live-shell[data-active-category="drought"] .journey-hero::before {
-  background-image: url('/images/thanphai-drought.webp');
-  background-position: center center;
-  background-size: cover;
-}
-.journey-live-shell[data-active-category="drought"] .journey-hero::after {
-  background: linear-gradient(180deg, #f8f3e6c2 0%, #f8f3e659 22%, #f3eedd0d 52%, #f3eedd99 100%);
-}
-.journey-live-shell[data-active-category="drought"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #493820; }
-@media (max-width: 760px) {
-  .journey-live-shell[data-active-category="drought"] .journey-hero::before { background-position: 70% top; }
-}
-
-/* Approved wildfire image, scoped to the fire category. */
-.journey-live-shell[data-active-category="fire"] .journey-hero::before {
-  background-image: url('/images/thanphai-fire.webp');
-  background-position: 60% center;
-  background-size: cover;
-}
-.journey-live-shell[data-active-category="fire"] .journey-hero::after { background: linear-gradient(180deg, #15283930, transparent 32%, #15283912); }
-.journey-live-shell[data-active-category="fire"] .journey-header-message h1 { color: #fff; text-shadow: 0 2px 6px #132638cc, 0 4px 18px #13263880; }
-.journey-live-shell[data-active-category="fire"] .journey-brand { color: #fff; text-shadow: 0 2px 6px #132638cc; }
-.journey-live-shell[data-active-category="fire"] .journey-brand-mark { border-color: #ffffffb3; background: #15283940; }
-.journey-live-shell[data-active-category="fire"] .journey-photo-note { color: #fff; text-shadow: 0 1px 5px #132638; }
-@media (max-width: 760px) {
-  .journey-live-shell[data-active-category="fire"] .journey-hero::before { background-position: 72% top; }
-}
-.journey-category-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); align-items: center; gap: 5px; max-width: 1180px; margin: 0 auto 24px; padding: 8px; border: 7px solid #ffffff7a; background: #f8f7f2; background-clip: padding-box; border-radius: 999px; box-shadow: 0 10px 40px #31454a1f; }
-@media (max-width: 950px) { .journey-category-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 28px; border-width: 5px; } }
-@media (max-width: 520px) { .journey-category-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 7px; border-radius: 24px; } }
+/* Each view keeps its illustration and focal point at every viewport. */
+.journey-live-shell[data-active-category="heat"] .journey-hero { --hero-photo: url('/images/thanphai-extreme-heat.webp'); --hero-position: center 42%; --hero-mobile-position: 76% top; }
+.journey-live-shell[data-active-category="air_quality"] .journey-hero { --hero-photo: url('/images/thanphai-pm25-haze.webp'); --hero-position: center 43%; --hero-mobile-position: 68% top; }
+.journey-live-shell[data-active-category="marine"] .journey-hero { --hero-photo: url('/images/thanphai-marine-waves.webp'); --hero-position: center 42%; --hero-mobile-position: 78% top; }
+.journey-live-shell[data-active-category="tropical_cyclone"] .journey-hero { --hero-photo: url('/images/thanphai-tropical-cyclone.webp'); --hero-position: center 38%; --hero-mobile-position: 74% top; }
+.journey-live-shell[data-active-category="flood"] .journey-hero { --hero-photo: url('/images/thanphai-bangkok-flood.webp'); --hero-position: center; --hero-mobile-position: 42% top; }
+.journey-live-shell[data-active-category="rain_storm"] .journey-hero { --hero-photo: url('/images/thanphai-bangkok-storm.webp'); --hero-position: center; --hero-mobile-position: 62% top; }
+.journey-live-shell[data-active-category="rivers"] .journey-hero { --hero-mobile-position: 75% top; }
+.journey-live-shell[data-active-category="dams"] .journey-hero { --hero-photo: url('/images/thanphai-bhumibol.webp'); --hero-position: center; --hero-mobile-position: 75% top; }
+.journey-live-shell[data-active-category="drought"] .journey-hero { --hero-photo: url('/images/thanphai-drought.webp'); --hero-position: center; --hero-mobile-position: 70% top; }
+.journey-live-shell[data-active-category="fire"] .journey-hero { --hero-photo: url('/images/thanphai-fire.webp'); --hero-position: 60% center; --hero-mobile-position: 72% top; }
+.journey-category-bar { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: center; gap: 5px; max-width: 1180px; margin: 0 auto 24px; padding: 8px; border: 7px solid #ffffff7a; background: #f8f7f2; background-clip: padding-box; border-radius: 999px; box-shadow: 0 10px 40px #31454a1f; }
+@media (max-width: 1200px) { .journey-category-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 28px; border-width: 5px; } }
+@media (max-width: 600px) { .journey-category-bar { padding: 6px; border-radius: 22px; gap: 4px; } }
 
 /* ThanPhai flood assistant mascot */
 .assistant-heading--flood {
@@ -331,4 +261,37 @@
 .journey-search-icon { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--category-color, #244c5b); border-radius: 999px; background: #fffffff0; color: var(--category-color, #244c5b); font: inherit; font-size: 13px; font-weight: 650; line-height: 1.4; white-space: nowrap; cursor: pointer; }
 .journey-search-icon:hover { background: var(--category-tint, #e5eef3); }
 .journey-search-icon:focus-visible { outline: 3px solid var(--category-color, #244c5b); outline-offset: 3px; }
-@media (max-width: 520px) { .journey-live-shell .journey-top-cta { display: none; } .journey-search-icon { padding-inline: 12px; font-size: 12px; } }
+.journey-header-actions, .journey-dashboard .dashboard-grid > *, .journey-dashboard .detail-sidebar > * { min-width: 0; }
+.journey-dashboard .map-heading-actions { max-width: 100%; }
+.journey-dashboard :is(.data-timestamp, .event-list, .dam-detail, .river-detail) { overflow-wrap: anywhere; }
+.journey-guide-dialog, .journey-search-dialog { overscroll-behavior: contain; }
+.journey-dialog-close { min-width: 44px; min-height: 44px; }
+
+@media (max-width: 1100px) {
+  .journey-dashboard .map-heading { flex-wrap: wrap; }
+  .journey-dashboard .map-heading:has(.images-link) .map-heading-copy { flex-basis: 100%; }
+  .journey-dashboard .map-heading:has(.images-link) .map-heading-actions { width: 100%; }
+}
+@media (max-width: 600px) {
+  .journey-header-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
+  .journey-header-message { grid-row: 2; padding: 0; }
+  .journey-live-shell .journey-header-message h1 { margin-top: 0; font-size: clamp(22px, 6vw, 30px); }
+  .journey-search-icon { padding: 10px 12px; font-size: 12px; }
+  .journey-top-cta { min-height: 44px; gap: 8px; padding-left: 12px; }
+  .journey-category-button { flex-direction: column; justify-content: center; gap: 5px; min-height: 72px; padding: 8px 3px; border-radius: 16px; text-align: center; }
+  .journey-category-button strong { font-size: 12px; white-space: nowrap; }
+  .journey-category-button small { display: none; }
+  .journey-category-button > svg { width: 22px; height: 22px; }
+  .journey-search-dialog { top: max(12px, env(safe-area-inset-top)); max-height: calc(100dvh - 24px); }
+  .journey-guide-dialog { max-height: calc(100dvh - 24px); padding: 32px 20px 20px; }
+  .journey-dashboard .media-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .journey-dashboard :is(.hazard-subtabs button, .dam-sort button, .media-steps button, .filter-chip button) { min-height: 44px; }
+  .journey-dashboard .overview-overlay-summary { padding: 14px 16px; }
+  .journey-photo-note { border-radius: 12px; }
+}
+@media (max-width: 420px) {
+  .journey-dashboard .risk-legend { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .journey-dashboard .risk-legend li { font-size: 11px; }
+  .journey-dashboard .dam-flows li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .journey-dashboard .dam-flows strong, .journey-dashboard .dam-flows > li > small { grid-column: 1; text-align: left; }
+}
