@@ -62,8 +62,8 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
     const radarTree = radarApp.render({ activeView: 'hazard', activeHazard: hazard });
     const before = radarRequests;
     const cleanupRadar = radarEffects.find(effect => /\.radar\(/.test(String(effect)))();
-    assert.equal(radarRequests - before, ['rain_storm', 'tropical_cyclone'].includes(hazard) ? 1 : 0, `Only weather topics request radar: ${hazard}`);
-    if (hazard === 'overview') assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Overview has no nonfunctional radar toggle');
+    assert.equal(radarRequests - before, ['overview', 'rain_storm', 'tropical_cyclone'].includes(hazard) ? 1 : 0, `Only overview and weather topics request radar: ${hazard}`);
+    if (hazard === 'overview') assert(nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle sits with the other overview layers');
     cleanupRadar?.();
   }
   let opened = 0;
