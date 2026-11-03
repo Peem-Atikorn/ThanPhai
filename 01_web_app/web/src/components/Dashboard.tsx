@@ -298,7 +298,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(true);
-    const [radarAvailable, setRadarAvailable] = useState(true);
+    const [radarAvailable, setRadarAvailable] = useState(false);
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
     const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
     const [radar, setRadar] = useState<{
@@ -739,6 +739,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         {tr(overview && <aside className="layer-toolbar" aria-label={tr("ชั้นข้อมูลบนแผนที่")}>
           <div className="layer-toolbar-buttons" role="group" aria-label={tr("เปิดปิดชั้นข้อมูลภาพรวม")}>
             <button type="button" data-layer="pm25" aria-pressed={pmOn} onClick={() => setPmOn(on => !on)}><Icon name="air_quality"/><span>{tr("ฝุ่น PM2.5")}<small>{tr(!pmOn ? "ปิด" : airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ" : "เปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
+            {radarAvailable && <button type="button" data-layer="radar" aria-pressed={radarOn} onClick={() => setRadarOn(on => !on)}><Icon name="radar"/><span>{tr("เรดาร์ฝน")}<small>{tr(radarOn ? "เปิด" : "ปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>}
             <OverlayControls data={overlays.data} enabled={overlays.enabled} onToggle={overlays.toggle}/>
           </div>
         </aside>)}
@@ -757,7 +758,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               <p>{tr(view === "water-quality" ? "ความเค็ม ออกซิเจนละลายน้ำ และค่าคุณภาพน้ำรายสถานี" : view === "dams" ? "ปริมาณน้ำและการระบายน้ำของเขื่อนขนาดใหญ่ทั่วประเทศ" : view === "rivers" ? "ระดับน้ำเทียบตลิ่งและปริมาณน้ำไหลผ่านจากสถานีวัดน้ำ" : hazardDescriptions[hazard])}</p>
             </div>
             <div className="map-heading-actions">
-            {tr(view === "hazard" && radarAvailable && RADAR_LAYERS.includes(hazard) && <button type="button" title={tr("เรดาร์บนแผนที่")} className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar"/>{tr("เรดาร์บนแผนที่")}{tr(radarOn ? " · เปิด" : " · ปิด")}</button>)}
+            {tr(view === "hazard" && radarAvailable && !overview && RADAR_LAYERS.includes(hazard) && <button type="button" title={tr("เรดาร์บนแผนที่")} className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar"/>{tr("เรดาร์บนแผนที่")}{tr(radarOn ? " · เปิด" : " · ปิด")}</button>)}
             {tr(view === "hazard" && hazard === "rain_storm" && <button type="button" className="images-link" title={tr("ภาพเรดาร์ คาดการณ์ฝน และพายุ")} onClick={showWeatherImages}><Icon name="radar"/>{tr("ภาพเรดาร์ \u00B7 คาดการณ์ฝน \u00B7 พายุ")}</button>)}
             <button className="icon-button" onClick={() => setRevision((value) => value + 1)} disabled={view === "water-quality" ? quality.status === "loading" : layerLoading} aria-label={tr("โหลดข้อมูลแผนที่ใหม่")} title={tr("โหลดข้อมูลแผนที่ใหม่")}><Icon name="refresh" className={layerLoading ? "spinning" : ""}/></button>
             </div>

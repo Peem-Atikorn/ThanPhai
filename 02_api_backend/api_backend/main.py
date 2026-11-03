@@ -375,7 +375,7 @@ async def warnings() -> dict:
 @app.get("/v1/sources")
 async def sources() -> dict:
     svc = await fresh_service()
-    return {"sources": svc.source_status, **meta(svc)}
+    return {"sources": svc.get_sources(), **meta(svc)}
 
 
 class AskRequest(BaseModel):
