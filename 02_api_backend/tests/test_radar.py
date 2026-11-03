@@ -141,3 +141,34 @@ async def test_radar_success_is_cached_for_five_minutes(radar_state, monkeypatch
         radar_state.monotonic = lambda: 10301.0
         assert (await client.get("/v1/radar")).status_code == 200
         assert calls == [1, 1]
+
+
+@pytest.mark.parametrize("image_time, want", [
+    (1799999400, {"tiles": "last-good", "time": 1799999400}),
+    (1799989200, None),
+])
+async def test_radar_cached_response_does_not_wait_for_refresh(radar_state, monkeypatch, image_time, want):
+    monkeypatch.setattr(main, "_radar_cache", (9600.0, {"tiles": "last-good", "time": image_time}))
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def fetch():
+        calls.append(1)
+        started.set()
+        await release.wait()
+        return maps()
+
+    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
+        refresh = asyncio.create_task(client.get("/v1/radar"))
+        try:
+            await asyncio.wait_for(started.wait(), timeout=1)
+            cached = await asyncio.wait_for(client.get("/v1/radar"), timeout=1)
+            assert cached.status_code == 200 and cached.json() == {"frame": want}
+            assert not refresh.done() and calls == [1]
+        finally:
+            release.set()
+            refreshed = await refresh
+        assert refreshed.status_code == 200 and refreshed.json()["frame"]["time"] == 1800000000
+        assert (await client.get("/v1/radar")).json() == refreshed.json()
+        assert calls == [1]
