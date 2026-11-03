@@ -87,6 +87,55 @@ def test_current_question_has_no_forecast_note():
     assert "สถานการณ์ล่าสุดจากข้อมูลตรวจวัด" in answer.text
 
 
+@pytest.mark.parametrize(
+    ("scope", "question", "included"),
+    [
+        ({"provinces_by_hazard": {"flood": ["TH90"]}}, "วันนี้อำเภอเสนาน้ำท่วมไหม", False),
+        ({"provinces_by_hazard": {"flood": ["TH14"]}}, "วันนี้อำเภอเสนาน้ำท่วมไหม", True),
+        # A province mentioned for rain must not inherit the same notice's flood warning.
+        ({"provinces": ["TH14", "TH12"], "provinces_by_hazard": {"flood": ["TH12"], "rain_storm": ["TH14"]}},
+         "วันนี้อำเภอเสนาน้ำท่วมไหม", False),
+        ({"provinces_by_hazard": {}}, "วันนี้อำเภอเสนาน้ำท่วมไหม", False),
+        ({"provinces": ["TH90"]}, "วันนี้อำเภอเสนาน้ำท่วมไหม", False),
+        ({"provinces": ["TH14"]}, "วันนี้จังหวัดพระนครศรีอยุธยาน้ำท่วมไหม", True),
+        ({"impact_from": "2026-10-18", "impact_to": "2026-10-18"}, "วันนี้อำเภอเสนาน้ำท่วมไหม", False),
+        ({"impact_from": "2026-10-20", "impact_to": "2026-10-21"}, "วันนี้อำเภอเสนาน้ำท่วมไหม", False),
+        ({"impact_from": "2026-10-18", "impact_to": "2026-10-19"}, "วันนี้อำเภอเสนาน้ำท่วมไหม", True),
+        ({"impact_from": "2026-10-20", "impact_to": "2026-10-20"}, "พรุ่งนี้อำเภอเสนาน้ำท่วมไหม", True),
+        ({"impact_from": "2026-10-21", "impact_to": "2026-10-21"}, "พรุ่งนี้อำเภอเสนาน้ำท่วมไหม", False),
+        # The local statement's dates override the title's longer nationwide window.
+        ({"impact_from": "2026-10-19", "impact_to": "2026-10-25",
+          "provinces_by_hazard": {"flood": ["TH14"]},
+          "impact_by_hazard": {"flood": {"TH14": ["2026-10-19", "2026-10-19"]}}},
+         "พรุ่งนี้อำเภอเสนาน้ำท่วมไหม", False),
+        ({"impact_from": "2026-10-21", "impact_to": "2026-10-25",
+          "provinces_by_hazard": {"flood": ["TH14"]},
+          "impact_by_hazard": {"flood": {"TH14": ["2026-10-20", "2026-10-20"]}}},
+         "พรุ่งนี้อำเภอเสนาน้ำท่วมไหม", True),
+        # Location and time must match the SAME hazard, not separate parts of a notice.
+        ({"provinces_by_hazard": {"flood": ["TH14"], "rain_storm": ["TH12"]},
+          "impact_by_hazard": {"flood": {"TH14": ["2026-10-21", "2026-10-21"]},
+                               "rain_storm": {"TH12": ["2026-10-19", "2026-10-19"]}}},
+         "วันนี้อำเภอเสนาน้ำท่วมและฝนตกไหม", False),
+        # Keep compatibility with tools that do not supply scope metadata yet.
+        ({}, "วันนี้อำเภอเสนาน้ำท่วมไหม", True),
+    ],
+)
+def test_warning_matches_question_scope(scope, question, included):
+    warning = {"title": "scope-test-warning", "hazards": ["rain_storm", "flood"], **scope}
+
+    class ScopedTools(FakeTools):
+        def get_official_warnings(self):
+            return [warning]
+
+    answer = HazardAgent(GAZ, ScopedTools()).ask(question, NOW)
+    assert (warning["title"] in answer.text) is included
+    assert (warning in answer.evidence) is included
+    assert ("กรมอุตุนิยมวิทยา (TMD)" in answer.sources) is included
+    if not included:
+        assert "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม" not in answer.text
+
+
 def test_satellite_flood_reason():
     class SatTools(FakeTools):
         def get_assessments(self, area_code):
