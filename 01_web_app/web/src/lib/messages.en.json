@@ -532,5 +532,18 @@
   "กรมอุตุนิยมวิทยา, USGS,": "Thai Meteorological Department, USGS,",
   "GDACS · ระดับสีของ GDACS คือระดับผลกระทบที่ GDACS ประเมิน ไม่ใช่ระดับเตือนภัยของทันภัย": "GDACS · GDACS colours represent its own impact assessment, not ThanPhai warning levels.",
   "สถานี · ค่าสูงสุด": "stations · Highest value",
-  "มคก./ลบ.ม.": "µg/m³"
+  "มคก./ลบ.ม.": "µg/m³",
+  "ตามประกาศ": "as announced",
+  "สีตามถ้อยคำในประกาศ: ฝนตกหนักบางแห่ง = เฝ้าระวัง, ฝนตกหนักถึงหนักมาก หลายพื้นที่ หรือระบุจังหวัด = เตือนภัย": "Colour follows the bulletin's wording: heavy rain in places = Watch; heavy to very heavy rain, widespread, or a named province = Warning",
+  "ประเทศไทยตอนบน": "Upper Thailand",
+  "ภาคเหนือ": "Northern region",
+  "ภาคตะวันออกเฉียงเหนือ": "Northeastern region",
+  "ภาคอีสาน": "Northeastern region",
+  "ภาคกลาง": "Central region",
+  "กรุงเทพมหานครและปริมณฑล": "Bangkok and vicinity",
+  "กรุงเทพฯและปริมณฑล": "Bangkok and vicinity",
+  "ภาคตะวันออก": "Eastern region",
+  "ภาคใต้": "Southern region",
+  "ภาคใต้ฝั่งตะวันออก": "Southern region, east coast",
+  "ภาคใต้ฝั่งตะวันตก": "Southern region, west coast"
 }

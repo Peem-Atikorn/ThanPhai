@@ -51,6 +51,8 @@ class OfficialWarning(BaseModel):
     issue_no: str
     title: str
     headline: str | None = None
+    # The bulletin's statements from its PDF (page 1), with each region's own days; the API headline has only the first.
+    body: str | None = None
     hazards: list[HazardType]
     announced_at: datetime
     effective_from: datetime | None = None

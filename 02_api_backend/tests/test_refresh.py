@@ -521,6 +521,117 @@ def test_tmd_warning_raises_only_the_provinces_it_names(base_service, monkeypatc
     assert "OFFICIAL_WARNING" in rain(bang_bua_thong)["rule_ids"]
 
 
+def test_tmd_warning_by_region_is_a_watch_and_named_provinces_keep_warning(base_service):
+    # Issue 288/2569 named "ประเทศไทยตอนบน" and "ภาคใต้" and made all 928 districts a WARNING.
+    from thanphai_shared import HazardType, OfficialWarning
+
+    svc = stale_copy(base_service)
+    now = datetime.now(timezone.utc)
+    warning = OfficialWarning(source="tmd_warnings", issue_no="1", title="ฝนตกหนักบริเวณภาคใต้ โดยเฉพาะจังหวัดสงขลา",
+                              headline="ภาคใต้จะมีฝนตกหนักบางแห่ง", hazards=[HazardType.RAIN_STORM],
+                              announced_at=now, fetched_at=now, attribution="t")
+    decisions, warnings, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []},
+                                          [warning])
+    # No strong wording ("ฝนตกหนักบางแห่ง"): only the province named by name sets min_level.
+    # Title and headline are two statements; สงขลา is named in the title only.
+    assert {code: p for code, p in warnings[0]["periods_by_hazard"]["rain_storm"].items() if code in ("TH83", "TH90")} == {
+        "TH83": [[None, None, False], [None, None, False]], "TH90": [[None, None, True], [None, None, False]]}
+    assert [(e["areas"], e["level"]) for e in warnings[0]["by_region"]] == [(["จ.สงขลา"], "WARNING"), (["ภาคใต้"], "WATCH")]
+
+    def rain(district):
+        code = next(a.code for a in svc.gazetteer.resolve(district))
+        return next(i for i in decisions[code] if i["hazard"] == "rain_storm")
+
+    rules = svc.engine.rules["official_warning"]
+    named, regional = rain("อำเภอหาดใหญ่"), rain("อำเภอเมืองภูเก็ต")
+    assert named["level"] == rules["min_level"] and named["rule_ids"][0] == "OFFICIAL_WARNING"
+    assert regional["level"] == rules["regional_level"] and regional["rule_ids"][0] == "OFFICIAL_WARNING_REGIONAL"
+    assert "กรมอุตุนิยมวิทยาประกาศเตือน" in regional["notices"][0]
+
+
+def test_cached_warning_without_periods_keeps_min_level():
+    # Warnings cached before periods_by_hazard existed set min_level everywhere, as they did then.
+    from thanphai_shared import HazardType
+
+    cached = [{"title": "t", "provinces_by_hazard": {"rain_storm": ["TH90"]}, "impact_from": None, "impact_to": None}]
+    fresh = [{**cached[0], "periods_by_hazard": {"rain_storm": {"TH90": [[None, None, False]]}}}]
+    assert HazardService._official_by_province(cached, date(2026, 11, 4), 1) == {"TH90": {HazardType.RAIN_STORM: [("t", None, False)]}}
+    assert HazardService._official_by_province(fresh, date(2026, 11, 4), 1) == {"TH90": {HazardType.RAIN_STORM: [("t", None, True)]}}
+
+
+@pytest.mark.parametrize(("today", "hat_yai_rain", "hat_yai_flood"), [
+    (date(2026, 11, 5), ("WATCH", "OFFICIAL_WARNING_UPCOMING"), ("WATCH", "OFFICIAL_WARNING_UPCOMING")),
+    (date(2026, 11, 6), ("WARNING", "OFFICIAL_WARNING"), ("WARNING", "OFFICIAL_WARNING")),
+])
+def test_tmd_bulletin_body_gives_each_region_its_days_and_level(base_service, monkeypatch, today, hat_yai_rain, hat_yai_flood):
+    # Issue 5 (288/2569) PDF: upper Thailand 5-7 Nov "ฝนตกหนักบางแห่ง" (WATCH); the south 7-9 Nov "ฝนตกหนักหลายพื้นที่ …
+    # หนักมากบางแห่ง … น้ำท่วมฉับพลัน" (WARNING from the day before, rain and flood). The title alone said 5-9 for the south.
+    import json as _json
+
+    from external_data.adapters.tmd import classify_hazards
+    from thanphai_shared import OfficialWarning
+
+    svc = stale_copy(base_service)
+    monkeypatch.setattr(svc, "_today", lambda: today)
+    fixture = Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures" / "tmd_bulletin_5.json"
+    bulletin = _json.loads(fixture.read_text(encoding="utf-8"))
+    at = datetime.fromisoformat(bulletin["announced"]).replace(tzinfo=timezone(timedelta(hours=7)))
+    warning = OfficialWarning(source="tmd_warnings", issue_no="5", title=bulletin["title"], body=bulletin["body"],
+                              hazards=classify_hazards(bulletin["title"]), announced_at=at, fetched_at=at, attribution="t")
+    decisions, warnings, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []},
+                                          [warning])
+    assert warnings[0]["by_region"] == [
+        {"from": "2026-11-05", "to": "2026-11-07", "level": "WATCH", "hazards": ["rain_storm"], "areas": ["ประเทศไทยตอนบน"]},
+        {"from": "2026-11-07", "to": "2026-11-09", "level": "WARNING", "hazards": ["rain_storm", "flood"], "areas": ["ภาคใต้"]},
+    ]
+
+    def item(district, hazard):
+        code = next(a.code for a in svc.gazetteer.resolve(district))
+        return next(i for i in decisions[code] if i["hazard"] == hazard)
+
+    for district in ("อำเภอเมืองเชียงใหม่", "เขตบางรัก"):
+        rain = item(district, "rain_storm")
+        assert (rain["level"], rain["rule_ids"][0]) == ("WATCH", "OFFICIAL_WARNING_REGIONAL")
+        assert not any(r.startswith("OFFICIAL_WARNING") for r in item(district, "flood")["rule_ids"])
+    assert tuple((lambda i: (i["level"], i["rule_ids"][0]))(item("อำเภอหาดใหญ่", "rain_storm"))) == hat_yai_rain
+    assert tuple((lambda i: (i["level"], i["rule_ids"][0]))(item("อำเภอหาดใหญ่", "flood"))) == hat_yai_flood
+
+
+def _bulletin_decisions(svc, body):
+    from external_data.adapters.tmd import classify_hazards
+    from thanphai_shared import OfficialWarning
+
+    at = datetime(2026, 11, 3, 17, 0, tzinfo=timezone(timedelta(hours=7)))
+    title = "ฝนตกหนักบริเวณประเทศไทย (มีผลกระทบในช่วงวันที่ 5-9 พฤศจิกายน 2569) ฉบับที่ 1"
+    warning = OfficialWarning(source="tmd_warnings", issue_no="1", title=title, body=body, hazards=classify_hazards(body),
+                              announced_at=at, fetched_at=at, attribution="t")
+    return svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [warning])
+
+
+@pytest.mark.parametrize(("today", "level", "rule"), [
+    (date(2026, 11, 5), "WATCH", "OFFICIAL_WARNING_REGIONAL"),  # only the 5-7 Nov "บางแห่ง" statement is in force
+    (date(2026, 11, 8), "WARNING", "OFFICIAL_WARNING"),  # the 8-9 Nov "หลายพื้นที่" statement
+])
+def test_each_statement_sets_its_level_only_on_its_own_days(base_service, monkeypatch, today, level, rule):
+    # Review of #41: one region WATCH on 5-7 Nov and WARNING on 8-9 Nov made 5 Nov a WARNING too.
+    svc = stale_copy(base_service)
+    monkeypatch.setattr(svc, "_today", lambda: today)
+    monkeypatch.setitem(svc.engine.rules["official_warning"], "lead_days", 0)
+    decisions, _, _ = _bulletin_decisions(svc, "ในช่วงวันที่ 5–7 พฤศจิกายน 2569 ภาคเหนือจะมีฝนตกหนักบางแห่ง "
+                                               "ส่วนในช่วงวันที่ 8–9 พฤศจิกายน 2569 ภาคเหนือจะมีฝนตกหนักหลายพื้นที่")
+    code = next(a.code for a in svc.gazetteer.resolve("อำเภอเมืองเชียงใหม่"))
+    rain = next(i for i in decisions[code] if i["hazard"] == "rain_storm")
+    assert (rain["level"], rain["rule_ids"][0]) == (level, rule)
+
+
+def test_by_region_keeps_each_region_with_its_own_hazards(base_service):
+    # Review of #41: rain in the north and flood in the south, same days and level, showed "เหนือ · ใต้ — ฝน, น้ำท่วม".
+    svc = stale_copy(base_service)
+    _, warnings, _ = _bulletin_decisions(svc, "ในช่วงวันที่ 5–7 พฤศจิกายน 2569 ภาคเหนือจะมีฝนตกหนักหลายพื้นที่ "
+                                              "ส่วนในช่วงวันที่ 5–7 พฤศจิกายน 2569 ภาคใต้ระวังน้ำท่วมฉับพลัน")
+    assert [(e["areas"], e["hazards"]) for e in warnings[0]["by_region"]] == [(["ภาคเหนือ"], ["rain_storm"]), (["ภาคใต้"], ["flood"])]
+
+
 def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service, monkeypatch):
     # Heavy rain (rain + flood) in the east and south; "ส่วนภาคเหนือตอนล่าง …" only thunderstorms. Before, every
     # hazard went to every province named, and เชียงใหม่ got a flood WARNING.
@@ -545,7 +656,8 @@ def test_tmd_issue_12_does_not_warn_chiang_mai_of_floods(base_service, monkeypat
         return next(i for i in decisions[code] if i["hazard"] == hazard)["rule_ids"]
 
     for hazard in ("flood", "rain_storm"):
-        assert "OFFICIAL_WARNING" not in rule_ids("อำเภอเมืองเชียงใหม่", hazard)
+        assert not any(r.startswith("OFFICIAL_WARNING") for r in rule_ids("อำเภอเมืองเชียงใหม่", hazard))
+        # "ภาคตะวันออกและภาคใต้ … ฝนตกหนักถึงหนักมากบางพื้นที่": regions, but strong wording keeps min_level.
         assert "OFFICIAL_WARNING" in rule_ids("อำเภอเมืองชลบุรี", hazard)
         assert "OFFICIAL_WARNING" in rule_ids("อำเภอหาดใหญ่", hazard)
 
@@ -577,19 +689,22 @@ def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_servi
         code = next(a.code for a in svc.gazetteer.resolve(district))
         return next(i for i in decisions[code] if i["hazard"] == hazard)
 
-    for district in ("อำเภอเมืองขอนแก่น", "อำเภอเมืองเชียงใหม่", "อำเภอเมืองชลบุรี", "อำเภอหาดใหญ่"):
+    # Upper Thailand "ฝนตกหนักบางแห่ง": regional_level. The south "ฝนตกหนักถึงหนักมาก" (title): min_level.
+    for district, rule in (("อำเภอเมืองขอนแก่น", "OFFICIAL_WARNING_REGIONAL"), ("อำเภอเมืองเชียงใหม่", "OFFICIAL_WARNING_REGIONAL"),
+                           ("อำเภอเมืองชลบุรี", "OFFICIAL_WARNING_REGIONAL"), ("อำเภอหาดใหญ่", "OFFICIAL_WARNING")):
         rain = item(district, "rain_storm")
-        assert "OFFICIAL_WARNING" in rain["rule_ids"] and sum("กรมอุตุนิยมวิทยาประกาศเตือน" in n for n in rain["notices"]) == 1
-    assert "OFFICIAL_WARNING" in item("อำเภอหาดใหญ่", "flood")["rule_ids"]
-    assert all("OFFICIAL_WARNING" not in item(d, "flood")["rule_ids"] for d in ("อำเภอเมืองขอนแก่น", "อำเภอเมืองเชียงใหม่", "อำเภอเมืองชลบุรี"))
+        assert rain["rule_ids"][0] == rule and sum("กรมอุตุนิยมวิทยาประกาศเตือน" in n for n in rain["notices"]) == 1
+    assert item("อำเภอหาดใหญ่", "flood")["rule_ids"][0] == "OFFICIAL_WARNING"
+    assert all(not any(r.startswith("OFFICIAL_WARNING") for r in item(d, "flood")["rule_ids"])
+               for d in ("อำเภอเมืองขอนแก่น", "อำเภอเมืองเชียงใหม่", "อำเภอเมืองชลบุรี"))
 
 
 @pytest.mark.parametrize(
     ("district", "today", "level", "rule", "notice"),
     [
         ("อำเภอเมืองเชียงใหม่", date(2026, 11, 2), "WATCH", "OFFICIAL_WARNING_UPCOMING", "ประกาศเตือนล่วงหน้า (คาดว่าเริ่ม 5 พฤศจิกายน 2569)"),
-        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 4), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
-        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 7), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),
+        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 4), "WATCH", "OFFICIAL_WARNING_REGIONAL", "ประกาศเตือน: อากาศแปรปรวน"),
+        ("อำเภอเมืองเชียงใหม่", date(2026, 11, 7), "WATCH", "OFFICIAL_WARNING_REGIONAL", "ประกาศเตือน: อากาศแปรปรวน"),
         ("อำเภอเมืองเชียงใหม่", date(2026, 11, 8), None, None, None),  # upper Thailand: 5-7 Nov in the headline
         ("อำเภอหาดใหญ่", date(2026, 11, 9), "WARNING", "OFFICIAL_WARNING", "ประกาศเตือน: อากาศแปรปรวน"),  # south: 5-9 Nov
         ("อำเภอหาดใหญ่", date(2026, 11, 10), None, None, None),  # past its last impact day: the warning no longer counts
@@ -597,7 +712,8 @@ def test_tmd_live_issue_3_floods_south_rain_upper_thailand_one_notice(base_servi
 )
 def test_tmd_warning_is_a_watch_until_the_day_before_its_impact(base_service, monkeypatch, district, today, level, rule, notice):
     # Issue 3 was issued on 2 Nov, for 5-7 Nov in upper Thailand and 5-9 Nov in the south: rules.yaml lead_days 1 makes
-    # it a WATCH on 2-3 Nov and a WARNING from 4 Nov to each region's last day.
+    # it upcoming on 2-3 Nov and active from 4 Nov to each region's last day. It names regions only: upper Thailand
+    # ("ฝนตกหนักบางแห่ง") is regional_level (WATCH), the south ("ฝนตกหนักถึงหนักมาก") keeps min_level.
     import json as _json
 
     from external_data.adapters.tmd import classify_hazards
@@ -640,4 +756,4 @@ def test_tmd_warning_over_the_new_year_without_years_stays_in_force(base_service
     assert warnings[0]["impact_by_hazard"]["rain_storm"]["TH90"] == ["2026-12-30", "2027-01-02"]
     code = next(a.code for a in svc.gazetteer.resolve("อำเภอหาดใหญ่"))
     rain = next(i for i in decisions[code] if i["hazard"] == "rain_storm")
-    assert ("OFFICIAL_WARNING" in rain["rule_ids"]) is active
+    assert ("OFFICIAL_WARNING_REGIONAL" in rain["rule_ids"]) is active

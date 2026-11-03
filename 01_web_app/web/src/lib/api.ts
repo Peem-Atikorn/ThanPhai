@@ -237,9 +237,18 @@ export interface AreaHazards {
   forecast_updated_at: string | null;
   dams: Dam[];
   rivers: River[];
-  official_warnings: { title: string; headline?: string; url?: string; hazards: Hazard[] }[];
+  official_warnings: OfficialWarning[];
   data_updated_at: string | null;
   degraded_services: string[];
+}
+
+/** A TMD bulletin. `by_region`: one line per days and level, with the regions (or "จ.X") it names. */
+export interface OfficialWarning {
+  title: string;
+  headline?: string;
+  url?: string;
+  hazards: Hazard[];
+  by_region?: { from: string | null; to: string | null; level: Exclude<Level, null>; hazards: Hazard[]; areas: string[] }[];
 }
 
 export type AreaBoundary = Omit<GeoJSON.Feature, "bbox"> & { bbox: [number, number, number, number] };
@@ -282,6 +291,7 @@ export const api = {
     if (!res.ok) throw new Error(`${res.status}`);
     return { enabled: true, frame: (await res.json()).frame };
   },
+  warnings: () => get<{ warnings: OfficialWarning[] }>(`/v1/warnings`),
   earthquakes: () => get<{ earthquakes: Earthquake[] }>(`/v1/earthquakes`),
   regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),

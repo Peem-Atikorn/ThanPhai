@@ -238,6 +238,8 @@ def _reason(item: dict) -> str:
         parts.append(f"ดัชนี SPI-3 {obs['spi_3']:+.2f}")
     if "OFFICIAL_WARNING" in (item.get("rule_ids") or []):
         parts.append("มีประกาศเตือนจากกรมอุตุนิยมวิทยา")
+    elif "OFFICIAL_WARNING_REGIONAL" in (item.get("rule_ids") or []):
+        parts.append("มีประกาศเตือนจากกรมอุตุนิยมวิทยาครอบคลุมทั้งภาค (ไม่ได้ระบุจังหวัดนี้โดยตรง)")
     elif "OFFICIAL_WARNING_UPCOMING" in (item.get("rule_ids") or []):
         parts.append("มีประกาศเตือนล่วงหน้าจากกรมอุตุนิยมวิทยา (ยังไม่ถึงช่วงที่มีผลกระทบ)")
     return ", ".join(parts)
