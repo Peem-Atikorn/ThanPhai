@@ -7,6 +7,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncEx
 import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import WaterQualityPanel, { qualityKey, qualityColor } from "@/components/WaterQualityPanel";
 import Icon from "@/components/Icon";
+import FloatingMascot from "@/components/FloatingMascot";
 import RainCloudSkeleton from "@/components/RainCloudSkeleton";
 import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
@@ -877,14 +878,11 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             <WaterQualityPanel stations={visibleQuality} selected={selectedQuality} onSelect={chooseQuality} onClose={() => setSelectedQuality(null)} status={quality.status} degraded={quality.degraded} source={quality.source} onRetry={() => setRevision(n => n + 1)}/>
           </section>)}
 
-          <details className="assistant-panel">
-            <summary className={"assistant-heading" + (view === "hazard" && hazard === "flood" ? " assistant-heading--flood" : "")}><span className="assistant-icon"><Icon name="chat"/></span><div><h2>{tr("ถามทันภัย")}</h2><p>{tr("ช่วยอ่านข้อมูลความเสี่ยงให้เข้าใจง่าย")}</p></div>
-              {tr(view === "hazard" && hazard === "flood" && <span className="flood-assistant-mascot" aria-hidden="true"/>)}
-            </summary>
+          <FloatingMascot topic={view === "hazard" ? hazard : view} status={asking ? "waiting" : answer?.intent === "error" ? "error" : answer ? "answered" : "idle"}>
             <form onSubmit={onAsk}><label htmlFor="ask">{tr("อยากรู้สถานการณ์เรื่องไหน?")}</label><div className="ask-input"><input id="ask" ref={questionInput} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={tr("เช่น น้ำจะท่วมอำเภอเสนาไหม")} maxLength={500}/><button className="primary-button" disabled={asking || !question.trim()} aria-label={tr("ส่งคำถาม")}>{tr(asking ? <span className="spinner"/> : <Icon name="arrow"/>)}</button></div></form>
             {tr(!answer && !asking && <div className="question-suggestions">{tr(["อำเภอเสนาเสี่ยงน้ำท่วมไหม", "เขื่อนภูมิพลมีน้ำเท่าไหร่", "เขื่อนเจ้าพระยาระบายน้ำเท่าไหร่"].map((example) => <button key={example} onClick={() => { setQuestion(example); questionInput.current?.focus(); }}>{tr(example)}</button>))}</div>)}
             <div aria-live="polite">{tr(asking && <p className="answer-text">{tr("กำลังตรวจสอบข้อมูลและเรียบเรียงคำตอบ\u2026")}</p>)}{tr(answer && <div className={"answer-text " + (answer.intent === "error" ? "data-notice" : "")}><p>{tr(answer.text)}</p>{tr(answer.sources.length > 0 && <p className="source-note">{tr("ที่มา: ")}{tr(answer.sources.join(", "))}</p>)}{tr(answer.llm_used && <p className="source-note">{tr("เรียบเรียงโดย AI (Gemini) \u00B7 ระดับเตือนภัยมาจากกฎของระบบ ไม่ได้ให้ AI ตัดสิน")}</p>)}</div>)}</div>
-          </details>
+          </FloatingMascot>
         </aside>
       </div>
     </>);
