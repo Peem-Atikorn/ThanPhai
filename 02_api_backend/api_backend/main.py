@@ -3,6 +3,7 @@ import gzip
 import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -309,6 +310,45 @@ async def media() -> dict:
     svc = await fresh_service()
     empty = {"radar": [], "rain_forecast": {}, "storm": [], "wave": []}
     return {**(svc.media or empty), **meta(svc)}
+
+
+RAINVIEWER_MAPS = "https://api.rainviewer.com/public/weather-maps.json"
+RADAR_TTL_S = 300
+_radar_cache: tuple[float, dict | None] | None = None  # (monotonic time fetched, latest frame)
+
+
+async def fetch_rainviewer_maps() -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(RAINVIEWER_MAPS)
+        response.raise_for_status()
+        return response.json()
+
+
+@app.get("/v1/radar")
+async def radar() -> dict:
+    """Latest RainViewer radar frame as a tile URL template (`frame` is null when there is none).
+
+    RainViewer's free tier is for personal/educational use and allows 100 requests/min per IP, so the layer is
+    for the team only: it answers 404 unless RADAR_LAYER=internal, and the frame list is fetched once per 5 minutes
+    for everyone. Login (admin/user) replaces the env flag later.
+    """
+    global _radar_cache
+    if os.getenv("RADAR_LAYER", "off") != "internal":
+        raise HTTPException(404, "radar layer is off")
+    now = time.monotonic()
+    if _radar_cache is None or now - _radar_cache[0] > RADAR_TTL_S:
+        try:
+            maps = await fetch_rainviewer_maps()
+            last = (maps.get("radar", {}).get("past") or [None])[-1]
+            # 256 px tiles, colour scheme 2 (Universal Blue, the only one left), smoothed, snow shown.
+            frame = {"tiles": f"{maps['host']}{last['path']}/256/{{z}}/{{x}}/{{y}}/2/1_1.png", "time": last["time"]} if last else None
+            _radar_cache = (now, frame)
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            logging.getLogger("api").warning("RainViewer frame list failed", exc_info=True)
+            if _radar_cache is None:
+                raise HTTPException(502, "RainViewer did not answer; try again later")
+            # Past frames stay on RainViewer for about 2 hours, so the last good one still draws.
+    return {"frame": _radar_cache[1]}
 
 
 @app.get("/v1/warnings")

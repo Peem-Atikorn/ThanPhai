@@ -223,6 +223,33 @@ def test_graph_endpoint_uses_cache(client, monkeypatch):
     assert first == second and first["qmax_m3s"] == 2720 and calls == [2744]
 
 
+def test_radar_is_off_unless_internal_and_cached(client, monkeypatch):
+    c, _, _ = client
+    calls = []
+
+    async def fake():
+        calls.append(1)
+        if len(calls) > 1:
+            raise main.httpx.ConnectError("down")
+        return {"host": "https://tilecache.rainviewer.com",
+                "radar": {"past": [{"time": 1, "path": "/v2/radar/a"}, {"time": 2, "path": "/v2/radar/b"}]}}
+
+    monkeypatch.setattr(main, "fetch_rainviewer_maps", fake)
+    monkeypatch.setattr(main, "_radar_cache", None)
+    monkeypatch.delenv("RADAR_LAYER", raising=False)
+    # Off by default: public visitors get nothing and RainViewer is never called.
+    assert c.get("/v1/radar").status_code == 404 and calls == []
+    monkeypatch.setenv("RADAR_LAYER", "internal")
+    frame = c.get("/v1/radar").json()["frame"]
+    assert frame == {"tiles": "https://tilecache.rainviewer.com/v2/radar/b/256/{z}/{x}/{y}/2/1_1.png", "time": 2}
+    assert c.get("/v1/radar").json()["frame"] == frame and calls == [1]  # one fetch per 5 minutes
+    # After 5 minutes a failed fetch keeps the last good frame.
+    monkeypatch.setattr(main, "_radar_cache", (main.time.monotonic() - main.RADAR_TTL_S - 1, frame))
+    assert c.get("/v1/radar").json()["frame"] == frame and calls == [1, 1]
+    monkeypatch.setattr(main, "_radar_cache", None)
+    assert c.get("/v1/radar").status_code == 502
+
+
 def test_area_boundary_for_highlighting(client):
     c, svc, sena = client
     province = c.get("/v1/areas/TH25/boundary").json()  # ปราจีนบุรี
