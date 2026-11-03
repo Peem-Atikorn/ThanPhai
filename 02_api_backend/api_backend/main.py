@@ -312,58 +312,19 @@ async def media() -> dict:
     return {**(svc.media or empty), **meta(svc)}
 
 
-RAINVIEWER_MAPS = "https://api.rainviewer.com/public/weather-maps.json"
-RADAR_TTL_S = 300
-RADAR_RETRY_S = 30
-RADAR_MAX_FRAME_AGE_S = 7200
-_radar_lock = asyncio.Lock()
-_radar_retry_at = 0.0
-_radar_cache: tuple[float, dict | None] | None = None  # (monotonic time fetched, latest frame)
-
-
-async def fetch_rainviewer_maps() -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.get(RAINVIEWER_MAPS)
-        response.raise_for_status()
-        return response.json()
-
-
-@app.get("/v1/radar")
-async def radar() -> dict:
-    """Latest RainViewer radar frame as a tile URL template (`frame` is null when there is none).
-
-    RainViewer's free tier is for personal/educational use and allows 100 requests/min per IP, so the layer is
-    for the team only: it answers 404 unless RADAR_LAYER=internal, and the frame list is fetched once per 5 minutes
-    for everyone. Failed refreshes wait 30 seconds before retrying; frames older than 2 hours are omitted.
-    Concurrent readers can use the cached image while one request refreshes it.
-    Login (admin/user) replaces the env flag later.
-    """
-    global _radar_cache, _radar_retry_at
-    if os.getenv("RADAR_LAYER", "off") != "internal":
-        raise HTTPException(404, "radar layer is off")
-    # Readers with a cached image need not wait for the request refreshing it.
-    if _radar_cache is None or _radar_cache[1] is None or not _radar_lock.locked():
-        async with _radar_lock:
-            # Recheck after waiting: another request may already have refreshed or failed.
-            now = time.monotonic()
-            if (_radar_cache is None or now - _radar_cache[0] >= RADAR_TTL_S) and now >= _radar_retry_at:
-                try:
-                    maps = await fetch_rainviewer_maps()
-                    last = (maps.get("radar", {}).get("past") or [None])[-1]
-                    # 256 px tiles, colour scheme 2 (Universal Blue, the only one left), smoothed, snow shown.
-                    frame = {"tiles": f"{maps['host']}{last['path']}/256/{{z}}/{{x}}/{{y}}/2/1_1.png", "time": last["time"]} if last else None
-                    _radar_cache = (time.monotonic(), frame)
-                    _radar_retry_at = 0.0
-                except (httpx.HTTPError, ValueError, KeyError, TypeError):
-                    logging.getLogger("api").warning("RainViewer frame list failed", exc_info=True)
-                    _radar_retry_at = time.monotonic() + RADAR_RETRY_S
-    if _radar_cache is None:
-        raise HTTPException(502, "RainViewer did not answer; try again later")
-    frame = _radar_cache[1]
-    # Tile retention follows the image timestamp, not when we fetched its URL.
     if frame and time.time() - frame["time"] >= RADAR_MAX_FRAME_AGE_S:
         frame = None
     return {"frame": frame}
+
+
+@app.get("/v1/radar/nowcast")
+async def radar_nowcast() -> dict:
+    """1-hour radar nowcast with extrapolated frame timestamps and Qwen explanation."""
+    if os.getenv("RADAR_LAYER", "off") != "internal":
+        raise HTTPException(404, "radar layer is off")
+    svc = await fresh_service()
+    data = await svc.get_radar_nowcast()
+    return {**data, **meta(svc)}
 
 
 @app.get("/v1/warnings")
