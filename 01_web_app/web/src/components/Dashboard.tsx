@@ -95,7 +95,7 @@ const riverKey = (r: River) => r.id ?? r.code;
 const RID_HOURLY = "https://hyd-app.rid.go.th/hydro5h.html";
 type View = MapView;
 // The rain radar is drawn on these maps.
-const RADAR_LAYERS: MapLayerId[] = ["rain_storm", "tropical_cyclone"];
+const RADAR_LAYERS: MapLayerId[] = ["overview", "rain_storm", "tropical_cyclone"];
 const stationFeatures = (stations: AirStation[]): GeoJSON.FeatureCollection => ({
     type: "FeatureCollection",
     features: stations.map((s) => ({
@@ -298,6 +298,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(true);
+    const [radarAvailable, setRadarAvailable] = useState(true);
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
     const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
     const [radar, setRadar] = useState<{
@@ -372,8 +373,9 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             return;
         let cancelled = false;
         // A failed radar request just leaves the map without radar; the station data still shows.
-        api.radar().then((r) => { if (!cancelled) {
-            setRadar(r);
+        api.radar().then((result) => { if (!cancelled) {
+            setRadarAvailable(result.enabled);
+            setRadar(result.frame);
         } }).catch(() => { if (!cancelled) {
             setRadar(null);
         } });
@@ -755,7 +757,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               <p>{tr(view === "water-quality" ? "ความเค็ม ออกซิเจนละลายน้ำ และค่าคุณภาพน้ำรายสถานี" : view === "dams" ? "ปริมาณน้ำและการระบายน้ำของเขื่อนขนาดใหญ่ทั่วประเทศ" : view === "rivers" ? "ระดับน้ำเทียบตลิ่งและปริมาณน้ำไหลผ่านจากสถานีวัดน้ำ" : hazardDescriptions[hazard])}</p>
             </div>
             <div className="map-heading-actions">
-            {tr(view === "hazard" && RADAR_LAYERS.includes(hazard) && <button type="button" title={tr("เรดาร์บนแผนที่")} className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar"/>{tr("เรดาร์บนแผนที่")}{tr(radarOn ? " · เปิด" : " · ปิด")}</button>)}
+            {tr(view === "hazard" && radarAvailable && RADAR_LAYERS.includes(hazard) && <button type="button" title={tr("เรดาร์บนแผนที่")} className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar"/>{tr("เรดาร์บนแผนที่")}{tr(radarOn ? " · เปิด" : " · ปิด")}</button>)}
             {tr(view === "hazard" && hazard === "rain_storm" && <button type="button" className="images-link" title={tr("ภาพเรดาร์ คาดการณ์ฝน และพายุ")} onClick={showWeatherImages}><Icon name="radar"/>{tr("ภาพเรดาร์ \u00B7 คาดการณ์ฝน \u00B7 พายุ")}</button>)}
             <button className="icon-button" onClick={() => setRevision((value) => value + 1)} disabled={view === "water-quality" ? quality.status === "loading" : layerLoading} aria-label={tr("โหลดข้อมูลแผนที่ใหม่")} title={tr("โหลดข้อมูลแผนที่ใหม่")}><Icon name="refresh" className={layerLoading ? "spinning" : ""}/></button>
             </div>

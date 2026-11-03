@@ -55,15 +55,15 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   lib.api.boundary = async () => null;
   const Dashboard = load('@/components/Dashboard').default;
   let radarRequests = 0;
-  lib.api.radar = async () => { radarRequests++; return null; };
+  lib.api.radar = async () => { radarRequests++; return { enabled: true, frame: null }; };
   for (const hazard of ['overview', 'flood', 'rain_storm', 'tropical_cyclone']) {
     const radarEffects = [];
     const radarApp = instance(Dashboard, radarEffects);
     const radarTree = radarApp.render({ activeView: 'hazard', activeHazard: hazard });
     const before = radarRequests;
     const cleanupRadar = radarEffects.find(effect => /\.radar\(/.test(String(effect)))();
-    assert.equal(radarRequests - before, ['rain_storm', 'tropical_cyclone'].includes(hazard) ? 1 : 0, `Only weather topics request radar: ${hazard}`);
-    if (hazard === 'overview') assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Overview has no nonfunctional radar toggle');
+    assert.equal(radarRequests - before, 1, `Radar availability is checked for ${hazard}`);
+    if (hazard === 'overview') assert(nodes(radarTree).some(n => n.type === 'button' && content(n).includes('เรดาร์บนแผนที่')), 'Overview has a radar toggle');
     cleanupRadar?.();
   }
   let opened = 0;
