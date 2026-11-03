@@ -29,5 +29,6 @@ def test_ask_source_list_matches_sources_endpoint(monkeypatch):
     sources = sources_response.json()["sources"]
     answer = answer_response.json()
     assert answer["intent"] == "sources"
+    assert answer["sources"] == []  # Do not repeat the provider list below the answer in the web chat.
     assert {e["source"]: e["ok"] for e in answer["evidence"]} == {name: state["ok"] for name, state in sources.items()}
     assert answer["degraded_services"] == ["new_provider"]

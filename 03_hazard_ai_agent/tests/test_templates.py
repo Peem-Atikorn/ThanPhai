@@ -62,6 +62,7 @@ def test_source_answer_uses_tool_results_and_status(question):
     tools = Tools({"thaiwater_waterlevel": {"ok": True}, "nasa_firms": {"ok": False}, "new_provider": {}})
     answer = HazardAgent(GAZ, tools, explainer=must_not_rewrite).ask(question, NOW)
     assert answer.intent == "sources"
+    assert answer.sources == []  # The provider list is already in the answer text.
     assert "ThaiWater" in answer.text and "NASA FIRMS" in answer.text and "new_provider" in answer.text
     assert "ไม่พร้อมใช้งาน" in next(line for line in answer.text.splitlines() if "NASA FIRMS" in line)
     assert "ยังไม่ทราบสถานะ" in next(line for line in answer.text.splitlines() if "new_provider" in line)
@@ -93,3 +94,35 @@ def test_emergency_takes_priority_over_source_question():
 
 def test_greeting_words_inside_unrelated_text_are_not_greetings():
     assert understand("highlight", GAZ, NOW).intent == "out_of_scope"
+
+
+@pytest.mark.parametrize("question", [
+    "แหล่งข้อมูลน้ำท่วมอำเภอเสนา",
+    "ใช้ข้อมูลจากดาวเทียม แล้วตอนนี้อำเภอเสนาน้ำท่วมไหม",
+    "ใช้ข้อมูลจากดาวเทียม น้ำท่วมไหม",
+    "Using data sources, will it flood in Sena?",
+])
+def test_source_words_do_not_override_risk_questions(question):
+    tools = Tools()
+    answer = HazardAgent(GAZ, tools).ask(question, NOW)
+    assert answer.intent == "risk"
+    assert "get_sources" not in tools.calls
+    if "เสนา" in question or "Sena" in question:
+        assert answer.area["code"] == "TH1412" and "TH1412" in tools.calls
+    else:
+        assert answer.area is None  # Normal clarification still asks for an area.
+
+
+def test_source_words_do_not_override_preparation():
+    tools = Tools()
+    answer = HazardAgent(GAZ, tools).ask("แหล่งข้อมูลบอกว่ามีน้ำท่วม ต้องเตรียมตัวอย่างไร", NOW)
+    assert answer.intent == "prepare" and "เตรียม" in answer.text
+    assert "get_sources" not in tools.calls
+
+
+@pytest.mark.parametrize("question, intent", [
+    ("ใช้ข้อมูลจาก สสน. เขื่อนภูมิพลมีน้ำเท่าไหร่", "dam"),
+    ("ใช้ข้อมูลจาก สสน. C.13 มีอัตราการไหลเท่าไหร่", "river"),
+])
+def test_source_words_do_not_override_dam_or_river(question, intent):
+    assert understand(question, GAZ, NOW).intent == intent

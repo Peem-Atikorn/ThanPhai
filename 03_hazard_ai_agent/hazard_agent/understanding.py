@@ -115,8 +115,6 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     areas = gazetteer.find_in_text(text)
     if any(w in lowered for w in EMERGENCY_WORDS):
         return Understanding("emergency", detect_hazards(text), areas, start, end, language)
-    if any(w in lowered for w in SOURCE_WORDS):
-        return Understanding("sources", [], [], start, end, language)
     if GREETING.fullmatch(lowered.strip()):
         return Understanding("greeting", [], [], start, end, language)
     if any(w in lowered for w in DAM_WORDS):
@@ -132,6 +130,9 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
             or (any(w in lowered for w in RIVER_WORDS) and not areas)):
         return Understanding("river", [], areas, start, end, language)
     hazards = detect_hazards(text)
+    # Source words must not swallow questions about hazards, areas, dams, or rivers.
+    if not hazards and not areas and any(w in lowered for w in SOURCE_WORDS):
+        return Understanding("sources", [], [], start, end, language)
     if any(w in lowered for w in PREPARE_WORDS):
         intent = "prepare"
     elif any(w in lowered for w in EXPLAIN_WORDS):

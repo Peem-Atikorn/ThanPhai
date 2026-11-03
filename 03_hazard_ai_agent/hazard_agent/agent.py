@@ -295,15 +295,14 @@ class HazardAgent:
         if not sources:
             return AgentAnswer("ยังไม่มีข้อมูลแหล่งที่มาในขณะนี้ กรุณาลองใหม่อีกครั้ง", "sources", None, [], tool_calls=calls)
         lines = ["แหล่งข้อมูลที่ทันภัยติดตามอยู่:"]
-        evidence, names = [], []
+        evidence = []
         for source, state in sorted(sources.items()):
             label = SOURCE_TH.get(source, source)
             ok = state.get("ok")
             status = "พร้อมใช้งาน" if ok is True else "ไม่พร้อมใช้งาน" if ok is False else "ยังไม่ทราบสถานะ"
             lines.append(f"• {label}: {status}")
-            names.append(label)
             evidence.append({"source": source, "ok": ok, "checked_at": state.get("checked_at")})
-        return AgentAnswer("\n".join(lines), "sources", None, [], evidence, names, calls)
+        return AgentAnswer("\n".join(lines), "sources", None, [], evidence=evidence, tool_calls=calls)
 
     def _dams(self, question: str, u: Understanding) -> AgentAnswer:
         """Dam storage, straight from the data (no LLM rewrite, so every number is exactly as reported)."""
