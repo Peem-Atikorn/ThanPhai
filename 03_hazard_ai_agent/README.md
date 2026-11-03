@@ -23,10 +23,6 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest 03_hazard_ai_agent/tests -q
 ```
 
-เครื่องที่จัดเตรียมในงานนี้มี `.venv` พร้อมแล้ว จึงรันคำสั่งทดสอบบรรทัดสุดท้ายได้เลย
-Python 3.12 ของ environment นี้อยู่ใน `../.runtimes/` จึงควรเก็บ directory นั้นไว้ด้วย
-ถ้าย้ายโปรเจกต์ไปเครื่องอื่น ให้สร้าง `.venv` ใหม่
-
 ## ลองผ่าน API จริง
 
 ทำขั้นตอนติดตั้ง backend และสร้าง boundary data ตาม README ที่ root ก่อน
@@ -53,12 +49,3 @@ Invoke-RestMethod -Uri 'http://localhost:8002/v1/ask' -Method Post -ContentType 
 
 การกรองนี้ใช้กับข้อความประกาศ หลักฐาน และแหล่งอ้างอิงในคำตอบ ไม่เปลี่ยนระดับเตือนภัย
 ที่ backend และโมดูล 07 คำนวณไว้แล้ว
-
-## ผลตรวจบนเครื่องนี้ (3 พฤศจิกายน 2026)
-
-- Module 03: 84 passed รวม regression cases เรื่องขอบเขตประกาศ 15 กรณี
-- Python suites ทั้ง 8 ชุด รวม shared: 389 passed, 110 skipped
-- 110 skipped ต้องมี boundary data จริง; live-provider tests 10 กรณีไม่ได้เลือกมารัน
-- ทดสอบ module 04 นอก sandbox เพราะ Windows asyncio ต้องใช้ local socket pair
-- มี deprecation warning ของ Starlette TestClient / httpx ที่ใช้อยู่ ไม่ใช่ test failure
-- ยังไม่ได้เปิดระบบข้อมูลสด / Gemini / หน้าเว็บจริงในการตรวจรอบนี้
