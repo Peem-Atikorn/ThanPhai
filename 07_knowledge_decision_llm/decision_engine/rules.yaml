@@ -1,10 +1,14 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.11.02.1"
+version: "2026.11.04.1"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
   min_level: WARNING
+  # A warning that reaches the area only through a region ("ประเทศไทยตอนบน", "ภาคใต้") sets this level instead:
+  # issue 288/2569 (5-9 Nov 2026) named upper Thailand and the south, which made all 928 districts a WARNING
+  # while measured rain was heavy in 15. Observations can still raise it. Provinces named by name keep min_level.
+  regional_level: WATCH
   # TMD warns days ahead ("มีผลกระทบในช่วงวันที่ 5-9 พฤศจิกายน" issued 2 Nov). A warning is active from `lead_days`
   # before its first impact day to the end of its last; before that it sets `upcoming_level`. No dates read: active now.
   lead_days: 1

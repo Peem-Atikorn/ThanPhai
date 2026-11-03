@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from external_data.adapters.tmd import classify_hazards, read_days
-from geo_integration import Gazetteer, hazard_areas, provinces_by_hazard, warning_parts, warning_provinces
+from geo_integration import Gazetteer, hazard_areas, named_provinces, provinces_by_hazard, warning_parts, warning_provinces
 from geo_integration.warning_areas import REGIONS
 from thanphai_shared import HazardType
 
@@ -128,6 +128,14 @@ def test_and_with_weather_but_no_area_stays_with_its_area(gaz):
 
 def test_mostly_is_not_a_new_part():
     assert warning_parts("ฝนตกหนัก ส่วนมากบริเวณจังหวัดตาก") == ["ฝนตกหนัก ส่วนมากบริเวณจังหวัดตาก"]
+
+
+def test_named_provinces_leave_out_regions(gaz):
+    # Issue 288/2569 named regions only; rules.yaml gives those a lower level than a province named by name.
+    issue = next(f for f in FIXTURES if f["issue_no"] == "3")
+    assert hazard_areas(gaz, [issue["title"], issue["headline"]], classify_hazards, provinces=named_provinces) == {}
+    assert named_provinces(gaz, "ฝนตกหนักบริเวณภาคใต้ โดยเฉพาะจังหวัดสงขลา และกทม.") == ["TH10", "TH90"]
+    assert named_provinces(gaz, "ภาคใต้(ฝั่งตะวันตก) และกรุงเทพฯและปริมณฑล") == []
 
 
 def test_province_list_with_short_names(gaz):

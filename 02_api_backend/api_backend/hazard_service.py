@@ -25,7 +25,7 @@ from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
 from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues, read_days
-from geo_integration import Gazetteer, hazard_areas, warning_provinces
+from geo_integration import Gazetteer, hazard_areas, named_provinces, warning_provinces
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import AlertLevel, HazardType
@@ -314,9 +314,12 @@ class HazardService:
                 text = f"{w.title} {w.headline or ''}"
                 issued = w.announced_at.astimezone(BANGKOK).date()
                 areas = hazard_areas(self.gazetteer, [w.title, w.headline or ""], classify_hazards, lambda part: read_days(part, issued))
+                named = hazard_areas(self.gazetteer, [w.title, w.headline or ""], classify_hazards, provinces=named_provinces)
                 window = impact_window(w.title, issued)
                 warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
                                  "provinces_by_hazard": {hazard.value: sorted(codes) for hazard, codes in areas.items()},
+                                 # Provinces named by name; the others were reached only through a region (rules.yaml regional_level).
+                                 "named_provinces_by_hazard": {hazard.value: sorted(codes) for hazard, codes in named.items()},
                                  "impact_from": window[0].isoformat() if window else None,
                                  "impact_to": window[1].isoformat() if window else None,
                                  # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
@@ -445,13 +448,15 @@ class HazardService:
                     # Confidence in the stated level: p for a fire level, 1 - p for NORMAL.
                     model_conf = p if model_level != AlertLevel.NORMAL else 1 - p
                     obs = {**obs, "fire_probability_7d": pred["probability"]}
+                active = [regional for _, start, regional in warned if start is None]
                 d = self.engine.decide(DecisionInput(hazard=hazard, observations=obs, degraded_sources=degraded.get(hazard, []),
                                                      model_level=model_level, model_confidence=model_conf,
-                                                     official_warning_active=any(start is None for _, start in warned),
-                                                     official_warning_upcoming=any(start is not None for _, start in warned)))
+                                                     official_warning_active=bool(active),
+                                                     official_warning_upcoming=any(start is not None for _, start, _ in warned),
+                                                     official_warning_regional=bool(active) and all(active)))
                 notices = [f"กรมอุตุนิยมวิทยาประกาศเตือน: {title}" if start is None else
                            f"กรมอุตุนิยมวิทยาประกาศเตือนล่วงหน้า (คาดว่าเริ่ม {thai_date(start)}): {title}"
-                           for title, start in warned] + list(d.notices)
+                           for title, start, _ in warned] + list(d.notices)
                 sources = list(SOURCES[hazard]) + (["กรมอุตุนิยมวิทยา (ประกาศเตือน)"] if warned else [])
                 if obs.get("satellite_flood_cells_7d") is not None:
                     sources.append("GISTDA (ดาวเทียม)")
@@ -501,21 +506,26 @@ class HazardService:
         return datetime.now(BANGKOK).date()
 
     @staticmethod
-    def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None]]]]:
-        """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None) of the
-        TMD warnings that name the province for that hazard. A province uses the days its own statement gives, else the
-        warning's; it is left out once its last impact day has passed."""
-        found: dict[str, dict[HazardType, list[tuple[str, date | None]]]] = {}
+    def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None, bool]]]]:
+        """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None, whether
+        the warning reaches the province only through a region) of the TMD warnings that name the province for that
+        hazard. A province uses the days its own statement gives, else the warning's; it is left out once its last
+        impact day has passed."""
+        found: dict[str, dict[HazardType, list[tuple[str, date | None, bool]]]] = {}
         for warning in warnings:
             whole = (warning.get("impact_from"), warning.get("impact_to"))
             for hazard, provinces in warning.get("provinces_by_hazard", {}).items():
                 own = warning.get("impact_by_hazard", {}).get(hazard, {})
+                # Warnings cached before the named list existed count every province as named, as they did then.
+                named = set(warning["named_provinces_by_hazard"].get(hazard, []) if "named_provinces_by_hazard" in warning
+                            else provinces)
                 for province in provinces:
                     first, last = (date.fromisoformat(d) if d else None for d in own.get(province, whole))
                     if last is not None and today > last:
                         continue
                     upcoming = first if first is not None and today < first - timedelta(days=lead_days) else None
-                    found.setdefault(province, {}).setdefault(HazardType(hazard), []).append((warning["title"], upcoming))
+                    found.setdefault(province, {}).setdefault(HazardType(hazard), []).append(
+                        (warning["title"], upcoming, province not in named))
         return found
 
     @staticmethod

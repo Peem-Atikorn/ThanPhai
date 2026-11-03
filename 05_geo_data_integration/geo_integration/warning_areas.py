@@ -79,8 +79,11 @@ def provinces_by_hazard(gazetteer: Gazetteer, texts: str | Iterable[str], classi
 
 
 def hazard_areas(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Callable[[str], Iterable[H]],
-                 read_days: Callable[[str], Days | None] = lambda _: None) -> dict[H, dict[str, Days | None]]:
+                 read_days: Callable[[str], Days | None] = lambda _: None,
+                 provinces: Callable[[Gazetteer, str], list[str]] | None = None) -> dict[H, dict[str, Days | None]]:
     """Hazard -> province code -> (first, last day) the statements naming both give, or None: the warning's own days.
+
+    `provinces` reads a statement's areas; `named_provinces` keeps only those it names by province, not by region.
 
     Issue 12 has heavy rain in the east and south, "ส่วน" the lower north only thunderstorms: the north must not
     get the heavy-rain (flood) warning. The title and the headline are cut separately, so the title's heavy rain
@@ -91,6 +94,7 @@ def hazard_areas(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Cal
     Issue 3 (2026-11-02): the title says 5-9 Nov for the south, the headline 5-7 Nov for upper Thailand. A province
     named in several statements gets the span of all of them; one without days there keeps the warning's days.
     """
+    provinces = provinces or warning_provinces
     found: dict[H, dict[str, Days | None]] = {}
     for text in [texts] if isinstance(texts, str) else texts:
         previous: tuple[list[H], Days | None] = ([], None)
@@ -101,7 +105,7 @@ def hazard_areas(gazetteer: Gazetteer, texts: str | Iterable[str], classify: Cal
             days = read_days(part) or (previous[1] if same else None)
             for hazard in hazards:
                 areas = found.setdefault(hazard, {})
-                for code in warning_provinces(gazetteer, part):
+                for code in provinces(gazetteer, part):
                     areas[code] = _span(areas[code], days) if code in areas else days
             previous = (hazards, days)
     return {hazard: areas for hazard, areas in found.items() if areas}
@@ -114,6 +118,17 @@ def _span(a: Days | None, b: Days | None) -> Days | None:
 
 def warning_provinces(gazetteer: Gazetteer, text: str) -> list[str]:
     """Province codes that a warning text names, sorted. Empty when it names none ("บริเวณประเทศไทย")."""
+    named, regional = _read_provinces(gazetteer, text)
+    return sorted(named | regional)
+
+
+def named_provinces(gazetteer: Gazetteer, text: str) -> list[str]:
+    """Province codes that a warning text names by province ("จังหวัดสงขลา", "กทม"), sorted; regions do not count."""
+    return sorted(_read_provinces(gazetteer, text)[0])
+
+
+def _read_provinces(gazetteer: Gazetteer, text: str) -> tuple[set[str], set[str]]:
+    """(codes named by province, codes reached through a region)."""
     text = COAST_SPELLING.sub(r"ภาคใต้ฝั่ง\1", text)
     names: set[str] = set()
     # Blank out each region once it is read, so the province scan below cannot also match inside it.
@@ -135,8 +150,7 @@ def warning_provinces(gazetteer: Gazetteer, text: str) -> list[str]:
     for hit in hits:
         if all(hit[1] <= k[0] or hit[0] >= k[1] for k in kept):
             kept.append(hit)
-    codes = {code for _, _, code in kept} | {keys[name] for name in names if name in keys}
-    return sorted(codes)
+    return {code for _, _, code in kept}, {keys[name] for name in names if name in keys}
 
 
 def _province_keys(gazetteer: Gazetteer) -> dict[str, str]:
