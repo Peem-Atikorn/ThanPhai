@@ -169,15 +169,17 @@ def validate(answer: str, facts: str, question: str = "") -> list[str]:
 
 
 class BaseExplainer:
+    # Same question on the same facts gives the same answer until the data refreshes; saves LLM quota and inference cost.
     CACHE_SIZE = 256
+    # ask() runs in the shared thread pool; a slow LLM (up to the timeout) must not take every thread
+    # and stall the data refreshes. Beyond this many calls at once, answer with the template instead.
     MAX_CONCURRENT_CALLS = 4
-    RATE_LIMIT_PAUSE_SECONDS = 60
 
     def __init__(self, config=None):
         self.config = config
         self._cache: OrderedDict[tuple[str, str], str] = OrderedDict()
         self._paused_until = 0.0
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()  # ask() runs in worker threads
         self._slots = threading.BoundedSemaphore(self.MAX_CONCURRENT_CALLS)
 
     def _call_model(self, question: str, facts: str) -> str:
@@ -298,9 +300,7 @@ class QwenExplainer(BaseExplainer):
     @classmethod
     def from_env(cls) -> "QwenExplainer | None":
         provider = os.getenv("LLM_PROVIDER", "").lower()
-        if provider == "gemini":
-            return None
-        if provider != "qwen" and not os.getenv("QWEN_ENDPOINT"):
+        if provider != "qwen":
             return None
         return cls(config=QwenConfig.from_env())
 
@@ -365,10 +365,8 @@ def create_explainer_from_env() -> "GeminiExplainer | QwenExplainer | None":
         return QwenExplainer.from_env()
     if provider == "gemini":
         return GeminiExplainer.from_env()
-    # Auto-detect: Gemini if key exists, Qwen if endpoint configured
+    # Default: if LLM_PROVIDER is not set, use Gemini only if API key is present
     if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
         return GeminiExplainer.from_env()
-    if os.getenv("QWEN_ENDPOINT"):
-        return QwenExplainer.from_env()
     return None
 

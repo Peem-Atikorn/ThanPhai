@@ -38,7 +38,7 @@ TIME_PATTERNS = [
 # TH1412 = เสนา, TH1406 = บางปะอิน, TH1405 = บางบาล
 # TH9011 = หาดใหญ่, TH9001 = เมืองสงขลา
 # TH7207 = สองพี่น้อง, TH7204 = บางปลาม้า
-# TH1206 = ปากเกร็ด, TH1202 = บางกรวย, TH1205 = บางบัวทอง
+# TH1206 = ปากเกร็ด, TH1202 = บางกรวย, TH1204 = บางบัวทอง, TH1205 = ไทรน้อย
 DEFAULT_AREAS = [
     {"code": "TH1412", "name_th": "เสนา", "level": "amphoe", "province_th": "พระนครศรีอยุธยา"},
     {"code": "TH1406", "name_th": "บางปะอิน", "level": "amphoe", "province_th": "พระนครศรีอยุธยา"},
@@ -49,7 +49,8 @@ DEFAULT_AREAS = [
     {"code": "TH7204", "name_th": "บางปลาม้า", "level": "amphoe", "province_th": "สุพรรณบุรี"},
     {"code": "TH1206", "name_th": "ปากเกร็ด", "level": "amphoe", "province_th": "นนทบุรี"},
     {"code": "TH1202", "name_th": "บางกรวย", "level": "amphoe", "province_th": "นนทบุรี"},
-    {"code": "TH1205", "name_th": "บางบัวทอง", "level": "amphoe", "province_th": "นนทบุรี"},
+    {"code": "TH1204", "name_th": "บางบัวทอง", "level": "amphoe", "province_th": "นนทบุรี"},
+    {"code": "TH1205", "name_th": "ไทรน้อย", "level": "amphoe", "province_th": "นนทบุรี"},
     {"code": "TH1001", "name_th": "พระนคร", "level": "amphoe", "province_th": "กรุงเทพมหานคร"},
     {"code": "TH5001", "name_th": "เมืองเชียงใหม่", "level": "amphoe", "province_th": "เชียงใหม่"},
     {"code": "TH8301", "name_th": "เมืองภูเก็ต", "level": "amphoe", "province_th": "ภูเก็ต"},

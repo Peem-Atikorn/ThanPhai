@@ -111,3 +111,13 @@ def test_create_explainer_from_env_none(monkeypatch):
 
     explainer = create_explainer_from_env()
     assert explainer is None
+
+
+def test_create_explainer_from_env_qwen_endpoint_without_provider_returns_none(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("QWEN_ENDPOINT", "http://127.0.0.1:11434")
+
+    explainer = create_explainer_from_env()
+    assert explainer is None
