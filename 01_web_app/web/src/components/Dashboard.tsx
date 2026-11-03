@@ -376,7 +376,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             setRadar(r);
         } }).catch(() => { if (!cancelled) {
             setRadar(null);
-            setRadar(null);
         } });
         return () => { cancelled = true; };
     }, [showRadar, revision]);
