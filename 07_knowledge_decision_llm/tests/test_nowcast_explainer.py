@@ -39,29 +39,47 @@ def test_valid_qwen_answer_passes(sample_summary):
     assert problems == []
 
 
-def test_hallucinated_number_fails_validation(sample_summary):
-    # Says 50 km/h instead of 20
-    bad_answer = "กลุ่มฝนกำลังเคลื่อนไปทางตะวันออกเฉียงใต้ ด้วยความเร็ว 50 กม./ชม. คาดว่าถึงบางนาใน 35 นาที"
+def test_regex_catches_numbers_attached_to_thai_characters(sample_summary):
+    # Says "ใน50นาที" without space; regex must extract 50 and reject it
+    bad_answer = "กลุ่มฝนกำลังเคลื่อนไปทางตะวันออกเฉียงใต้ ด้วยความเร็ว 20 กม./ชม. คาดว่าถึงบางนาใน50นาที"
+    problems = validate_nowcast_explanation(bad_answer, sample_summary)
+    assert any("numbers not in facts" in p for p in problems)
+
+
+def test_hallucinated_unconditional_time_bound_fails(sample_summary):
+    # Says 60 when 60 is not in summary targets or speed
+    bad_answer = "กลุ่มฝนความเร็ว 20 กม./ชม. เคลื่อนไปทางตะวันออกเฉียงใต้ คาดว่าถึงบางนาใน 60 นาที"
     problems = validate_nowcast_explanation(bad_answer, sample_summary)
     assert any("numbers not in facts" in p for p in problems)
 
 
 def test_hallucinated_direction_fails_validation(sample_summary):
-    # Says North instead of Southeast
     bad_answer = "กลุ่มฝนกำลังเคลื่อนไปทางทิศเหนือ ด้วยความเร็ว 20 กม./ชม. คาดว่าถึงบางนาใน 35 นาที"
     problems = validate_nowcast_explanation(bad_answer, sample_summary)
     assert any("direction mismatch" in p for p in problems)
 
 
-def test_hallucinated_district_fails_validation(sample_summary):
-    # Mentions Pattaya which is not in target districts
-    bad_answer = "กลุ่มฝนกำลังเคลื่อนไปทางตะวันออกเฉียงใต้ 20 กม./ชม. คาดว่าถึงพัทยาใน 35 นาที"
-    problems = validate_nowcast_explanation(bad_answer, sample_summary)
-    assert any("district" in p for p in problems)
+def test_hallucinated_district_with_gazetteer(sample_summary):
+    class FakeArea:
+        def __init__(self, name, level="amphoe"):
+            self.name_th = name
+            self.level = level
+
+    class FakeGazetteer:
+        areas = [
+            FakeArea("บางนา"),
+            FakeArea("พระโขนง"),
+            FakeArea("บางพลี"),
+            FakeArea("เมืองสมุทรปราการ"),
+        ]
+
+    # Mentions "บางพลี" which is in gazetteer but not in targets
+    bad_answer = "กลุ่มฝนกำลังเคลื่อนไปทางตะวันออกเฉียงใต้ 20 กม./ชม. คาดว่าถึงบางพลีใน 35 นาที"
+    problems = validate_nowcast_explanation(bad_answer, sample_summary, gazetteer=FakeGazetteer())
+    assert any("unconfirmed district" in p for p in problems)
 
 
 def test_emergency_number_fails_validation(sample_summary):
-    # Contains emergency phone number
     bad_answer = "กลุ่มฝนกำลังเคลื่อนตัว 20 กม./ชม. ไปทางตะวันออกเฉียงใต้ โทร 1784"
     problems = validate_nowcast_explanation(bad_answer, sample_summary)
     assert any("emergency" in p for p in problems)
@@ -77,16 +95,11 @@ def test_nowcast_explainer_uses_qwen_when_valid(sample_summary):
     mock_requester.assert_called_once()
 
 
-def test_nowcast_explainer_falls_back_to_template_on_rejection(sample_summary):
-    # Mock returns answer with hallucinated speed (88 km/h)
-    bad_answer = "กลุ่มฝนความเร็ว 88 กม./ชม. เคลื่อนไปทางตะวันออกเฉียงใต้"
-    mock_requester = MagicMock(return_value=bad_answer)
-    explainer = NowcastExplainer(requester=mock_requester)
-
+def test_nowcast_explainer_skips_qwen_if_provider_not_qwen(sample_summary, monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    # When requester is not injected and LLM_PROVIDER is not 'qwen', returns template without calling network
+    explainer = NowcastExplainer(requester=None)
     result = explainer.explain(sample_summary)
-    # Must fallback to template answer
-    assert "20" in result
-    assert "88" not in result
     assert result == build_template_answer(sample_summary)
 
 

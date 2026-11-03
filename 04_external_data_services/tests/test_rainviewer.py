@@ -1,6 +1,11 @@
+import asyncio
+import time
+from unittest.mock import AsyncMock, MagicMock
+import httpx
 import pytest
 
-from external_data.adapters.rainviewer import build_tile_url, parse_radar_frames
+from external_data.adapters import rainviewer
+from external_data.adapters.rainviewer import build_tile_url, fetch_radar_maps, parse_radar_frames
 
 SAMPLE_MAPS = {
     "version": "v2",
@@ -29,3 +34,44 @@ def test_parse_radar_frames():
 def test_build_tile_url():
     url = build_tile_url("https://tilecache.rainviewer.com", "/v2/radar/abc12345")
     assert url == "https://tilecache.rainviewer.com/v2/radar/abc12345/256/{z}/{x}/{y}/2/1_1.png"
+
+
+def test_fetch_radar_maps_does_not_close_caller_client(monkeypatch):
+    # Reset cache
+    rainviewer._CACHE_FRAMES = None
+    rainviewer._CACHE_TIME = 0.0
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = SAMPLE_MAPS
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.get.return_value = mock_resp
+    # Mock aclose to verify it is NOT called
+    mock_client.aclose = AsyncMock()
+
+    frames = asyncio.run(fetch_radar_maps(client=mock_client))
+    assert len(frames) == 3
+    mock_client.get.assert_called_once()
+    mock_client.aclose.assert_not_called()
+
+
+def test_fetch_radar_maps_caches_results(monkeypatch):
+    rainviewer._CACHE_FRAMES = None
+    rainviewer._CACHE_TIME = 0.0
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = SAMPLE_MAPS
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.get.return_value = mock_resp
+
+    # First call hits mock_client
+    frames1 = asyncio.run(fetch_radar_maps(client=mock_client))
+    assert mock_client.get.call_count == 1
+
+    # Second call within TTL hits cache without calling mock_client
+    frames2 = asyncio.run(fetch_radar_maps(client=mock_client))
+    assert mock_client.get.call_count == 1
+    assert frames1 == frames2

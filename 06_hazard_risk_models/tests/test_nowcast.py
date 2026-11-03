@@ -108,3 +108,32 @@ def test_track_cells_to_districts():
     hit = next((t for t in targets if t["amphoe_th"] == "บางนา"), None)
     assert hit is not None
     assert 5 <= hit["eta_min"] <= 60
+
+
+def test_decode_png_radar():
+    import struct
+    import zlib
+    from risk_models.nowcast import decode_png_radar
+
+    # Create synthetic 256x256 RGBA PNG
+    raw_rgba = np.zeros((256, 256 * 4 + 1), dtype=np.uint8)
+    raw_rgba[50:60, 51:101] = 255  # 50 dBZ rain
+    compressed = zlib.compress(raw_rgba.tobytes())
+    fake_png = (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I4sIIBBBBB", 13, b"IHDR", 256, 256, 8, 6, 0, 0, 0)
+        + b"crc1"
+        + struct.pack(">I4s", len(compressed), b"IDAT")
+        + compressed
+        + b"crc2"
+    )
+
+    arr = decode_png_radar(fake_png)
+    assert arr.shape == (256, 256)
+    assert arr[55, 20] == pytest.approx(65.0, abs=1.0)
+    assert arr[0, 0] == 0.0
+
+    # Corrupt or invalid PNG returns zeroes without crashing
+    bad_arr = decode_png_radar(b"not a png")
+    assert bad_arr.shape == (256, 256)
+    assert bad_arr.max() == 0.0

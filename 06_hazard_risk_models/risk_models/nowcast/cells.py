@@ -26,7 +26,7 @@ def detect_rain_cells(
     cells: list[RainCell] = []
     # Calculate centers of mass for all labels
     centroids = ndimage.center_of_mass(frame, labeled, range(1, num_features + 1))
-    if num_features == 1:
+    if isinstance(centroids, tuple):
         centroids = [centroids]
 
     for label_idx in range(1, num_features + 1):

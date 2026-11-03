@@ -1319,8 +1319,9 @@ class HazardService:
         return {"type": "FeatureCollection", "features": features}
 
     async def get_radar_nowcast(self) -> dict:
-        """Return 1-hour radar nowcast frames (+10m to +60m) and Qwen cell movement explanation."""
-        from external_data.adapters.rainviewer import fetch_radar_maps
+        """Return 1-hour radar nowcast calculated from real radar frames with Qwen explanation."""
+        from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes
+        from risk_models.nowcast import decode_png_radar, detect_rain_cells, estimate_motion, track_cells_to_districts
         from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget
 
         try:
@@ -1328,90 +1329,121 @@ class HazardService:
         except Exception:
             frames = []
 
-        now_ts = int(datetime.now(timezone.utc).timestamp())
-        latest_time = frames[-1]["time"] if frames else now_ts
-        latest_path = frames[-1]["path"] if frames else "/v2/radar/now"
         host = "https://tilecache.rainviewer.com"
+        past_frames = frames[-6:] if frames else []
 
-        # Generate 6 future frames: +10, +20, +30, +40, +50, +60 minutes
-        forecast_frames = []
-        for i in range(1, 7):
-            offset_min = i * 10
-            ft = latest_time + (offset_min * 60)
-            forecast_frames.append({
-                "time": ft,
-                "offset_minutes": offset_min,
-                "is_forecast": True,
-                "tile_url": f"{host}{latest_path}/256/{{z}}/{{x}}/{{y}}/2/1_1.png",
-            })
+        motion_data = None
+        rain_cells_data = []
+        summary = NowcastSummary(
+            location_desc="",
+            direction_th="ไม่มีกลุ่มฝน",
+            speed_kmh=0.0,
+            intensity_desc="ไม่มีฝน",
+            targets=[],
+        )
 
-        # Check rain observations in the country to identify active areas
-        rain_amphoes = []
-        for code, items in self.decisions.items():
-            for it in items:
-                if it.get("hazard") == "rain_storm":
-                    obs = it.get("observations", {})
-                    rain_24h = obs.get("rain_24h") or 0.0
-                    rain_3h = obs.get("rain_3h") or 0.0
-                    if rain_3h > 10.0 or rain_24h > 35.0:
-                        a = self.gazetteer.by_code.get(code)
-                        if a:
-                            rain_amphoes.append(a)
+        if len(past_frames) >= 2:
+            prev_frame_meta = past_frames[-2]
+            curr_frame_meta = past_frames[-1]
 
-        cells = []
-        targets = []
-        if rain_amphoes:
-            avg_lat = sum(a.lat for a in rain_amphoes) / len(rain_amphoes)
-            avg_lon = sum(a.lon for a in rain_amphoes) / len(rain_amphoes)
-            first_prov = self.gazetteer.by_code.get(rain_amphoes[0].parent_code)
-            prov_name = first_prov.name_th if first_prov else "ประเทศไทย"
-            loc_desc = f"บริเวณจังหวัด{prov_name}"
-            speed_kmh = 25.0
-            dir_th = "ตะวันออกเฉียงใต้"
-            dir_deg = 135.0
+            tile_url_prev = f"{host}{prev_frame_meta['path']}/256/4/12/7/2/1_1.png"
+            tile_url_curr = f"{host}{curr_frame_meta['path']}/256/4/12/7/2/1_1.png"
 
-            for idx, a in enumerate(rain_amphoes[:3]):
-                targets.append(RainCellTarget(amphoe_th=a.name_th, eta_min=20 + (idx * 15)))
+            try:
+                bytes_prev = await fetch_tile_bytes(tile_url_prev)
+                bytes_curr = await fetch_tile_bytes(tile_url_curr)
 
-            cells.append({
-                "id": 1,
-                "centroid_lat": round(avg_lat, 3),
-                "centroid_lon": round(avg_lon, 3),
-                "speed_kmh": speed_kmh,
-                "direction_th": dir_th,
-                "target_districts": [{"amphoe_th": t.amphoe_th, "eta_min": t.eta_min} for t in targets],
-            })
-            summary = NowcastSummary(
-                location_desc=loc_desc,
-                direction_th=dir_th,
-                speed_kmh=speed_kmh,
-                intensity_desc="ปานกลางถึงหนัก",
-                targets=targets,
-            )
-        else:
-            speed_kmh = 0.0
-            dir_th = "ไม่มีกลุ่มฝน"
-            dir_deg = 0.0
-            summary = NowcastSummary(
-                location_desc="",
-                direction_th=dir_th,
-                speed_kmh=0.0,
-                intensity_desc="ไม่มีฝน",
-                targets=[],
-            )
+                arr_prev = decode_png_radar(bytes_prev)
+                arr_curr = decode_png_radar(bytes_curr)
+
+                interval_min = max(5.0, (curr_frame_meta["time"] - prev_frame_meta["time"]) / 60.0)
+                motion = estimate_motion(arr_prev, arr_curr, pixel_size_km=9.6, interval_min=interval_min)
+
+                cells = detect_rain_cells(
+                    arr_curr,
+                    threshold=15.0,
+                    min_pixels=4,
+                    origin_lat=21.943,
+                    origin_lon=90.0,
+                    pixel_deg_lat=21.943 / 256.0,
+                    pixel_deg_lon=22.5 / 256.0,
+                )
+
+                if cells and motion.speed_kmh >= 2.0:
+                    amphoe_list = [
+                        {"name_th": a.name_th, "lat": a.lat, "lon": a.lon}
+                        for a in self.gazetteer.areas
+                        if a.level == "amphoe"
+                    ]
+                    target_hits = track_cells_to_districts(
+                        cells=cells,
+                        speed_kmh=motion.speed_kmh,
+                        direction_deg=motion.direction_deg,
+                        districts=amphoe_list,
+                        max_horizon_min=60,
+                    )
+
+                    motion_data = {
+                        "speed_kmh": round(motion.speed_kmh, 1),
+                        "direction_th": motion.direction_th,
+                        "direction_deg": round(motion.direction_deg, 1),
+                    }
+
+                    lead_cell = cells[0]
+                    closest_amphoe = min(
+                        (a for a in self.gazetteer.areas if a.level == "amphoe"),
+                        key=lambda a: (a.lat - lead_cell.centroid_lat) ** 2 + (a.lon - lead_cell.centroid_lon) ** 2,
+                        default=None,
+                    )
+                    prov_parent = self.gazetteer.by_code.get(closest_amphoe.parent_code) if closest_amphoe else None
+                    loc_desc = (
+                        f"บริเวณจังหวัด{prov_parent.name_th}"
+                        if prov_parent
+                        else f"บริเวณพิกัด {lead_cell.centroid_lat:.2f}, {lead_cell.centroid_lon:.2f}"
+                    )
+
+                    intensity_th = (
+                        "หนัก"
+                        if lead_cell.peak_intensity >= 45.0
+                        else ("ปานกลาง" if lead_cell.peak_intensity >= 25.0 else "กำลังอ่อน")
+                    )
+
+                    targets_summary = [
+                        RainCellTarget(amphoe_th=h["amphoe_th"], eta_min=h["eta_min"])
+                        for h in target_hits[:3]
+                    ]
+
+                    for c in cells[:5]:
+                        c_targets = [h for h in target_hits if h["cell_id"] == c.id]
+                        rain_cells_data.append({
+                            "id": c.id,
+                            "centroid_lat": round(c.centroid_lat, 3),
+                            "centroid_lon": round(c.centroid_lon, 3),
+                            "peak_intensity_dbz": round(c.peak_intensity, 1),
+                            "target_districts": [
+                                {"amphoe_th": h["amphoe_th"], "eta_min": h["eta_min"]}
+                                for h in c_targets[:3]
+                            ],
+                        })
+
+                    summary = NowcastSummary(
+                        location_desc=loc_desc,
+                        direction_th=motion.direction_th,
+                        speed_kmh=motion.speed_kmh,
+                        intensity_desc=intensity_th,
+                        targets=targets_summary,
+                    )
+            except Exception:
+                pass
 
         explainer = NowcastExplainer()
-        explanation = explainer.explain(summary)
+        explanation = await asyncio.to_thread(explainer.explain, summary, self.gazetteer)
 
         return {
-            "past_frames": frames[-6:] if frames else [],
-            "forecast_frames": forecast_frames,
-            "motion": {
-                "speed_kmh": speed_kmh,
-                "direction_th": dir_th,
-                "direction_deg": dir_deg,
-            },
-            "rain_cells": cells,
+            "past_frames": past_frames,
+            "forecast_frames": [],
+            "motion": motion_data,
+            "rain_cells": rain_cells_data,
             "explanation": explanation,
-            "source": "RainViewer · คำนวณทิศทางการเคลื่อนที่ของกลุ่มฝนและอธิบายโดย ThanPhai Local AI",
+            "source": "RainViewer · วิเคราะห์การเคลื่อนที่ของกลุ่มฝนด้วย Optical Flow และอธิบายโดย ThanPhai Local AI",
         }

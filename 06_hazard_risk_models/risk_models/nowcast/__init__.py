@@ -30,6 +30,7 @@ class RainCell:
 
 
 from .cells import detect_rain_cells
+from .decode import decode_png_radar
 from .extrapolate import extrapolate_frames
 from .motion import direction_degrees_to_thai, estimate_motion
 from .tracker import track_cells_to_districts
@@ -37,6 +38,7 @@ from .tracker import track_cells_to_districts
 __all__ = [
     "MotionVector",
     "RainCell",
+    "decode_png_radar",
     "detect_rain_cells",
     "direction_degrees_to_thai",
     "estimate_motion",
