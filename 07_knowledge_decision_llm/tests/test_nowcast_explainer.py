@@ -114,3 +114,19 @@ def test_nowcast_explainer_empty_summary_returns_fallback():
     explainer = NowcastExplainer(requester=None)
     result = explainer.explain(empty_summary)
     assert "ไม่พบกลุ่มฝนที่มีนัยสำคัญ" in result
+
+
+def test_nowcast_explainer_undetermined_direction():
+    undetermined_summary = NowcastSummary(
+        location_desc="บริเวณจังหวัดเชียงใหม่",
+        direction_th="ยังประเมินทิศทางไม่ได้",
+        speed_kmh=0.0,
+        intensity_desc="หนัก",
+        targets=[],
+    )
+    explainer = NowcastExplainer(requester=None)
+    result = explainer.explain(undetermined_summary)
+    assert "ยังประเมินทิศทางไม่ได้" in result
+    problems = validate_nowcast_explanation(result, undetermined_summary)
+    assert problems == []
+

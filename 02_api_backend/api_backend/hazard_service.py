@@ -133,6 +133,8 @@ class HazardService:
         self.source_status: dict[str, dict] = {}
         self.updated_at: datetime | None = None
         self._lock = asyncio.Lock()
+        self._radar_nowcast_lock = asyncio.Lock()
+        self._radar_nowcast_cache: tuple[int, dict] | None = None
         self._background: asyncio.Task | None = None
         # Set when slower inputs (satellite, fire model) change, so decisions are rebuilt without
         # pretending the live data is missing (clearing updated_at showed "data time: —" in the UI).
@@ -1324,6 +1326,9 @@ class HazardService:
         from risk_models.nowcast import decode_png_radar, detect_rain_cells, estimate_motion, track_cells_to_districts
         from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget
 
+        if not hasattr(self, "_radar_nowcast_lock") or self._radar_nowcast_lock is None:
+            self._radar_nowcast_lock = asyncio.Lock()
+
         try:
             frames = await fetch_radar_maps()
         except Exception as exc:
@@ -1346,165 +1351,210 @@ class HazardService:
 
         prev_frame_meta = past_frames[-2]
         curr_frame_meta = past_frames[-1]
+        curr_time = curr_frame_meta["time"]
 
-        # Check in-memory nowcast cache by latest frame timestamp
+        # Fast path check outside lock
         cached = getattr(self, "_radar_nowcast_cache", None)
-        if cached and cached[0] == curr_frame_meta["time"]:
+        if cached and cached[0] == curr_time:
             return cached[1]
 
-        tile_url_prev = f"{host}{prev_frame_meta['path']}/256/4/12/7/2/1_1.png"
-        tile_url_curr = f"{host}{curr_frame_meta['path']}/256/4/12/7/2/1_1.png"
+        # Acquire lock to serialize calculation and prevent duplicate work when a new frame arrives
+        async with self._radar_nowcast_lock:
+            # Double check inside lock
+            cached = getattr(self, "_radar_nowcast_cache", None)
+            if cached and cached[0] == curr_time:
+                return cached[1]
 
-        try:
-            bytes_prev, bytes_curr = await asyncio.gather(
-                fetch_tile_bytes(tile_url_prev),
-                fetch_tile_bytes(tile_url_curr),
-            )
-        except Exception as exc:
-            log.warning("Failed to fetch radar tile bytes: %s", exc)
-            return {
-                "status": "unavailable",
-                "past_frames": past_frames,
-                "forecast_frames": [],
-                "motion": None,
-                "rain_cells": [],
-                "explanation": "ไม่สามารถดึงภาพเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
-                "source": "RainViewer · เกิดข้อผิดพลาดในการโหลดภาพเรดาร์",
-            }
+            tile_url_prev = f"{host}{prev_frame_meta['path']}/256/4/12/7/2/1_1.png"
+            tile_url_curr = f"{host}{curr_frame_meta['path']}/256/4/12/7/2/1_1.png"
 
-        interval_min = max(5.0, (curr_frame_meta["time"] - prev_frame_meta["time"]) / 60.0)
-
-        def _compute_nowcast_sync() -> tuple[dict | None, list[dict], NowcastSummary, list[dict]]:
-            arr_prev = decode_png_radar(bytes_prev)
-            arr_curr = decode_png_radar(bytes_curr)
-
-            # Estimate bulk motion using sub-pixel phase cross-correlation
-            motion = estimate_motion(arr_prev, arr_curr, pixel_size_km=9.5, interval_min=interval_min)
-
-            # Detect rain cells with exact inverse Web Mercator projection, filtered to Thailand territory
-            cells = detect_rain_cells(
-                arr_curr,
-                threshold=15.0,
-                min_pixels=4,
-                z=4,
-                tx=12,
-                ty=7,
-                filter_thailand=True,
-            )
-
-            # Generate extrapolated forecast frames metadata (+10 to +60 minutes)
-            forecast_frames = [
-                {
-                    "time": curr_frame_meta["time"] + step * int(interval_min * 60),
-                    "horizon_min": step * int(interval_min),
-                    "dx_pixels": round(motion.dx * step, 1) if motion else 0.0,
-                    "dy_pixels": round(motion.dy * step, 1) if motion else 0.0,
-                }
-                for step in range(1, 7)
-            ]
-
-            if not cells:
-                summary = NowcastSummary(
-                    location_desc="",
-                    direction_th="ไม่มีกลุ่มฝน",
-                    speed_kmh=0.0,
-                    intensity_desc="ไม่มีฝน",
-                    targets=[],
+            try:
+                bytes_prev, bytes_curr = await asyncio.gather(
+                    fetch_tile_bytes(tile_url_prev),
+                    fetch_tile_bytes(tile_url_curr),
                 )
-                return None, [], summary, forecast_frames
+            except Exception as exc:
+                log.warning("Failed to fetch radar tile bytes: %s", exc)
+                return {
+                    "status": "unavailable",
+                    "past_frames": past_frames,
+                    "forecast_frames": [],
+                    "motion": None,
+                    "rain_cells": [],
+                    "explanation": "ไม่สามารถดึงภาพเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "source": "RainViewer · เกิดข้อผิดพลาดในการโหลดภาพเรดาร์",
+                }
 
-            # Rain cells detected
+            interval_min = max(5.0, (curr_frame_meta["time"] - prev_frame_meta["time"]) / 60.0)
+
+            # Amphoe list for boundary filtering and tracking
             amphoe_list = [
-                {"code": a.code, "name_th": a.name_th, "lat": a.lat, "lon": a.lon}
+                {"code": a.code, "name_th": a.name_th, "lat": a.lat, "lon": a.lon, "parent_code": a.parent_code}
                 for a in self.gazetteer.areas
                 if a.level == "amphoe"
             ]
 
-            # Track only top 5 cells for performance
-            target_hits = track_cells_to_districts(
-                cells=cells[:5],
-                speed_kmh=motion.speed_kmh,
-                direction_deg=motion.direction_deg,
-                districts=amphoe_list,
-                max_horizon_min=60,
-            )
+            def _compute_nowcast_sync() -> tuple[dict | None, list[dict], NowcastSummary, list[dict]]:
+                from risk_models.earthquake import distance_km
 
-            is_moving = motion.speed_kmh >= 2.0
-            motion_data = {
-                "speed_kmh": round(motion.speed_kmh, 1),
-                "direction_th": motion.direction_th if is_moving else "เกือบอยู่กับที่",
-                "direction_deg": round(motion.direction_deg, 1),
+                arr_prev = decode_png_radar(bytes_prev)
+                arr_curr = decode_png_radar(bytes_curr)
+
+                # Estimate bulk motion using spatial cross-correlation with sub-pixel refinement
+                motion = estimate_motion(arr_prev, arr_curr, pixel_size_km=9.5, interval_min=interval_min)
+
+                # Detect rain cells with exact inverse Web Mercator projection
+                raw_cells = detect_rain_cells(
+                    arr_curr,
+                    threshold=15.0,
+                    min_pixels=4,
+                    z=4,
+                    tx=12,
+                    ty=7,
+                )
+
+                # Filter cells to Thailand territory: must be within 35 km of at least one Thai amphoe centroid
+                # This rejects storm cells in Cambodia (Phnom Penh), Laos, Myanmar, or far out in the Andaman Sea.
+                cells_with_amphoe: list[tuple[Any, dict, float]] = []
+                for c in raw_cells:
+                    if not amphoe_list:
+                        continue
+                    closest_a = min(
+                        amphoe_list,
+                        key=lambda a: (a["lat"] - c.centroid_lat) ** 2 + (a["lon"] - c.centroid_lon) ** 2,
+                    )
+                    dist = distance_km(c.centroid_lat, c.centroid_lon, closest_a["lat"], closest_a["lon"])
+                    if dist <= 35.0:
+                        cells_with_amphoe.append((c, closest_a, dist))
+
+                cells = [item[0] for item in cells_with_amphoe]
+
+                # Generate extrapolated forecast frames metadata (+10 to +60 minutes)
+                # If motion is undetermined (direction_th == "ทิศทางไม่แน่นอน"), dx/dy are 0
+                is_undetermined = motion.direction_th == "ทิศทางไม่แน่นอน"
+                forecast_frames = [
+                    {
+                        "time": curr_frame_meta["time"] + step * int(interval_min * 60),
+                        "horizon_min": step * int(interval_min),
+                        "dx_pixels": round(motion.dx * step, 1) if (motion and not is_undetermined) else 0.0,
+                        "dy_pixels": round(motion.dy * step, 1) if (motion and not is_undetermined) else 0.0,
+                    }
+                    for step in range(1, 7)
+                ]
+
+                if not cells:
+                    summary = NowcastSummary(
+                        location_desc="",
+                        direction_th="ไม่มีกลุ่มฝน",
+                        speed_kmh=0.0,
+                        intensity_desc="ไม่มีฝน",
+                        targets=[],
+                    )
+                    return None, [], summary, forecast_frames
+
+                lead_cell, lead_amphoe, _ = cells_with_amphoe[0]
+                prov_parent = self.gazetteer.by_code.get(lead_amphoe.get("parent_code")) if lead_amphoe else None
+                loc_desc = (
+                    f"บริเวณจังหวัด{prov_parent.name_th}"
+                    if prov_parent
+                    else f"บริเวณพิกัด {lead_cell.centroid_lat:.2f}, {lead_cell.centroid_lon:.2f}"
+                )
+
+                intensity_th = (
+                    "หนัก"
+                    if lead_cell.peak_intensity >= 45.0
+                    else ("ปานกลาง" if lead_cell.peak_intensity >= 25.0 else "กำลังอ่อน")
+                )
+
+                # Check if motion cannot be determined reliably (e.g. noise spikes > 120 km/h)
+                if is_undetermined:
+                    rain_cells_data = [
+                        {
+                            "id": c.id,
+                            "centroid_lat": round(c.centroid_lat, 3),
+                            "centroid_lon": round(c.centroid_lon, 3),
+                            "peak_intensity_dbz": round(c.peak_intensity, 1),
+                            "target_districts": [],
+                        }
+                        for c in cells[:5]
+                    ]
+                    summary = NowcastSummary(
+                        location_desc=loc_desc,
+                        direction_th="ยังประเมินทิศทางไม่ได้",
+                        speed_kmh=0.0,
+                        intensity_desc=intensity_th,
+                        targets=[],
+                    )
+                    return None, rain_cells_data, summary, forecast_frames
+
+                is_moving = motion.speed_kmh >= 2.0
+                motion_data = {
+                    "speed_kmh": round(motion.speed_kmh, 1),
+                    "direction_th": motion.direction_th if is_moving else "เกือบอยู่กับที่",
+                    "direction_deg": round(motion.direction_deg, 1),
+                }
+
+                if is_moving:
+                    target_hits = track_cells_to_districts(
+                        cells=cells[:5],
+                        speed_kmh=motion.speed_kmh,
+                        direction_deg=motion.direction_deg,
+                        districts=amphoe_list,
+                        max_horizon_min=60,
+                    )
+                else:
+                    target_hits = []
+
+                # Deduplicate targets by district code, keeping earliest ETA
+                earliest_by_amphoe: dict[str, dict] = {}
+                for hit in target_hits:
+                    code_key = hit.get("code") or hit.get("amphoe_th")
+                    if code_key not in earliest_by_amphoe or hit["eta_min"] < earliest_by_amphoe[code_key]["eta_min"]:
+                        earliest_by_amphoe[code_key] = hit
+
+                unique_targets = sorted(earliest_by_amphoe.values(), key=lambda h: h["eta_min"])
+                targets_summary = [
+                    RainCellTarget(amphoe_th=h["amphoe_th"], eta_min=h["eta_min"])
+                    for h in unique_targets[:3]
+                ]
+
+                rain_cells_data = []
+                for c in cells[:5]:
+                    c_targets = [h for h in target_hits if h["cell_id"] == c.id]
+                    rain_cells_data.append({
+                        "id": c.id,
+                        "centroid_lat": round(c.centroid_lat, 3),
+                        "centroid_lon": round(c.centroid_lon, 3),
+                        "peak_intensity_dbz": round(c.peak_intensity, 1),
+                        "target_districts": [
+                            {"amphoe_th": h["amphoe_th"], "eta_min": h["eta_min"]}
+                            for h in c_targets[:3]
+                        ],
+                    })
+
+                summary = NowcastSummary(
+                    location_desc=loc_desc,
+                    direction_th=motion_data["direction_th"],
+                    speed_kmh=motion.speed_kmh,
+                    intensity_desc=intensity_th,
+                    targets=targets_summary,
+                )
+                return motion_data, rain_cells_data, summary, forecast_frames
+
+            # Execute heavy calculation off event loop
+            motion_data, rain_cells_data, summary, forecast_frames = await asyncio.to_thread(_compute_nowcast_sync)
+
+            explainer = NowcastExplainer()
+            explanation = await asyncio.to_thread(explainer.explain, summary, self.gazetteer)
+
+            result = {
+                "status": "ok",
+                "past_frames": past_frames,
+                "forecast_frames": forecast_frames,
+                "motion": motion_data,
+                "rain_cells": rain_cells_data,
+                "explanation": explanation,
+                "source": "RainViewer · คำนวณ Nowcast 1 ชม. จากภาพเรดาร์จริง",
             }
-
-            lead_cell = cells[0]
-            closest_amphoe = min(
-                (a for a in self.gazetteer.areas if a.level == "amphoe"),
-                key=lambda a: (a.lat - lead_cell.centroid_lat) ** 2 + (a.lon - lead_cell.centroid_lon) ** 2,
-                default=None,
-            )
-            prov_parent = self.gazetteer.by_code.get(closest_amphoe.parent_code) if closest_amphoe else None
-            loc_desc = (
-                f"บริเวณจังหวัด{prov_parent.name_th}"
-                if prov_parent
-                else f"บริเวณพิกัด {lead_cell.centroid_lat:.2f}, {lead_cell.centroid_lon:.2f}"
-            )
-
-            intensity_th = (
-                "หนัก"
-                if lead_cell.peak_intensity >= 45.0
-                else ("ปานกลาง" if lead_cell.peak_intensity >= 25.0 else "กำลังอ่อน")
-            )
-
-            # Deduplicate targets by district code, keeping earliest ETA
-            earliest_by_amphoe: dict[str, dict] = {}
-            for hit in target_hits:
-                code_key = hit.get("code") or hit.get("amphoe_th")
-                if code_key not in earliest_by_amphoe or hit["eta_min"] < earliest_by_amphoe[code_key]["eta_min"]:
-                    earliest_by_amphoe[code_key] = hit
-
-            unique_targets = sorted(earliest_by_amphoe.values(), key=lambda h: h["eta_min"])
-            targets_summary = [
-                RainCellTarget(amphoe_th=h["amphoe_th"], eta_min=h["eta_min"])
-                for h in unique_targets[:3]
-            ]
-
-            rain_cells_data = []
-            for c in cells[:5]:
-                c_targets = [h for h in target_hits if h["cell_id"] == c.id]
-                rain_cells_data.append({
-                    "id": c.id,
-                    "centroid_lat": round(c.centroid_lat, 3),
-                    "centroid_lon": round(c.centroid_lon, 3),
-                    "peak_intensity_dbz": round(c.peak_intensity, 1),
-                    "target_districts": [
-                        {"amphoe_th": h["amphoe_th"], "eta_min": h["eta_min"]}
-                        for h in c_targets[:3]
-                    ],
-                })
-
-            summary = NowcastSummary(
-                location_desc=loc_desc,
-                direction_th=motion_data["direction_th"],
-                speed_kmh=motion.speed_kmh,
-                intensity_desc=intensity_th,
-                targets=targets_summary,
-            )
-            return motion_data, rain_cells_data, summary, forecast_frames
-
-        # Execute heavy calculation off event loop
-        motion_data, rain_cells_data, summary, forecast_frames = await asyncio.to_thread(_compute_nowcast_sync)
-
-        explainer = NowcastExplainer()
-        explanation = await asyncio.to_thread(explainer.explain, summary, self.gazetteer)
-
-        result = {
-            "status": "ok",
-            "past_frames": past_frames,
-            "forecast_frames": forecast_frames,
-            "motion": motion_data,
-            "rain_cells": rain_cells_data,
-            "explanation": explanation,
-            "source": "RainViewer · วิเคราะห์การเคลื่อนที่ของกลุ่มฝนด้วย Optical Flow และอธิบายโดย ThanPhai Local AI",
-        }
-        self._radar_nowcast_cache = (curr_frame_meta["time"], result)
-        return result
+            self._radar_nowcast_cache = (curr_time, result)
+            return result

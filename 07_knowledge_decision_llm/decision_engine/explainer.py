@@ -286,13 +286,6 @@ class QwenConfig:
         )
 
 
-class QwenExplainer(BaseExplainer):
-    """Local Qwen explainer (via Ollama or OpenAI-compatible server).
-
-    Uses the exact same validate() logic as Gemini. If Qwen fails, times out, or produces an
-    answer that fails validation, returns None so the agent falls back to deterministic rule templates.
-    """
-
 def call_qwen_api(
     endpoint: str,
     model: str,

@@ -30,7 +30,11 @@ def estimate_motion(
     pixel_size_km: float = 1.0,
     interval_min: float = 10.0,
 ) -> MotionVector:
-    """Estimate bulk motion displacement (dx, dy) between two frames using phase cross-correlation.
+    """Estimate bulk motion displacement (dx, dy) between two frames using 2D spatial cross-correlation via FFT.
+
+    Uses spatial cross-correlation with 2D parabolic peak interpolation around the correlation maximum
+    to achieve sub-pixel displacement precision. This avoids the delta-spike and sinc-fringe artefacts
+    of normalized phase correlation, allowing smooth quadratic interpolation down to fractional pixel shifts.
     
     In image coordinates:
       dx > 0 means moving right (East)

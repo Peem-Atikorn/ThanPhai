@@ -50,8 +50,11 @@ class NowcastSummary:
 
 def build_template_answer(summary: NowcastSummary) -> str:
     """Generate a safe, deterministic template sentence without LLM."""
-    if not summary.location_desc or summary.direction_th in ["ไม่มีกลุ่มฝน", "ทิศทางไม่แน่นอน"]:
+    if not summary.location_desc or summary.direction_th == "ไม่มีกลุ่มฝน":
         return "ไม่พบกลุ่มฝนที่มีนัยสำคัญในระยะคาดการณ์ 1 ชั่วโมงข้างหน้า"
+
+    if summary.direction_th in ["ยังประเมินทิศทางไม่ได้", "ทิศทางไม่แน่นอน"]:
+        return f"ตรวจพบกลุ่มฝน{summary.intensity_desc}{summary.location_desc} ยังประเมินทิศทางไม่ได้"
 
     if summary.speed_kmh < 2.0 or summary.direction_th in ["เกือบอยู่กับที่", "อยู่กับที่"]:
         return f"กลุ่มฝน{summary.intensity_desc}{summary.location_desc} มีการเคลื่อนตัวช้าหรือเกือบอยู่กับที่ โปรดเฝ้าระวังฝนสะสมและน้ำท่วมฉับพลัน"
@@ -103,7 +106,12 @@ def validate_nowcast_explanation(
     expected_dir = summary.direction_th
     # Remove location_desc from answer first so phrases like "ทางตะวันตกของกรุงเทพฯ" do not trigger false direction mismatch
     text_for_dir_check = answer.replace(summary.location_desc, "")
-    if expected_dir in ["เกือบอยู่กับที่", "อยู่กับที่"]:
+    if expected_dir in ["ยังประเมินทิศทางไม่ได้", "ทิศทางไม่แน่นอน", "ไม่มีกลุ่มฝน"]:
+        for d in ALL_DIRECTIONS:
+            if d in text_for_dir_check:
+                problems.append(f"Contains direction mismatch: found {d}, expected unknown direction")
+                break
+    elif expected_dir in ["เกือบอยู่กับที่", "อยู่กับที่"]:
         for d in ALL_DIRECTIONS:
             if d in text_for_dir_check:
                 problems.append(f"Contains direction mismatch: found {d}, expected stationary")
@@ -167,7 +175,7 @@ class NowcastExplainer:
     def explain(self, summary: NowcastSummary, gazetteer: Any = None) -> str:
         """Explain nowcast summary using Qwen; falls back to template on any error or validation failure."""
         template = build_template_answer(summary)
-        if not summary.location_desc or summary.direction_th in ["ไม่มีกลุ่มฝน", "ทิศทางไม่แน่นอน"]:
+        if not summary.location_desc or summary.direction_th in ["ไม่มีกลุ่มฝน", "ยังประเมินทิศทางไม่ได้", "ทิศทางไม่แน่นอน"]:
             return template
 
         # Check if Qwen is explicitly enabled via LLM_PROVIDER=qwen

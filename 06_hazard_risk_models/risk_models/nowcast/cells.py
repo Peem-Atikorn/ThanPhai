@@ -4,12 +4,6 @@ from scipy import ndimage
 
 from . import RainCell
 
-# Approximate bounding box covering Thailand land territory and immediate border/coastal waters
-THAILAND_MIN_LAT = 5.5
-THAILAND_MAX_LAT = 21.0
-THAILAND_MIN_LON = 97.0
-THAILAND_MAX_LON = 106.0
-
 
 def pixel_to_latlon_mercator(cy: float, cx: float, z: int, tx: int, ty: int, tile_size: int = 256) -> tuple[float, float]:
     """Inverse Web Mercator projection (EPSG:3857) converting tile pixel (cy, cx) to (lat, lon)."""
@@ -33,14 +27,12 @@ def detect_rain_cells(
     z: int | None = None,
     tx: int | None = None,
     ty: int | None = None,
-    filter_thailand: bool = False,
 ) -> list[RainCell]:
     """Segment frame into rain cells using connected components.
 
     threshold: dBZ or mm/h threshold to consider as rain cell
     min_pixels: minimum cell area
     z, tx, ty: Web Mercator tile zoom and coordinates for exact inverse Mercator projection.
-    filter_thailand: if True, filter out rain cells outside Thailand territory (e.g. Andaman Sea / Myanmar).
     """
     binary_mask = frame >= threshold
     labeled, num_features = ndimage.label(binary_mask)
@@ -69,10 +61,6 @@ def detect_rain_cells(
             cell_lat = origin_lat - (cy * pixel_deg_lat)
             cell_lon = origin_lon + (cx * pixel_deg_lon)
 
-        if filter_thailand:
-            if not (THAILAND_MIN_LAT <= cell_lat <= THAILAND_MAX_LAT and THAILAND_MIN_LON <= cell_lon <= THAILAND_MAX_LON):
-                continue
-
         cells.append(
             RainCell(
                 id=label_idx,
@@ -89,4 +77,3 @@ def detect_rain_cells(
     # Sort by peak intensity descending
     cells.sort(key=lambda c: c.peak_intensity, reverse=True)
     return cells
-

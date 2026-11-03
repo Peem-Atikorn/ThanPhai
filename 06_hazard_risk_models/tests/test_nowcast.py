@@ -111,26 +111,22 @@ def test_track_cells_to_districts():
 
 
 def test_decode_png_radar():
-    import struct
-    import zlib
+    import io
+    from PIL import Image
     from risk_models.nowcast import decode_png_radar
 
-    # Create synthetic 256x256 RGBA PNG
-    raw_rgba = np.zeros((256, 256 * 4 + 1), dtype=np.uint8)
-    raw_rgba[50:60, 51:101] = 255  # 50 dBZ rain
-    compressed = zlib.compress(raw_rgba.tobytes())
-    fake_png = (
-        b"\x89PNG\r\n\x1a\n"
-        + struct.pack(">I4sIIBBBBB", 13, b"IHDR", 256, 256, 8, 6, 0, 0, 0)
-        + b"crc1"
-        + struct.pack(">I4s", len(compressed), b"IDAT")
-        + compressed
-        + b"crc2"
-    )
+    im = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    # 0xff4400 is Universal Blue for 45.0 dBZ
+    for y in range(50, 60):
+        for x in range(50, 60):
+            im.putpixel((x, y), (255, 68, 0, 255))
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    fake_png = buf.getvalue()
 
     arr = decode_png_radar(fake_png)
     assert arr.shape == (256, 256)
-    assert arr[55, 20] == pytest.approx(65.0, abs=1.0)
+    assert arr[55, 55] == pytest.approx(45.0, abs=0.5)
     assert arr[0, 0] == 0.0
 
     # Corrupt or invalid PNG returns zeroes without crashing
@@ -195,7 +191,7 @@ def test_detect_rain_cells_with_web_mercator():
     # Put rain cell at Bangkok coordinates on tile 4/12/7: (py=98, px=119)
     frame[95:102, 116:123] = 45.0
 
-    cells = detect_rain_cells(frame, threshold=20.0, min_pixels=4, z=4, tx=12, ty=7, filter_thailand=True)
+    cells = detect_rain_cells(frame, threshold=20.0, min_pixels=4, z=4, tx=12, ty=7)
     assert len(cells) == 1
     # Lat should be ~13.7 deg N, Lon ~100.5 deg E
     assert 13.0 <= cells[0].centroid_lat <= 14.5

@@ -1,6 +1,6 @@
 """Rain radar nowcasting module.
 
-Calculates radar rain-cell motion using optical flow / phase cross-correlation,
+Calculates radar rain-cell motion using 2D spatial cross-correlation via FFT,
 extrapolates radar frames +10 to +60 minutes ahead, and identifies target districts
 in the projected path.
 """
