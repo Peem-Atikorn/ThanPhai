@@ -43,11 +43,23 @@ def test_upcoming_official_warning_is_a_watch_and_rules_can_raise_it():
 
 
 def test_regional_official_warning_is_a_watch_and_rules_can_raise_it():
-    d = decide(official_warning_active=True, official_warning_regional=True)
+    d = decide(official_warning_active=True, official_warning_kinds=["regional"])
     assert d.level == L.WATCH and d.rule_ids == ["OFFICIAL_WARNING_REGIONAL"]
-    assert decide(official_warning_active=True, official_warning_regional=True, observations={"above_bank_m": 0.1}).level == L.WARNING
-    # Regional alone means nothing without an active warning.
-    assert decide(official_warning_regional=True, official_warning_upcoming=True).rule_ids == ["OFFICIAL_WARNING_UPCOMING"]
+    assert decide(official_warning_active=True, official_warning_kinds=["regional"], observations={"above_bank_m": 0.1}).level == L.WARNING
+    # Kinds mean nothing without an active warning.
+    assert decide(official_warning_kinds=["regional"], official_warning_upcoming=True).rule_ids == ["OFFICIAL_WARNING_UPCOMING"]
+
+
+@pytest.mark.parametrize(("kinds", "level", "rule"), [
+    ([], L.WARNING, "OFFICIAL_WARNING"),  # no kind given: as before kinds existed
+    (["heavy_rain"], L.WATCH, "OFFICIAL_WARNING_HEAVY_RAIN"),
+    (["regional", "heavy_rain"], L.WATCH, "OFFICIAL_WARNING_HEAVY_RAIN"),  # same level: the more specific kind
+    (["very_heavy_rain"], L.WARNING, "OFFICIAL_WARNING_VERY_HEAVY_RAIN"),
+    (["heavy_rain", "named"], L.WARNING, "OFFICIAL_WARNING"),  # two warnings: the higher level
+])
+def test_official_warning_kind_sets_the_level(kinds, level, rule):
+    d = decide(hazard=HazardType.RAIN_STORM, official_warning_active=True, official_warning_kinds=kinds)
+    assert d.level == level and d.rule_ids == [rule]
 
 
 @pytest.mark.parametrize(

@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from external_data.adapters.tmd import classify_hazards, read_days
-from geo_integration import (Gazetteer, hazard_areas, named_provinces, provinces_by_hazard, warning_parts, warning_provinces,
-                             warning_statements)
+from geo_integration import (Gazetteer, hazard_areas, named_provinces, provinces_by_hazard, table_provinces, warning_parts,
+                             warning_provinces, warning_statements)
 from geo_integration.warning_areas import REGIONS
 from thanphai_shared import HazardType
 
@@ -154,6 +154,14 @@ def test_bulletin_gives_each_region_its_days_and_flood_advice_stays_in_the_south
     south = [s for s in warning_statements(gaz, BULLETIN_5, classify_hazards) if s.regions == ["ภาคใต้"]]
     assert [s.hazards for s in south] == [[HazardType.RAIN_STORM], [HazardType.FLOOD]]
     assert "หนักมาก" in south[1].wording and "น้ำท่วมฉับพลัน" in south[1].wording
+
+
+def test_table_row_labels_are_not_whole_regions(gaz):
+    # Daily table of issue 5 (5 Nov): "ภาคใต้:" heads six southern provinces, not the whole south.
+    row = ("ภาคใต้: จังหวัดชุมพร สุราษฎร์ธานี นครศรีธรรมราช สงขลา ปัตตานี และนราธิวาส "
+           "ภาคกลาง: จังหวัดนครปฐม รวมทั้งกรุงเทพมหานครและปริมณฑล")
+    assert table_provinces(gaz, row) == sorted({"TH86", "TH84", "TH80", "TH90", "TH94", "TH96", "TH73", *BANGKOK_AREA})
+    assert table_provinces(gaz, "ภาคตะวันออก: จังหวัดชลบุรี และระยอง") == ["TH20", "TH21"]
 
 
 def test_province_list_with_short_names(gaz):

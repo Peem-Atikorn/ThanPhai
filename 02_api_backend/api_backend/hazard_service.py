@@ -26,7 +26,7 @@ from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
 from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues, read_days
-from geo_integration import Gazetteer, hazard_areas, warning_provinces, warning_statements
+from geo_integration import Gazetteer, hazard_areas, table_provinces, warning_provinces, warning_statements
 from geo_integration.warning_areas import REGIONS
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
@@ -321,19 +321,15 @@ class HazardService:
                 statements = warning_statements(self.gazetteer, texts, classify_hazards, lambda part: read_days(part, issued))
                 areas = hazard_areas(self.gazetteer, texts, classify_hazards, lambda part: read_days(part, issued))
                 window = impact_window(w.title, issued)
-                # Each statement's days with whether it sets rules.yaml min_level (a province named by name, or a region
-                # in strong_words) or regional_level. A region WATCH on 5-7 Nov and WARNING on 8-9 Nov is a WATCH on 5 Nov.
-                periods: dict[str, dict[str, list]] = {}
-                for s in statements:
-                    days = [d.isoformat() for d in s.days] if s.days else [None, None]
-                    strong = self._strong(s.wording)
-                    for hazard in s.hazards:
-                        for code in sorted(s.provinces):
-                            periods.setdefault(hazard.value, {}).setdefault(code, []).append([*days, strong or code in s.named])
+                periods, rain_days = self._periods(statements, w.rain_days, window)
+                provinces = {hazard.value: sorted(codes) for hazard, codes in areas.items()}
+                for hazard, codes in periods.items():  # daily tables can name provinces the statements reach only by region
+                    provinces[hazard] = sorted(set(provinces.get(hazard, [])) | set(codes))
                 warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
-                                 "provinces_by_hazard": {hazard.value: sorted(codes) for hazard, codes in areas.items()},
+                                 "provinces_by_hazard": provinces,
                                  "periods_by_hazard": periods,
-                                 "by_region": self._by_region(statements, window),
+                                 "by_region": self._by_region(statements, window, tables=bool(w.rain_days)),
+                                 "rain_days": rain_days,
                                  "impact_from": window[0].isoformat() if window else None,
                                  "impact_to": window[1].isoformat() if window else None,
                                  # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
@@ -462,12 +458,12 @@ class HazardService:
                     # Confidence in the stated level: p for a fire level, 1 - p for NORMAL.
                     model_conf = p if model_level != AlertLevel.NORMAL else 1 - p
                     obs = {**obs, "fire_probability_7d": pred["probability"]}
-                active = [regional for _, start, regional in warned if start is None]
+                active = [kinds for _, start, kinds in warned if start is None]
                 d = self.engine.decide(DecisionInput(hazard=hazard, observations=obs, degraded_sources=degraded.get(hazard, []),
                                                      model_level=model_level, model_confidence=model_conf,
                                                      official_warning_active=bool(active),
                                                      official_warning_upcoming=any(start is not None for _, start, _ in warned),
-                                                     official_warning_regional=bool(active) and all(active)))
+                                                     official_warning_kinds=[k for kinds in active for k in kinds]))
                 notices = [f"กรมอุตุนิยมวิทยาประกาศเตือน: {title}" if start is None else
                            f"กรมอุตุนิยมวิทยาประกาศเตือนล่วงหน้า (คาดว่าเริ่ม {thai_date(start)}): {title}"
                            for title, start, _ in warned] + list(d.notices)
@@ -520,23 +516,25 @@ class HazardService:
         return datetime.now(BANGKOK).date()
 
     @staticmethod
-    def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None, bool]]]]:
-        """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None, whether
-        the statements in force reach the province only through a region without strong wording) of the TMD warnings
-        that name the province for that hazard. Each statement counts on its own days (a statement without days: the
-        warning's), from `lead_days` before its first day to its last; the province is left out once all have passed."""
-        found: dict[str, dict[HazardType, list[tuple[str, date | None, bool]]]] = {}
+    def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None, list[str]]]]]:
+        """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None, kinds of
+        the periods in force: decision_engine OFFICIAL_KINDS) of the TMD warnings that name the province for that
+        hazard. Each period counts on its own days (one without days: the warning's), from `lead_days` before its first
+        day to its last; the province is left out once all have passed."""
+        found: dict[str, dict[HazardType, list[tuple[str, date | None, list[str]]]]] = {}
         for warning in warnings:
             whole = (warning.get("impact_from"), warning.get("impact_to"))
             for hazard, provinces in warning.get("provinces_by_hazard", {}).items():
                 own = warning.get("impact_by_hazard", {}).get(hazard, {})
                 for province in provinces:
                     if "periods_by_hazard" in warning:
-                        periods = warning["periods_by_hazard"].get(hazard, {}).get(province) or [[None, None, True]]
+                        periods = warning["periods_by_hazard"].get(hazard, {}).get(province) or [[None, None, "named"]]
                     else:  # cached before periods existed: one period, min_level, as it was then
-                        periods = [[*own.get(province, whole), True]]
+                        periods = [[*own.get(province, whole), "named"]]
                     active, upcoming = [], []
-                    for start, end, firm in periods:
+                    for start, end, kind in periods:
+                        if isinstance(kind, bool):  # cached when a period held only "sets min_level"
+                            kind = "named" if kind else "regional"
                         first, last = (date.fromisoformat(d) if d else None
                                        for d in ((start, end) if start or end else whole))
                         if last is not None and today > last:
@@ -544,28 +542,77 @@ class HazardService:
                         if first is not None and today < first - timedelta(days=lead_days):
                             upcoming.append(first)
                         else:
-                            active.append(firm)
+                            active.append(kind)
                     if active:
-                        entry = (warning["title"], None, not any(active))
+                        entry = (warning["title"], None, active)
                     elif upcoming:
-                        entry = (warning["title"], min(upcoming), True)
+                        entry = (warning["title"], min(upcoming), [])
                     else:
                         continue
                     found.setdefault(province, {}).setdefault(HazardType(hazard), []).append(entry)
         return found
+
+    def _periods(self, statements: list, rain_days: list, window: tuple[date, date] | None) -> tuple[dict, list[dict]]:
+        """Hazard -> province -> [first day, last day, kind] periods of a warning, and its daily tables for display.
+
+        Statements: "named" for a province named by name, or for a region whose statement uses strong_words when the
+        bulletin has no daily tables; otherwise "regional". A region WATCH on 5-7 Nov and WARNING on 8-9 Nov is a WATCH
+        on 5 Nov, as each period counts only on its own days.
+
+        Daily tables (issue 288/2569): a province listed for heavy rain gets "heavy_rain", for very heavy rain
+        "very_heavy_rain", from its first listed day of that kind to the end of the bulletin's period for it, not the
+        listed day alone: เชียงใหม่ listed on 6 Nov stays on through upper Thailand's 5-7 Nov. Flood: very heavy rain
+        only where a statement warns that province of flood; the flood statement's own provinces stay "regional".
+        """
+        iso = lambda d: d.isoformat() if d else None  # noqa: E731
+        periods: dict[str, dict[str, list]] = {}
+        ends: dict[str, dict[str, date | None]] = {}  # hazard -> province -> last statement day (None: the window's)
+        for s in statements:
+            first, last = s.days or (None, None)
+            kind = "named" if not rain_days and self._strong(s.wording) else "regional"
+            for hazard in s.hazards:
+                for code in sorted(s.provinces):
+                    periods.setdefault(hazard.value, {}).setdefault(code, []).append(
+                        [iso(first), iso(last), "named" if code in s.named else kind])
+                    end = last or (window[1] if window else None)
+                    old = ends.setdefault(hazard.value, {}).get(code)
+                    ends[hazard.value][code] = end if old is None or (end and end > old) else old
+
+        listed: dict[str, dict[bool, list[date]]] = {}  # province -> very heavy? -> days
+        shown = []
+        for row in rain_days:
+            codes = table_provinces(self.gazetteer, row.areas)
+            for code in codes:
+                listed.setdefault(code, {}).setdefault(row.very_heavy, []).append(row.day)
+            shown.append({"day": row.day.isoformat(), "very_heavy": row.very_heavy,
+                          "provinces": [self.gazetteer.by_code[c].name_th for c in codes if c in self.gazetteer.by_code]})
+        for code, by_kind in listed.items():
+            last_listed = max(d for days in by_kind.values() for d in days)
+            for hazard, kind_of in (("rain_storm", None), ("flood", "flood")):
+                if kind_of and code not in ends.get("flood", {}):
+                    continue  # no flood statement for this province: tables are rain only
+                statement_end = ends.get(hazard, {}).get(code) or (window[1] if window else None)
+                end = max(last_listed, statement_end) if statement_end else last_listed
+                for very, days in sorted(by_kind.items()):
+                    if hazard == "flood" and not very:
+                        continue
+                    periods.setdefault(hazard, {}).setdefault(code, []).append(
+                        [min(days).isoformat(), end.isoformat(), "very_heavy_rain" if very else "heavy_rain"])
+        return periods, shown
 
     def _strong(self, wording: str) -> bool:
         """The statement says heavy impact is likely (rules.yaml strong_words), so a region keeps min_level."""
         compact = re.sub(r"\s+", "", wording)
         return any(word in compact for word in self.engine.rules["official_warning"]["strong_words"])
 
-    def _by_region(self, statements: list, window: tuple[date, date] | None) -> list[dict]:
+    def _by_region(self, statements: list, window: tuple[date, date] | None, tables: bool = False) -> list[dict]:
         """The warning as the overview shows it: one entry per days, level and areas, with the hazards for exactly those
         areas. Issue 288/2569: upper Thailand 5-7 Nov WATCH (rain), the south 7-9 Nov WARNING (rain, flood).
 
         Statements with the same days, level and hazards are joined first, and a region whose provinces all lie in
         another region of the group is left out ("ส่วนภาคเหนือ ภาคกลาง … ในระยะถัดไป" inside "ประเทศไทยตอนบน").
         Then groups for the same areas join their hazards. Rain in the north and flood in the south stay apart.
+        With daily tables, a region's level is regional_level: the tables (shown apart) say where it is heavier.
         """
         rules = self.engine.rules["official_warning"]
         groups: dict[tuple, list[str]] = {}
@@ -576,7 +623,7 @@ class HazardService:
             areas += [label for label in labels if label not in areas]
 
         for s in statements:
-            level = rules["min_level"] if self._strong(s.wording) else rules["regional_level"]
+            level = rules["min_level"] if not tables and self._strong(s.wording) else rules["regional_level"]
             if s.regions:
                 add(s.days, level, s.hazards, s.regions)
             if s.named:

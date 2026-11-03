@@ -604,3 +604,5 @@ def test_reason_names_an_upcoming_tmd_warning():
     assert _reason({"rule_ids": ["OFFICIAL_WARNING"]}) == "มีประกาศเตือนจากกรมอุตุนิยมวิทยา"
     assert "ล่วงหน้า" in _reason({"rule_ids": ["OFFICIAL_WARNING_UPCOMING"]})
     assert "ครอบคลุมทั้งภาค" in _reason({"rule_ids": ["OFFICIAL_WARNING_REGIONAL"]})
+    assert _reason({"rule_ids": ["OFFICIAL_WARNING_HEAVY_RAIN"]}).endswith("มีฝนตกหนัก")
+    assert _reason({"rule_ids": ["OFFICIAL_WARNING_VERY_HEAVY_RAIN"]}).endswith("มีฝนตกหนักมาก")

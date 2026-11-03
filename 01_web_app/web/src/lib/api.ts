@@ -249,6 +249,8 @@ export interface OfficialWarning {
   url?: string;
   hazards: Hazard[];
   by_region?: { from: string | null; to: string | null; level: Exclude<Level, null>; hazards: Hazard[]; areas: string[] }[];
+  /** The bulletin's daily tables: provinces TMD expects heavy (35.1-90 mm) or very heavy (> 90 mm) rain that day. */
+  rain_days?: { day: string; very_heavy: boolean; provinces: string[] }[];
 }
 
 export type AreaBoundary = Omit<GeoJSON.Feature, "bbox"> & { bbox: [number, number, number, number] };
