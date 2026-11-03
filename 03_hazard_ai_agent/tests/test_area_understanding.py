@@ -60,6 +60,30 @@ def test_mueang_with_province_assesses_the_city_district(gazetteer):
     assert tools.calls == ["TH5001"]
 
 
+@pytest.mark.parametrize(("question", "area_code"), [
+    ("สรุปน้ำท่วมอำเภอเสนา", "TH1412"),
+    ("สรุปสถานการณ์จังหวัดเชียงใหม่", "TH50"),
+    ("อำเภอเสนาฝนตกมากที่สุดเท่าไหร่", "TH1412"),
+])
+def test_named_area_takes_priority_over_national_intent_words(gazetteer, question, area_code):
+    tools = Tools()
+    answer = HazardAgent(gazetteer, tools).ask(question, NOW)
+
+    assert answer.intent == "risk" and answer.area["code"] == area_code
+    assert tools.calls == [area_code]
+
+
+def test_future_national_question_asks_for_a_specific_area(gazetteer):
+    tools = Tools()
+    u = understand("พรุ่งนี้ฝนตกทั่วประเทศไหม", gazetteer, NOW)
+    answer = HazardAgent(gazetteer, tools).ask("พรุ่งนี้ฝนตกทั่วประเทศไหม", NOW)
+
+    assert u.future and u.intent == "risk"
+    assert answer.intent == "risk" and answer.area is None
+    assert "ระบุพื้นที่" in answer.text or "ไม่พบชื่อพื้นที่" in answer.text
+    assert tools.calls == []
+
+
 def test_region_uses_aggregate_assessments(gazetteer):
     tools = Tools()
     u = understand("ภาคเหนือมีไฟป่ากี่จุด", gazetteer, NOW)

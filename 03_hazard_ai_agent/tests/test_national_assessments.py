@@ -56,3 +56,14 @@ def test_region_hazard_question_uses_region_filter(gazetteer):
 def test_empty_decisions_return_a_clear_no_data_answer(gazetteer):
     answer = HazardAgent(gazetteer, NationalTools([])).ask("สรุปน้ำท่วมทั้งประเทศ", NOW)
     assert "ยังไม่มีผลประเมิน" in answer.text
+
+
+def test_overview_distinguishes_missing_hazard_data_from_zero_risk(gazetteer):
+    tools = NationalTools([
+        {"area_code": "TH5001", "hazard": "flood", "level": "WATCH"},
+    ])
+    answer = HazardAgent(gazetteer, tools).ask("ภาพรวมทั้งประเทศวันนี้", NOW)
+
+    assert "น้ำท่วม: ปกติ 0 อำเภอ" in answer.text
+    assert "ฝุ่น PM2.5: ไม่มีผลประเมินรายอำเภอ" in answer.text
+    assert "ฝุ่น PM2.5: ปกติ 0 อำเภอ" not in answer.text
