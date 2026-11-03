@@ -140,6 +140,6 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         notes.append("no hazard named; checking all four")
     if intent in ("risk", "explain") and not areas:
         notes.append("no area found")
-    if areas and sum(1 for a in areas if a.level == areas[0].level) > 1:
+    if areas and sum(1 for a in areas if a.level == areas[0].level and a.name_th == areas[0].name_th) > 1:
         notes.append("ambiguous area")
     return Understanding(intent, hazards, areas, start, end, language, notes, future)

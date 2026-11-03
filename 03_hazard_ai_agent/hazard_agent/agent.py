@@ -242,9 +242,11 @@ class HazardAgent:
         if not u.area:
             text = "ไม่พบชื่อพื้นที่ในคำถาม ช่วยระบุอำเภอหรือจังหวัด เช่น \"อำเภอเสนา จังหวัดพระนครศรีอยุธยา\" ครับ"
             return AgentAnswer(text, u.intent, None, [h.value for h in u.hazards], notes=u.notes)
-        if "ambiguous area" in u.notes and u.area.level == "tambon":
-            options = " / ".join(_area_label(a, self.gazetteer) for a in u.areas[:4])
-            return AgentAnswer(f"พบหลายพื้นที่ชื่อนี้: {options} หมายถึงที่ไหนครับ", "clarify", None, [h.value for h in u.hazards], notes=u.notes)
+        if "ambiguous area" in u.notes:
+            same_name = [a for a in u.areas if a.level == u.area.level and a.name_th == u.area.name_th]
+            options = " / ".join(_area_label(a, self.gazetteer) for a in same_name[:4])
+            prompt = f"ยังมีอีก {len(same_name) - 4} แห่ง ช่วยระบุจังหวัดที่ต้องการครับ" if len(same_name) > 4 else "หมายถึงที่ไหนครับ"
+            return AgentAnswer(f"พบหลายพื้นที่ชื่อนี้: {options} {prompt}", "clarify", None, [h.value for h in u.hazards], notes=u.notes)
         answer = self._assess(u, question)
         if self.explainer and answer.intent in ("risk", "explain"):
             answer.facts = answer.text
