@@ -946,6 +946,10 @@ class HazardService:
                     worst[item["hazard"]] = {**item, "worst_area": code}
         return list(worst.values())
 
+    def get_all_assessments(self) -> list[dict]:
+        """Return the existing per-district decisions for national summaries."""
+        return [{"area_code": code, **item} for code in self.amphoe_codes for item in self.decisions.get(code, [])]
+
     @staticmethod
     def _dam_rows(records) -> list[dict]:
         rows = [{"id": r.station_id, "storage_percent": r.value, "lat": r.lat, "lon": r.lon,

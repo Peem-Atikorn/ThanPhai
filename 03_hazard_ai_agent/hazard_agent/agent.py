@@ -76,6 +76,7 @@ class HazardTools(Protocol):
     """Tools the agent may call. Implemented by the API backend (module 02)."""
 
     def get_assessments(self, area_code: str) -> list[dict]: ...
+    def get_all_assessments(self) -> list[dict]: ...
     def get_official_warnings(self) -> list[dict]: ...
     def get_sources(self) -> dict[str, dict]: ...
 
@@ -264,7 +265,7 @@ class HazardAgent:
                     if not any(a.level == "province" for a in u.areas)
                     else "ไม่พบอำเภอเมืองในพื้นที่ที่ระบุ กรุณาระบุชื่ออำเภอและจังหวัดครับ")
             return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards], notes=u.notes)
-        if u.regions:
+        if u.regions and u.intent not in ("overview", "ranking"):
             text = (f"คำถามนี้ครอบคลุม{' / '.join(u.regions)} ทันภัยยังไม่สรุปข้อมูลทั้งภาคในคำตอบนี้ "
                     "กรุณาระบุจังหวัดหรืออำเภอที่ต้องการครับ")
             return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards])
@@ -278,6 +279,8 @@ class HazardAgent:
             text = (f"ทันภัยตอบได้เฉพาะเรื่อง{' · '.join(HAZARD_TH.values())}ในประเทศไทยครับ "
                     'ลองถามเช่น "น้ำจะท่วมอำเภอบางบัวทองไหม"')
             return AgentAnswer(text, u.intent, None, [])
+        if u.intent in ("overview", "ranking"):
+            return self._national(question, u)
         if u.intent == "prepare" and not u.area:
             return self._prepare(question, u, [])
         if not u.area:
@@ -298,6 +301,55 @@ class HazardAgent:
                 tail = [line for line in answer.text.splitlines() if line.startswith(VERBATIM_PREFIXES)]
                 answer.text, answer.llm_used = "\n".join([rewritten.strip(), *tail]), True
         return answer
+
+    def _national(self, question: str, u: Understanding) -> AgentAnswer:
+        records = self.tools.get_all_assessments()
+        hazards = {h.value for h in u.hazards}
+        province_codes = {a.code for a in self.gazetteer.areas if a.level == "province"}
+        if u.regions:
+            from geo_integration.regions import REGION_CODES
+            province_codes &= {code for region in u.regions for code in REGION_CODES[region]}
+        rows = [r for r in records if r["hazard"] in hazards and r["area_code"][:4] in province_codes]
+        if not rows:
+            return AgentAnswer("ยังไม่มีผลประเมินพื้นที่ให้สรุปในขณะนี้", u.intent, None, sorted(hazards), tool_calls=["get_all_assessments()"])
+        rank = {"NORMAL": 0, "WATCH": 1, "WARNING": 2, "CRITICAL": 3}
+        grouped = {}
+        for row in rows:
+            grouped.setdefault((row["area_code"][:4], row["hazard"]), []).append(row)
+        names = {a.code: a.name_th for a in self.gazetteer.areas if a.level == "province"}
+        lines = []
+        evidence = []
+        if u.intent == "ranking":
+            for hazard in sorted(hazards):
+                provinces = []
+                for (code, h), items in grouped.items():
+                    if h == hazard:
+                        worst_level = max((rank.get(item.get("level"), -1) for item in items), default=-1)
+                        worst = next(item for item in items if rank.get(item.get("level"), -1) == worst_level)
+                        worst_count = sum(rank.get(item.get("level"), -1) == worst_level for item in items)
+                        provinces.append((worst_level, worst_count, names.get(code, code), code, worst))
+                if not provinces:
+                    lines.append(f"{HAZARD_TH[hazard]}: ไม่มีผลประเมินรายอำเภอ")
+                    continue
+                provinces.sort(key=lambda item: (-item[0], -item[1], item[2]))
+                lines.append(f"{HAZARD_TH[hazard]} — 5 จังหวัดที่ระดับสูงสุด:")
+                lines.extend(f"• จ.{name}: {LEVEL_TH[item.get('level')]} {count} อำเภอ" for _, count, name, _, item in provinces[:5])
+                evidence.extend(item for _, _, _, _, item in provinces[:5])
+        else:
+            for hazard in sorted(hazards):
+                hazard_items = [items for (_, h), items in grouped.items() if h == hazard]
+                if not hazard_items:
+                    lines.append(f"{HAZARD_TH[hazard]}: ไม่มีผลประเมินรายอำเภอ")
+                    continue
+                counts = {level: 0 for level in ("NORMAL", "WATCH", "WARNING", "CRITICAL", None)}
+                for items in hazard_items:
+                    for item in items:
+                        if item.get("level") in counts:
+                            counts[item.get("level")] += 1
+                lines.append(f"{HAZARD_TH[hazard]}: " + " · ".join(f"{LEVEL_TH[level]} {count} อำเภอ" for level, count in counts.items()))
+        scope = " / ".join(u.regions) if u.regions else "ทั้งประเทศ"
+        text = f"ภาพรวม{scope}จากผลประเมินล่าสุด\n" + "\n".join(lines) + "\nระดับภัยมาจากกฎประเมินและข้อมูลที่มีอยู่"
+        return AgentAnswer(text, u.intent, None, sorted(hazards), evidence, [], ["get_all_assessments()"])
 
     def _sources(self) -> AgentAnswer:
         get = getattr(self.tools, "get_sources", None)

@@ -25,13 +25,18 @@ class Tools:
         self.calls.append(code)
         return [{"hazard": "flood", "level": "WATCH", "sources": ["fixture"]}]
 
+    def get_all_assessments(self):
+        self.calls.append("get_all_assessments()")
+        return [{"area_code": "TH5001", "hazard": "fire", "level": "WATCH"},
+                {"area_code": "TH5701", "hazard": "fire", "level": "NORMAL"}]
+
     def get_official_warnings(self):
         return []
 
 
 @pytest.mark.parametrize(("question", "intent", "codes"), [
-    ("ภาคเหนือมีไฟป่ากี่จุด", "risk", {"TH50", "TH57"}),
-    ("สรุปสถานการณ์ภัยทั้งประเทศวันนี้", "out_of_scope", set()),
+    ("ภาคเหนือมีไฟป่ากี่จุด", "overview", {"TH50", "TH57"}),
+    ("สรุปสถานการณ์ภัยทั้งประเทศวันนี้", "overview", set()),
     ("อำเภอเมืองอันตรายไหม", "clarify", set()),
     ("เขื่อนภูมิพลเหลือน้ำกี่เปอร์เซ็นต์", "dam", set()),
     ("เขื่อนสิริกิติ์ปล่อยน้ำเท่าไหร่", "dam", set()),
@@ -55,14 +60,37 @@ def test_mueang_with_province_assesses_the_city_district(gazetteer):
     assert tools.calls == ["TH5001"]
 
 
-def test_region_does_not_silently_assess_its_first_province(gazetteer):
+@pytest.mark.parametrize(("question", "area_code"), [
+    ("สรุปน้ำท่วมอำเภอเสนา", "TH1412"),
+    ("สรุปสถานการณ์จังหวัดเชียงใหม่", "TH50"),
+    ("อำเภอเสนาฝนตกมากที่สุดเท่าไหร่", "TH1412"),
+])
+def test_named_area_takes_priority_over_national_intent_words(gazetteer, question, area_code):
+    tools = Tools()
+    answer = HazardAgent(gazetteer, tools).ask(question, NOW)
+
+    assert answer.intent == "risk" and answer.area["code"] == area_code
+    assert tools.calls == [area_code]
+
+
+def test_future_national_question_asks_for_a_specific_area(gazetteer):
+    tools = Tools()
+    u = understand("พรุ่งนี้ฝนตกทั่วประเทศไหม", gazetteer, NOW)
+    answer = HazardAgent(gazetteer, tools).ask("พรุ่งนี้ฝนตกทั่วประเทศไหม", NOW)
+
+    assert u.future and u.intent == "risk"
+    assert answer.intent == "risk" and answer.area is None
+    assert "ระบุพื้นที่" in answer.text or "ไม่พบชื่อพื้นที่" in answer.text
+    assert tools.calls == []
+
+
+def test_region_uses_aggregate_assessments(gazetteer):
     tools = Tools()
     u = understand("ภาคเหนือมีไฟป่ากี่จุด", gazetteer, NOW)
     assert u.regions == ["ภาคเหนือ"] and "ambiguous area" not in u.notes
     answer = HazardAgent(gazetteer, tools).ask("ภาคเหนือมีไฟป่ากี่จุด", NOW)
-    # Region summaries belong to issue #23; ask for a local area until that route exists.
-    assert answer.intent == "clarify" and "ระบุจังหวัด" in answer.text
-    assert answer.area is None and answer.evidence == [] and tools.calls == []
+    assert answer.intent == "overview" and "ภาพรวมภาคเหนือ" in answer.text
+    assert answer.area is None and answer.tool_calls == ["get_all_assessments()"]
 
 
 def test_explicit_province_takes_priority_over_region(gazetteer):
