@@ -279,6 +279,60 @@ def test_emergency_with_duplicate_district_keeps_emergency_response(duplicate_di
     assert "1784" in answer.text and "1669" in answer.text
 
 
+@pytest.mark.parametrize(("question", "code"), [
+    ("นนทบุรีกับปทุมธานีน้ำท่วมไหม", "TH13"),
+    ("อำเภอเสนาและอำเภอบางบาลน้ำท่วมไหม", "TH1405"),
+    ("เชียงใหม่ เชียงราย ไฟป่าไหม", "TH50"),
+])
+def test_different_named_areas_are_not_duplicate_names(question, code):
+    gazetteer = Gazetteer(GAZ.areas + [
+        Area("TH13", "province", "ปทุมธานี", "Pathum Thani", None, 14.0, 100.5, 1000),
+        Area("TH1405", "amphoe", "บางบาล", "Bang Ban", "TH14", 14.4, 100.5, 100),
+        Area("TH50", "province", "เชียงใหม่", "Chiang Mai", None, 18.8, 99.0, 1000),
+        Area("TH57", "province", "เชียงราย", "Chiang Rai", None, 19.9, 99.8, 1000),
+    ])
+    tools = FakeTools()
+    answer = HazardAgent(gazetteer, tools).ask(question, NOW)
+    assert answer.intent == "risk" and answer.area["code"] == code
+    assert "ambiguous area" not in answer.notes
+    assert tools.calls == [code]
+
+
+@pytest.fixture
+def five_duplicate_districts(duplicate_districts):
+    return Gazetteer(duplicate_districts.areas + [
+        Area("TH19", "province", "สระบุรี", "Saraburi", None, 14.5, 100.9, 1000),
+        Area("TH1913", "amphoe", "เฉลิมพระเกียรติ", "Chaloem Phra Kiat", "TH19", 14.5, 100.9, 100),
+        Area("TH30", "province", "นครราชสีมา", "Nakhon Ratchasima", None, 15.0, 102.0, 1000),
+        Area("TH3032", "amphoe", "เฉลิมพระเกียรติ", "Chaloem Phra Kiat", "TH30", 15.0, 102.0, 100),
+        Area("TH80", "province", "นครศรีธรรมราช", "Nakhon Si Thammarat", None, 8.4, 99.9, 1000),
+        Area("TH8023", "amphoe", "เฉลิมพระเกียรติ", "Chaloem Phra Kiat", "TH80", 8.4, 99.9, 100),
+    ])
+
+
+def test_more_than_four_duplicate_names_requests_province(five_duplicate_districts):
+    tools = FakeTools()
+    answer = HazardAgent(five_duplicate_districts, tools).ask("อำเภอเฉลิมพระเกียรติน้ำท่วมไหม", NOW)
+    assert answer.intent == "clarify" and tools.calls == []
+    assert "อีก 1 แห่ง" in answer.text and "ระบุจังหวัด" in answer.text
+
+
+def test_fifth_duplicate_can_be_selected_by_province(five_duplicate_districts):
+    tools = FakeTools()
+    answer = HazardAgent(five_duplicate_districts, tools).ask(
+        "อำเภอเฉลิมพระเกียรติ จังหวัดนครศรีธรรมราชน้ำท่วมไหม", NOW)
+    assert answer.intent == "risk" and answer.area["code"] == "TH8023"
+    assert tools.calls == ["TH8023"]
+
+
+def test_clarification_options_only_contain_matching_names(duplicate_districts):
+    gazetteer = Gazetteer(duplicate_districts.areas + GAZ.areas)
+    answer = HazardAgent(gazetteer, FakeTools()).ask("อำเภอเฉลิมพระเกียรติและอำเภอเสนาน้ำท่วมไหม", NOW)
+    assert answer.intent == "clarify"
+    assert "จ.บุรีรัมย์" in answer.text and "จ.น่าน" in answer.text
+    assert "อ.เสนา" not in answer.text
+
+
 def test_out_of_scope():
     assert agent.ask("ราคาทองวันนี้เท่าไหร่", NOW).intent == "out_of_scope"
 
