@@ -2,7 +2,7 @@
 name = "thanphai-geo-integration"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["thanphai-shared", "geopandas>=1.0", "pyogrio>=0.9", "shapely>=2.0", "pyproj>=3.6", "pandas>=2.2"]
+dependencies = ["thanphai-shared", "geopandas>=1.0", "pyogrio>=0.9", "shapely>=2.0", "pyproj>=3.6", "pandas>=2.2", "pythainlp>=5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

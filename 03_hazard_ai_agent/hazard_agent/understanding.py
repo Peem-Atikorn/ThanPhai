@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from geo_integration import Area, Gazetteer
+from geo_integration.gazetteer import MUEANG_QUERY
+from geo_integration.regions import find_regions, mask_regions
 from thanphai_shared import HazardType
 
 BANGKOK = timezone(timedelta(hours=7), "Asia/Bangkok")
@@ -55,6 +57,7 @@ class Understanding:
     notes: list[str] = field(default_factory=list)
     # True when the user asks about the future; the system only has current observations.
     future: bool = False
+    regions: list[str] = field(default_factory=list)
 
     @property
     def area(self) -> Area | None:
@@ -111,12 +114,15 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     start, end, explicit = detect_window(text, now)
     future = asks_about_future(text, start, end, explicit, now)
     areas = gazetteer.find_in_text(text)
+    regions = find_regions(text)
+    if regions and gazetteer.find_in_text(mask_regions(text)):
+        regions = []  # A named province or district is more specific than its region.
     if any(w in lowered for w in EMERGENCY_WORDS):
         return Understanding("emergency", detect_hazards(text), areas, start, end, language)
     if any(w in lowered for w in DAM_WORDS):
         # A real tambon is named "เขื่อน" (TH440310, Maha Sarakham); in a dam question the word is not a place.
         places = [a for a in areas if a.name_th not in DAM_WORDS]
-        return Understanding("dam", [], places, start, end, language)
+        return Understanding("dam", [], places, start, end, language, regions=regions)
     if any(w in lowered for w in RIVER_WORDS):
         # Tambons named like river words exist (ต.แม่น้ำ, Ko Samui): "แม่น้ำเจ้าพระยา" matched it live.
         # Such a name counts as a place only when written as one ("ต.แม่น้ำ", "ตำบลแม่น้ำ").
@@ -124,13 +130,15 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
                  or f"ต.{a.name_th}" in text or f"ตำบล{a.name_th}" in text]
     if (any(w in lowered for w in FLOW_WORDS) or STATION_CODE.search(text)
             or (any(w in lowered for w in RIVER_WORDS) and not areas)):
-        return Understanding("river", [], areas, start, end, language)
+        return Understanding("river", [], areas, start, end, language, regions=regions)
     hazards = detect_hazards(text)
+    if MUEANG_QUERY.search(text) and not any(a.level == "amphoe" and a.name_th.startswith("เมือง") for a in areas):
+        return Understanding("clarify", hazards, areas, start, end, language, notes=["mueang province required"])
     if any(w in lowered for w in PREPARE_WORDS):
         intent = "prepare"
     elif any(w in lowered for w in EXPLAIN_WORDS):
         intent = "explain"
-    elif hazards or areas:
+    elif hazards or areas or regions:
         intent = "risk"
     else:
         intent = "out_of_scope"
@@ -140,6 +148,6 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         notes.append("no hazard named; checking all four")
     if intent in ("risk", "explain") and not areas:
         notes.append("no area found")
-    if areas and sum(1 for a in areas if a.level == areas[0].level and a.name_th == areas[0].name_th) > 1:
+    if areas and not regions and sum(1 for a in areas if a.level == areas[0].level and a.name_th == areas[0].name_th) > 1:
         notes.append("ambiguous area")
-    return Understanding(intent, hazards, areas, start, end, language, notes, future)
+    return Understanding(intent, hazards, areas, start, end, language, notes, future, regions)

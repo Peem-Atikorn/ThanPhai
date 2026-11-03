@@ -230,6 +230,15 @@ class HazardAgent:
         u = understand(question, self.gazetteer, now.astimezone(BANGKOK))
         if u.intent == "emergency":
             return AgentAnswer(EMERGENCY_TH, u.intent, None, [h.value for h in u.hazards])
+        if "mueang province required" in u.notes:
+            text = ("อำเภอเมืองของจังหวัดไหนครับ กรุณาระบุจังหวัด เช่น อำเภอเมืองเชียงใหม่"
+                    if not any(a.level == "province" for a in u.areas)
+                    else "ไม่พบอำเภอเมืองในพื้นที่ที่ระบุ กรุณาระบุชื่ออำเภอและจังหวัดครับ")
+            return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards], notes=u.notes)
+        if u.regions:
+            text = (f"คำถามนี้ครอบคลุม{' / '.join(u.regions)} ทันภัยยังไม่สรุปข้อมูลทั้งภาคในคำตอบนี้ "
+                    "กรุณาระบุจังหวัดหรืออำเภอที่ต้องการครับ")
+            return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards])
         if u.intent == "dam":
             return self._dams(question, u)
         if u.intent == "river":

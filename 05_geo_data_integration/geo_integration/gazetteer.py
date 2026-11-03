@@ -5,6 +5,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from pythainlp.tokenize import word_tokenize
+
+from geo_integration.regions import REGION_CODES, find_regions, mask_regions
+
 # Admin prefixes people type before a name. Longest first so "อำเภอ" wins over "อ.".
 TH_PREFIXES = ("จังหวัด", "อำเภอ", "ตำบล", "แขวง", "เขต", "กิ่งอำเภอ", "จ.", "อ.", "ต.")
 EN_PREFIXES = ("province", "district", "subdistrict", "amphoe", "tambon", "khet", "khwaeng", "changwat")
@@ -22,6 +26,8 @@ ALIASES = {
 LEVEL_RANK = {"province": 0, "amphoe": 1, "tambon": 2}
 # Thai question particles that often stick to the end of a place name ("เสนาไหม").
 PARTICLES = ("ไหม", "มั้ย", "มั๊ย", "หรือเปล่า", "หรือไม่", "บ้าง", "ครับ", "ค่ะ", "คะ")
+MUEANG_QUERY = re.compile(r"(?:อำเภอ|อ\.)\s*เมือง")
+SHORT_TAMBON = 5
 
 
 @dataclass(frozen=True)
@@ -107,11 +113,17 @@ class Gazetteer:
     def find_in_text(self, text: str) -> list[Area]:
         """Find places mentioned inside free text such as "น้ำจะท่วมอำเภอบางบัวทองไหม".
 
-        Thai is written without spaces, so this scans for known names as substrings. Longer names win
-        over names they contain, a prefix such as "อำเภอ" right before a name restricts its level, and
-        when a province is mentioned, other matches outside it are dropped.
+        Thai token boundaries reject names inside ordinary words. Longer names win over names they
+        contain, an admin prefix restricts the level, and short tambons need an explicit prefix or
+        a following parent area. Region questions return provinces; explicit local areas take priority.
         """
-        lowered = text.lower().strip()
+        regions = find_regions(text)
+        lowered = mask_regions(text).lower().strip()
+        boundaries = {0}
+        offset = 0
+        for token in word_tokenize(lowered, engine="newmm", keep_whitespace=True):
+            offset += len(token)
+            boundaries.add(offset)
         particle_spans = [(m.start(), m.end()) for p in PARTICLES for m in re.finditer(re.escape(p), lowered)]
         hits: list[tuple[int, int, str | None, list[Area]]] = []
         for key, areas in self.index.items():
@@ -121,14 +133,18 @@ class Gazetteer:
             # Short names ("นา", "เลย" = "at all") match inside ordinary words. Accept them only after an
             # admin prefix or at the very start of the question ("ตากมีไฟป่าไหม").
             min_len = 3 if key.isascii() else 4
-            # English names need word boundaries ("rai" inside "rain"); Thai has no spaces, so it cannot.
+            # English names also need letter boundaries ("rai" inside "rain").
             pattern = rf"(?<![a-z]){re.escape(key)}(?![a-z])" if key.isascii() else re.escape(key)
             for match in re.finditer(pattern, lowered):
                 start = match.start()
                 level = self._prefix_level_before(lowered, start)
                 if level and not any(a.level == level for a in areas):
-                    level = None  # "อำเภอ" before a tambon-only name is not a real prefix hit
-                if len(key) >= min_len or level or (start == 0 and len(key) >= 2):
+                    continue  # An explicit district prefix must not select a same-name tambon.
+                if level is None and (start not in boundaries or match.end() not in boundaries):
+                    continue
+                if level is None and re.search(r"(?:เขื่อน|อ่างเก็บน้ำ)\s*$", lowered[:start]):
+                    continue
+                if len(key) >= min_len or level or (start == 0 and len(key) >= 2) or any(a.level == "tambon" for a in areas):
                     hits.append((start, start + len(key), level, areas))
 
         def eats_particle(hit) -> bool:
@@ -143,18 +159,39 @@ class Gazetteer:
             if all(hit[1] <= k[0] or hit[0] >= k[1] for k in kept):
                 kept.append(hit)
         found: list[Area] = []
+        scopes = [(start, a.code) for start, _, level, matches in kept for a in matches
+                  if a.level in ("amphoe", "province") and (level is None or a.level == level)]
         # `kept` is already in match-quality order, so the best match comes first.
-        for _, _, level, areas in kept:
+        for start, end, level, areas in kept:
             if level is not None:
                 found.extend(a for a in areas if a.level == level)
             else:
                 # Same name at several levels (amphoe หาดใหญ่ and its tambon หาดใหญ่): people mean the larger area.
                 top = min(LEVEL_RANK[a.level] for a in areas)
-                found.extend(a for a in areas if LEVEL_RANK[a.level] == top)
+                for area in areas:
+                    if LEVEL_RANK[area.level] != top:
+                        continue
+                    if area.level == "tambon" and end - start <= SHORT_TAMBON:
+                        parent_codes = {p.code for p in self.parents(area)}
+                        if not any(pos >= end and code in parent_codes for pos, code in scopes):
+                            continue
+                    found.append(area)
         provinces = {a.code for a in found if a.level == "province"}
         if provinces:
             found = [a for a in found if a.level == "province" or a.code[:4] in provinces]
         ordered = list({a.code: a for a in found}.values())
+
+        if MUEANG_QUERY.search(lowered) and not any(a.level == "amphoe" and a.name_th.startswith("เมือง") for a in ordered):
+            provinces = [a for a in ordered if a.level == "province"]
+            if len(provinces) == 1:
+                cities = [a for a in self.areas if a.level == "amphoe" and a.parent_code == provinces[0].code
+                          and a.name_th.startswith("เมือง")]
+                if len(cities) == 1:
+                    ordered.insert(0, cities[0])
+
+        if not ordered and regions:
+            codes = {code for region in regions for code in REGION_CODES[region]}
+            return [self.by_code[code] for code in sorted(codes) if code in self.by_code and self.by_code[code].level == "province"]
 
         def lineage_key(area: Area) -> tuple[int, int]:
             # Group each area with its ancestors/descendants at the position of the group's best match,
