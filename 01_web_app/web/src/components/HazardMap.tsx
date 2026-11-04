@@ -279,7 +279,7 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
             ready.current = true;
             const { data: d, selected: s, points: pts, selectedPoint: sp, mode: md, outline: ol, stations: st, radar: rd, radarNext: rn, dark: dk, riskOnly: ro } = latest.current;
             (m.getSource("stations") as GeoJSONSource).setData(st ?? EMPTY);
-            applyRadar(m, rd, rn);
+            applyRadar(m, rd, rn, radarSources.current);
             applyLook(m, dk, ro);
             (m.getSource("outline") as GeoJSONSource).setData(ol ?? EMPTY);
             if (d)
