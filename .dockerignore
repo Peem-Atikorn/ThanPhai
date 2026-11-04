@@ -6,3 +6,5 @@ data
 **/.pytest_cache
 01_web_app/web/node_modules
 01_web_app/web/.next
+# Local Qwen weights and checkpoints (~34 GB, gitignored); the API image never needs them.
+07_knowledge_decision_llm/training/models
