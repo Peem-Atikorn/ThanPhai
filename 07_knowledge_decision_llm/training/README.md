@@ -15,12 +15,18 @@
 PYTHONPATH=shared:01_web_app:02_api_backend:03_hazard_ai_agent:04_external_data_services:05_geo_data_integration:06_hazard_risk_models:07_knowledge_decision_llm:08_alert_feedback_monitoring \
 python 07_knowledge_decision_llm/training/generate_intent_dataset.py --count 10000 --test-count 500
 
-# 2. สร้างชุดข้อมูลเรียบเรียงคำตอบ (Explainer)
+# 2. สร้างชุดข้อมูลเรียบเรียงคำตอบ (Explainer) ต้องมี data/processed/gazetteer.json ก่อน (make data)
 PYTHONPATH=shared:01_web_app:02_api_backend:03_hazard_ai_agent:04_external_data_services:05_geo_data_integration:06_hazard_risk_models:07_knowledge_decision_llm:08_alert_feedback_monitoring \
-python 07_knowledge_decision_llm/training/generate_explainer_dataset.py --count 5000 --test-count 500
+python 07_knowledge_decision_llm/training/generate_explainer_dataset.py --count 3000 --test-count 500
 ```
 
 *ไฟล์ชุดข้อมูลจะถูกบันทึกลงใน `07_knowledge_decision_llm/training/data/` ซึ่งถูกระบุใน `.gitignore` ไม่ถูก commit เข้า git*
+
+ชุดข้อมูล Explainer สร้างข้อเท็จจริงด้วย `HazardAgent` ตัวจริง (ข้อมูลประเมินภัยสุ่มขึ้น) จึงมีรูปแบบเดียวกับที่ระบบส่งให้โมเดลตอนใช้งาน:
+- คำถามหลายแบบ: ภาพรวม ภัยเดียว สองภัย "ปลอดภัยไหม" พรุ่งนี้/หลายวันข้างหน้า และถามเหตุผลของระดับ ราว 1 ใน 4 เป็นภาษาอังกฤษและตอบเป็นภาษาอังกฤษ
+- คำตอบขึ้นต้นด้วยสิ่งที่ถาม คงระดับและค่าที่วัดได้ ไม่เกิน 4 บรรทัด ไม่ใส่ประกาศ เบอร์ฉุกเฉิน หรือที่มา และผ่าน `validate()` ทุกข้อ
+- ชุดทดสอบใช้อำเภอที่ไม่อยู่ในชุดเทรน (15% ของ 928 อำเภอ)
+- ความยาวรวม system prompt + ข้อเท็จจริง + คำตอบ ราว 1,200 token (สูงสุด ~2,200) จึงเทรนด้วย `--max-seq-length 2560` (ค่าเริ่มต้น) และ `Modelfile` ใช้ `num_ctx 4096`
 
 ---
 
