@@ -15,8 +15,8 @@ export default function StormsPanel({ revision }: { revision: number }) {
   }, [revision]);
   const current = result?.revision === revision ? result : null;
   const data = current?.data;
-  const pending = !!data?.inputs_pending?.length;
-  const degraded = !!data?.degraded_services?.length;
+  const pending = !!data?.inputs_pending?.includes("thaiwater_storms");
+  const degraded = !!data?.degraded_services?.includes("thaiwater_storms");
   return <section className="media-panel events-panel storms-panel" aria-label={tr("พายุหมุนที่ สสน. ติดตาม")} aria-busy={!current || pending}>
     <h3><Icon name="tropical_cyclone"/>{tr("พายุหมุนที่ สสน. ติดตาม")}</h3>
     {!current && <p className="search-feedback" role="status">{tr("กำลังโหลดรายชื่อพายุ…")}</p>}

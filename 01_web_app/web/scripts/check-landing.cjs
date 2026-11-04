@@ -84,6 +84,22 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   stormResponse = { storms: [], source: 'สสน.', degraded_services: [] };
   stormApp.render({ revision: 2 }); cleanupStorm = stormEffects.at(-1)(); await tick();
   assert(content(stormApp.render({ revision: 2 })).includes('ไม่มีพายุ')); cleanupStorm?.();
+  for (const metadata of [
+    { inputs_pending: ['air_model', 'heat_model', 'marine_model'], degraded_services: [] },
+    { inputs_pending: [], degraded_services: ['nasa_firms'] },
+  ]) {
+    stormResponse = { storms: [], source: 'สสน.', ...metadata };
+    const effects = [], panel = instance(StormsPanel, effects);
+    panel.render({ revision: 0 }); const cleanup = effects[0](); await tick();
+    const tree = panel.render({ revision: 0 });
+    assert(content(tree).includes('ไม่มีพายุ'), 'Unrelated sources do not hide a successful empty storm list');
+    assert(!content(tree).includes('กำลังรอข้อมูลพายุ') && !content(tree).includes('ข้อมูลพายุบางแหล่งไม่พร้อมใช้งาน'));
+    assert.equal(tree.props['aria-busy'], false, 'Unrelated pending inputs do not mark storms busy'); cleanup?.();
+  }
+  stormResponse = { storms: [], source: 'สสน.', degraded_services: ['thaiwater_storms'] };
+  stormApp.render({ revision: 5 }); cleanupStorm = stormEffects.at(-1)(); await tick();
+  stormTree = stormApp.render({ revision: 5 });
+  assert(content(stormTree).includes('ข้อมูลพายุบางแหล่งไม่พร้อมใช้งาน') && !content(stormTree).includes('ไม่มีพายุ'), 'Storm source failures still show degraded data'); cleanupStorm?.();
   lib.api.storms = async () => { throw new Error('offline'); };
   stormApp.render({ revision: 3 }); cleanupStorm = stormEffects.at(-1)(); await tick();
   assert(content(stormApp.render({ revision: 3 })).includes('โหลดรายชื่อพายุไม่สำเร็จ')); cleanupStorm?.();
