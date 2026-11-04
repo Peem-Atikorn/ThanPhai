@@ -315,21 +315,23 @@ async def media() -> dict:
 
 RADAR_TTL_S = 300
 RADAR_RETRY_S = 30
+RADAR_HISTORY_S = 3600
 RADAR_MAX_FRAME_AGE_S = 7200
+RADAR_FRAME_LIMIT = 7
 _radar_lock = asyncio.Lock()
 _radar_retry_at = 0.0
-_radar_cache: tuple[float, dict | None] | None = None  # (monotonic time fetched, latest frame)
+_radar_cache: tuple[float, list[dict] | None] | None = None  # (monotonic time fetched, recent frames)
 
 
 @app.get("/v1/radar")
 async def radar() -> dict:
-    """Latest RainViewer radar frame as a tile URL template (`frame` is null when there is none).
+    """Recent RainViewer radar frames as tile URL templates (`frames` is empty when none are available).
 
     RainViewer's free tier is for personal/educational use and allows 100 requests/min per IP, so the layer is
     for the team only: it answers 404 unless RADAR_LAYER=internal, and the frame list is fetched once per 5 minutes
     for everyone through the module 04 adapter, which the nowcast shares. Failed refreshes wait 30 seconds before
-    retrying; frames older than 2 hours are omitted.
-    Concurrent readers can use the cached image while one request refreshes it.
+    retrying; frames older than 1 hour are omitted.
+    Concurrent readers can use the cached images while one request refreshes them.
     Login (admin/user) replaces the env flag later.
     """
     global _radar_cache, _radar_retry_at
@@ -343,19 +345,28 @@ async def radar() -> dict:
             if (_radar_cache is None or now - _radar_cache[0] >= RADAR_TTL_S) and now >= _radar_retry_at:
                 try:
                     frames = await fetch_radar_maps()
-                    frame = {"tiles": frames[-1]["tile_url"], "time": frames[-1]["time"]} if frames else None
-                    _radar_cache = (time.monotonic(), frame)
+                    recent = [
+                        {"tiles": frame["tile_url"], "time": frame["time"]}
+                        for frame in frames[-RADAR_FRAME_LIMIT:]
+                    ]
+                    _radar_cache = (time.monotonic(), recent)
                     _radar_retry_at = 0.0
                 except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
                     logging.getLogger("api").warning("RainViewer frame list failed", exc_info=True)
                     _radar_retry_at = time.monotonic() + RADAR_RETRY_S
     if _radar_cache is None:
         raise HTTPException(502, "RainViewer did not answer; try again later")
-    frame = _radar_cache[1]
-    # Tile retention follows the image timestamp, not when we fetched its URL.
-    if frame and time.time() - frame["time"] >= RADAR_MAX_FRAME_AGE_S:
-        frame = None
-    return {"frame": frame}
+    frames = _radar_cache[1] or []
+    # RainViewer's latest image can lag wall time; retain an hour relative to it, but never serve a stale cache.
+    latest_time = max((frame["time"] for frame in frames), default=None)
+    latest_age = time.time() - latest_time if latest_time is not None else None
+    if latest_age is None or not 0 <= latest_age <= RADAR_MAX_FRAME_AGE_S:
+        return {"frames": []}
+    frames = [
+        frame for frame in frames
+        if 0 <= latest_time - frame["time"] <= RADAR_HISTORY_S
+    ]
+    return {"frames": frames}
 
 
 @app.get("/v1/radar/nowcast")

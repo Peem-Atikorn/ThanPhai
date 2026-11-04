@@ -12,7 +12,16 @@ const hooks = {
   useRef(initial) { const i = current.cursor++; return current.state[i] ??= { current: initial }; },
   useMemo(fn) { current.cursor++; return fn(); },
   useCallback(fn) { current.cursor++; return fn; },
-  useEffect(fn, dependencies) { current.cursor++; fn.dependencies = dependencies; current.effects?.push(fn); },
+  useEffect(fn, dependencies) {
+    fn.dependencies = dependencies;
+    const i = current.cursor++;
+    if (!current.trackEffects) { current.effects?.push(fn); return; }
+    const previous = current.effectDeps[i];
+    if (previous && dependencies?.length === previous.length && dependencies.every((value, index) => value === previous[index])) return;
+    current.effectCleanups[i]?.();
+    current.effectDeps[i] = dependencies;
+    current.effectCleanups[i] = fn();
+  },
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) { return (getServerSnapshot ?? getSnapshot)(); },
 };
 const jsx = (type, props) => ({ type, props: props || {} });
@@ -33,9 +42,10 @@ function load(id) {
   new Function('module', 'exports', 'require', js)(mod, mod.exports, load);
   return mod.exports;
 }
-function instance(Component, effects) {
+function instance(Component, effects, trackEffects = false) {
   const state = [];
-  return { state, render(props = {}) { current = { state, cursor: 0, effects }; this.tree = Component(props); return this.tree; } };
+  const effectDeps = [], effectCleanups = [];
+  return { state, render(props = {}) { current = { state, cursor: 0, effects, trackEffects, effectDeps, effectCleanups }; this.tree = Component(props); return this.tree; } };
 }
 function nodes(node, result = []) {
   if (Array.isArray(node)) { node.forEach(n => nodes(n, result)); return result; }
@@ -215,7 +225,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   }
   let radarRequests = 0;
   let radarEnabled = true;
-  lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frame: null }; };
+  let radarFrames = [{ tiles: 'https://tiles.test/old/{z}/{x}/{y}.png', time: 1799996400 }, { tiles: 'https://tiles.test/new/{z}/{x}/{y}.png', time: 1800000000 }];
+  lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frames: radarEnabled ? radarFrames : [] }; };
   for (const hazard of ['overview', 'flood', 'rain_storm', 'tropical_cyclone']) {
     const radarEffects = [];
     const radarApp = instance(Dashboard, radarEffects);
@@ -227,7 +238,65 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
     if (hazard === 'overview') {
       assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Radar stays hidden while availability is unknown');
       await tick();
-      assert(nodes(radarApp.render(props)).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
+      const enabledTree = radarApp.render(props);
+      assert(nodes(enabledTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
+      const playback = nodes(enabledTree).find(n => n.type.name === 'RadarPlayback');
+      assert(playback && playback.props.frames.length === 2 && playback.props.index === 1, 'Radar playback receives history and opens on the latest frame');
+      assert.equal(nodes(enabledTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Idle radar playback does not preload another frame');
+      playback.props.onPlaybackChange(true);
+      const playingTree = radarApp.render(props);
+      assert.equal(nodes(playingTree).find(n => 'radarNext' in n.props).props.radarNext, radarFrames[0].tiles, 'The next frame is preloaded only while playback is active');
+      playback.props.onPlaybackChange(false);
+      radarApp.render(props);
+
+      let selectedFrame = 1, timerCallback, timerCount = 0, clearCount = 0;
+      window.setInterval = callback => { timerCallback = callback; timerCount++; return timerCount; };
+      window.clearInterval = () => { clearCount++; };
+      const RadarPlayback = load('@/components/RadarPlayback').default;
+      const playbackApp = instance(RadarPlayback, undefined, true);
+      const playbackProps = () => ({ frames: radarFrames, index: selectedFrame, onChange: index => { selectedFrame = index; }, onPlaybackChange() {} });
+      let playbackControl = nodes(playbackApp.render(playbackProps())).find(n => n.type === 'button');
+      playbackControl.props.onClick();
+      playbackApp.render(playbackProps());
+      selectedFrame = 0;
+      playbackApp.render(playbackProps());
+      assert.equal(timerCount, 1, 'Parent renders and callback identity changes do not restart the playback timer');
+      timerCallback();
+      assert.equal(selectedFrame, 1, 'Playback advances from the latest selected frame after a parent render');
+      playbackControl = nodes(playbackApp.render(playbackProps())).find(n => n.type === 'button');
+      playbackControl.props.onClick();
+      playbackApp.render(playbackProps());
+      assert.equal(clearCount, 1, 'Pausing clears the playback timer');
+
+      nodes(enabledTree).find(n => n.type.name === 'RadarPlayback').props.onChange(0);
+      radarFrames = [
+        { tiles: 'https://tiles.test/older/{z}/{x}/{y}.png', time: 1799992800 },
+        { ...radarFrames[0], tiles: 'https://tiles.test/refreshed/{z}/{x}/{y}.png' },
+        { tiles: 'https://tiles.test/latest/{z}/{x}/{y}.png', time: 1800003600 },
+      ];
+      radarApp.render(props);
+      const refreshRadar = radarEffects.filter(effect => /\.radar\(/.test(String(effect))).at(-1)();
+      await tick();
+      refreshRadar?.();
+      const refreshedTree = radarApp.render(props);
+      assert.equal(nodes(refreshedTree).find(n => n.type.name === 'RadarPlayback').props.index, 1, 'Radar refresh preserves the selected frame timestamp when it remains available');
+      nodes(refreshedTree).find(n => n.type.name === 'RadarPlayback').props.onChange(0);
+      radarFrames = [radarFrames[1], radarFrames[2]];
+      radarApp.render(props);
+      const removedRadarFrame = radarEffects.filter(effect => /\.radar\(/.test(String(effect))).at(-1)();
+      await tick();
+      removedRadarFrame?.();
+      const missingFrameTree = radarApp.render(props);
+      assert.equal(nodes(missingFrameTree).find(n => n.type.name === 'RadarPlayback').props.index, 1, 'Radar refresh selects the latest frame if the selected timestamp expired');
+
+      lib.api.radar = async () => { throw new Error('offline'); };
+      radarApp.render(props);
+      const failRadar = radarEffects.filter(effect => /\.radar\(/.test(String(effect))).at(-1)();
+      await tick();
+      failRadar?.();
+      const failedTree = radarApp.render(props);
+      assert(nodes(failedTree).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note') && content(n).includes('ยังโหลดเรดาร์ไม่ได้')), 'Radar failure keeps its unavailable note visible');
+      lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frames: radarEnabled ? radarFrames : [] }; };
     }
     cleanupRadar?.();
   }

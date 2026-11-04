@@ -1,5 +1,6 @@
 export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone" | "landslide";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
+export type RadarFrame = { tiles: string; time: number };
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "flood", th: "น้ำท่วม", ready: true },
@@ -310,12 +311,12 @@ export const api = {
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
   media: () => get<Media>(`/v1/media`),
   airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
-  /** Latest RainViewer frame. `enabled` is false when the team-only backend switch is off. */
-  radar: async (): Promise<{ enabled: boolean; frame: { tiles: string; time: number } | null }> => {
+  /** Seven recent RainViewer frames. `enabled` is false when the team-only backend switch is off. */
+  radar: async (): Promise<{ enabled: boolean; frames: RadarFrame[] }> => {
     const res = await fetch("/api/v1/radar", { cache: "no-store" });
-    if (res.status === 404) return { enabled: false, frame: null };
+    if (res.status === 404) return { enabled: false, frames: [] };
     if (!res.ok) throw new Error(`${res.status}`);
-    return { enabled: true, frame: (await res.json()).frame };
+    return { enabled: true, frames: (await res.json()).frames };
   },
   warnings: () => get<{ warnings: OfficialWarning[] }>(`/v1/warnings`),
   storms: () => get<StormsResponse>(`/v1/storms`),
