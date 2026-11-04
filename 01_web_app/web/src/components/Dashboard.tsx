@@ -4,7 +4,7 @@ import { t as tr, getLocale } from "@/lib/i18n";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, OfficialWarning, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
+import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, OfficialWarning, RadarFrame, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import WaterQualityPanel, { qualityKey, qualityColor } from "@/components/WaterQualityPanel";
 import Icon from "@/components/Icon";
 import FloatingMascot from "@/components/FloatingMascot";
@@ -16,6 +16,7 @@ import StormsPanel from "@/components/StormsPanel";
 import AreaWarnings from "@/components/AreaWarnings";
 import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
+import RadarPlayback from "@/components/RadarPlayback";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
 import { OverlayControls, OverlayLegends, useOverviewLayers } from "@/components/OverviewLayers";
 import { RiverDetail, RiverRow, riverTime, RiverSort, sortRivers } from "@/components/RiverPanel";
@@ -308,12 +309,12 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(true);
     const [radarAvailable, setRadarAvailable] = useState(false);
+    const [radarFrames, setRadarFrames] = useState<RadarFrame[]>([]);
+    const [radarFrameIndex, setRadarFrameIndex] = useState(0);
+    const radarFrame = radarFrames[radarFrameIndex] ?? null;
+    const radarNextFrame = radarFrames.length > 1 ? radarFrames[(radarFrameIndex + 1) % radarFrames.length] : null;
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
     const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
-    const [radar, setRadar] = useState<{
-        tiles: string;
-        time: number;
-    } | null>(null);
     const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
     // TMD bulletins for the overview, by region; a failed request just leaves the card out.
     const [nationalWarnings, setNationalWarnings] = useState<OfficialWarning[]>([]);
@@ -395,9 +396,11 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         // A failed radar request just leaves the map without radar; the station data still shows.
         api.radar().then((result) => { if (!cancelled) {
             setRadarAvailable(result.enabled);
-            setRadar(result.frame);
+            setRadarFrames(result.frames);
+            setRadarFrameIndex(Math.max(0, result.frames.length - 1));
         } }).catch(() => { if (!cancelled) {
-            setRadar(null);
+            setRadarAvailable(false);
+            setRadarFrames([]);
         } });
         return () => { cancelled = true; };
     }, [showRadar, revision]);
@@ -783,7 +786,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
-            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radar?.tiles ?? null : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
+            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel ? radarNextFrame?.tiles ?? null : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
               <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>{tr("แผนที่กลางคืน")}</button>
@@ -800,6 +803,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(view === "rivers" && rivers.status === "loading" && <div className="map-notice" role="status"><span className="spinner"/>{tr("กำลังโหลดข้อมูลแม่น้ำ\u2026")}</div>)}
             {tr(view === "rivers" && rivers.status === "error" && !rivers.list.length && <div className="map-notice error-notice" role="alert"><Icon name="info"/><div><strong>{tr("โหลดข้อมูลแม่น้ำไม่สำเร็จ")}</strong><p>{tr("ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง")}</p></div><button className="text-button" onClick={() => setRevision((value) => value + 1)}>{tr("ลองใหม่")}</button></div>)}
           </div>
+          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} onChange={setRadarFrameIndex}/>}
           <details className="map-supplement"><summary>{tr(overview ? "ชั้นข้อมูลและคำอธิบายแผนที่" : "คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
           {tr(hideToolbar && overview && !selectedRiskLevel && mapControls)}
           {tr(overview && !selectedRiskLevel && <div className="overview-overlay-summary">
@@ -820,7 +824,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             <div className="legend-heading"><h3>{tr("ระดับความเสี่ยง")}</h3><span>{tr(displayedLayer ? number.format(displayedLayer.features.length) + " อำเภอ" : "รอข้อมูล")}</span></div>
             <ul className="risk-legend">{tr(counts.map((level) => <li key={level.id}><span className="legend-dot" style={{ background: level.color }}/><span>{tr(level.th)}</span><strong>{tr(layer ? number.format(level.n) : "—")}</strong></li>))}</ul>
             {tr(hazard === "air_quality" && <div className="pm-legend"><h3>{tr("จุดสถานีวัด PM2.5 (กรมควบคุมมลพิษ) \u00B7 ตัวเลขคือค่าเฉลี่ย 24 ชม. \u00B7 วงใหญ่ = หลายสถานี แสดงค่าสูงสุด")}</h3><ul>{tr(PM25_BANDS.map((b, i) => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}<small>{tr(i === 0 ? "0–15" : i === PM25_BANDS.length - 1 ? "> 75" : `${PM25_BANDS[i - 1].max}–${b.max}`)}</small></li>))}</ul>{tr(airStations && <p className="source-note">{tr(number.format(airStations.length))}{tr(" สถานีที่มีค่าล่าสุดไม่เกิน 6 ชม. \u00B7 อำเภอที่ไม่มีสถานีใช้ค่าจากแบบจำลอง")}</p>)}</div>)}
-            {tr(showRadar && radarAvailable && <p className="source-note radar-note">{tr(radar ? <>{tr("เรดาร์ฝนล่าสุด ")}{tr(new Date(radar.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. \u00B7 ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</> : "ยังโหลดเรดาร์ไม่ได้")}</p>)}
+            {tr(showRadar && radarAvailable && <p className="source-note radar-note">{tr(radarFrame ? <>{tr("เรดาร์ฝนเวลา ")}{tr(new Date(radarFrame.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. \u00B7 ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</> : "ยังโหลดเรดาร์ไม่ได้")}</p>)}
             <div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(layer?.meta.data_updated_at))}{tr(" (เวลาไทย)")}{tr(pending && " · กำลังโหลดข้อมูลดาวเทียมและพยากรณ์เพิ่มเติม")}</span></div>
             {tr(!!layer?.meta.degraded_services.length && <p className="data-notice">{tr("ข้อมูลบางแหล่งไม่พร้อมใช้งาน: ")}{tr(layer.meta.degraded_services.join(", "))}</p>)}
           </div>)}

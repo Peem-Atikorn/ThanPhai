@@ -122,7 +122,8 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   }
   let radarRequests = 0;
   let radarEnabled = true;
-  lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frame: null }; };
+  const radarFrames = [{ tiles: 'https://tiles.test/old/{z}/{x}/{y}.png', time: 1799996400 }, { tiles: 'https://tiles.test/new/{z}/{x}/{y}.png', time: 1800000000 }];
+  lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frames: radarEnabled ? radarFrames : [] }; };
   for (const hazard of ['overview', 'flood', 'rain_storm', 'tropical_cyclone']) {
     const radarEffects = [];
     const radarApp = instance(Dashboard, radarEffects);
@@ -134,7 +135,9 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
     if (hazard === 'overview') {
       assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Radar stays hidden while availability is unknown');
       await tick();
-      assert(nodes(radarApp.render(props)).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
+      const enabledTree = radarApp.render(props);
+      assert(nodes(enabledTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
+      assert(nodes(enabledTree).some(n => n.type.name === 'RadarPlayback' && n.props.frames.length === 2 && n.props.index === 1), 'Radar playback receives history and opens on the latest frame');
     }
     cleanupRadar?.();
   }
