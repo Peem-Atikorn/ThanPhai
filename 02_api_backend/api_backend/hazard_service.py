@@ -33,7 +33,7 @@ from geo_integration import Gazetteer, hazard_areas, table_provinces, warning_pr
 from geo_integration.warning_areas import REGIONS
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
-from thanphai_shared import AlertLevel, HazardType
+from thanphai_shared import AlertLevel, HazardType, SourceRecord
 
 BANGKOK = timezone(timedelta(hours=7), "Asia/Bangkok")
 RETRY_AFTER_FAILURE = timedelta(minutes=10)
@@ -56,9 +56,12 @@ MAX_PM25_AGE = timedelta(hours=6)
 # Fires in Myanmar, Laos and Cambodia within this distance of a district centre are shown with its PM2.5:
 # context for where the smoke may come from, not a rule input.
 CROSS_BORDER_KM = 100
-# Earthquakes count for district levels for a day; the list endpoint shows a week.
+# Earthquakes count for district levels for a day; the list endpoint shows a week, the assistant a month.
 QUAKE_WINDOW = timedelta(hours=24)
 QUAKE_LIST_WINDOW = timedelta(days=7)
+# TMD's RSS feed holds only its last 10 events (about a day when Laos/Myanmar are active), so every event seen
+# is kept this long, and saved to QUAKE_HISTORY_FILE (if set) to survive restarts.
+QUAKE_HISTORY_WINDOW = timedelta(days=31)
 NEAR_QUAKE_KM = 30  # an epicentre this close to a district centre is reported there, however weak the shaking
 # Observation that decides which district speaks for a province when several share its worst level.
 PROVINCE_TIEBREAK = {"earthquake": "quake_mmi_24h", "rain_storm": "rain_24h", "flood": "above_bank_m",
@@ -154,7 +157,7 @@ class HazardService:
         self.water_quality: list[dict] = []  # fresh readings of the automatic water-quality stations, saltiest first
         self.storms: list[dict] = []  # active tropical storms (HII), one row per storm with its track
         self.media: dict | None = None  # radar, rain-forecast, storm and wave images
-        self.quakes: list[dict] = []  # TMD + USGS, last 7 days, newest first
+        self.quakes: list[dict] = []  # TMD + USGS, last QUAKE_HISTORY_WINDOW, newest first
         self.pm25_stations: list[dict] = []  # fresh Air4Thai readings, for station points on the map
         self.regional_events: list[dict] = []  # GDACS events around South-East Asia
         self.cyclone_records: list | None = None  # GDACS wind areas and track points; None until GDACS answers
@@ -194,6 +197,8 @@ class HazardService:
         self.grid_updated_at: dict[str, datetime | None] = {name: None for name in GRID_MODELS}
         self._offshore: list[tuple[str, float, float]] | None = None  # built on the first marine refresh
         self._last_quakes: list[dict] | None = None
+        self._quake_file = Path(os.environ["QUAKE_HISTORY_FILE"]) if os.getenv("QUAKE_HISTORY_FILE") else None
+        self._tmd_quakes: dict[str, SourceRecord] = self._load_quake_history()
         self._last_pm25: list[dict] | None = None
         # Past landslides per district, from scripts/build_landslide_districts.py; optional.
         self.landslide_traces = self._load_landslide_traces()
@@ -285,7 +290,7 @@ class HazardService:
             "nasa_firms": FirmsHotspots(bbox=REGION_BBOX),
             "air4thai": Air4ThaiPm25(),
             "tmd_earthquakes": TmdEarthquakes(),
-            "usgs_earthquakes": UsgsEarthquakes(days=7),
+            "usgs_earthquakes": UsgsEarthquakes(days=QUAKE_HISTORY_WINDOW.days),
             "gdacs": GdacsEvents(),
             "gdacs_cyclones": GdacsCyclones(),
             "thaiwater_storms": ThaiWaterStorms(),
@@ -694,7 +699,8 @@ class HazardService:
     def _quake_shaking(self, tmd: list | None, usgs: list | None) -> dict[str, dict] | None:
         """Strongest expected shaking per district from the last day's earthquakes; None when both feeds failed.
 
-        Also keeps the week's merged list for /v1/earthquakes (swapped in by refresh()).
+        Also keeps the month's merged list (with TMD events seen in earlier refreshes) for /v1/earthquakes and the
+        assistant (swapped in by refresh()).
         """
         from risk_models.earthquake import mmi_label_th, shaking_at
 
@@ -702,8 +708,10 @@ class HazardService:
         if tmd is None and usgs is None:
             return None
         now = datetime.now(timezone.utc)
+        if tmd is not None:
+            tmd = self._remember_tmd_quakes(tmd, now)
         merged = sorted(merge_quakes(tmd or [], usgs or []), key=lambda r: r.observed_at, reverse=True)
-        week = [r for r in merged if now - r.observed_at <= QUAKE_LIST_WINDOW]
+        week = [r for r in merged if now - r.observed_at <= QUAKE_HISTORY_WINDOW]
         self._last_quakes = [{
             "id": r.station_id, "time": r.observed_at.isoformat(), "magnitude": r.value, "lat": r.lat, "lon": r.lon,
             "depth_km": r.extra.get("depth_km"), "place_th": r.extra.get("place_th"), "where_th": r.extra.get("where_th"),
@@ -731,6 +739,36 @@ class HazardService:
                          "_time": r.observed_at,
                          "_epicentre_mmi": shaking_at(r.lat, r.lon, r.lat, r.lon, r.value, r.extra.get("depth_km"))[0]}
         return out
+
+    @staticmethod
+    def _quake_key(r: SourceRecord) -> str:
+        return r.station_id or f"{r.observed_at.isoformat()}:{r.lat}:{r.lon}"
+
+    def _remember_tmd_quakes(self, tmd: list[SourceRecord], now: datetime) -> list[SourceRecord]:
+        """Add this feed's events to those seen before, drop ones older than the window, save; return them all."""
+        before = set(self._tmd_quakes)
+        self._tmd_quakes.update((self._quake_key(r), r) for r in tmd)
+        self._tmd_quakes = {k: r for k, r in self._tmd_quakes.items() if now - r.observed_at <= QUAKE_HISTORY_WINDOW}
+        if self._quake_file is not None and set(self._tmd_quakes) != before:
+            try:
+                self._quake_file.parent.mkdir(parents=True, exist_ok=True)
+                tmp = self._quake_file.with_suffix(".tmp")
+                tmp.write_text(json.dumps([r.model_dump(mode="json") for r in self._tmd_quakes.values()], ensure_ascii=False),
+                               encoding="utf-8")
+                tmp.replace(self._quake_file)
+            except OSError:
+                log.exception("could not save earthquake history to %s", self._quake_file)
+        return list(self._tmd_quakes.values())
+
+    def _load_quake_history(self) -> dict[str, SourceRecord]:
+        if self._quake_file is None or not self._quake_file.exists():
+            return {}
+        try:
+            rows = [SourceRecord.model_validate(row) for row in json.loads(self._quake_file.read_text(encoding="utf-8"))]
+        except (OSError, ValueError):
+            log.exception("could not read earthquake history %s; starting empty", self._quake_file)
+            return {}
+        return {self._quake_key(r): r for r in rows}
 
     def _load_landslide_traces(self) -> dict[str, int] | None:
         path = self.data_dir / "landslide_districts.json"
@@ -1291,8 +1329,12 @@ class HazardService:
             self._graph_cache[key] = (now, history)
             return history
 
-    def get_earthquakes(self) -> list[dict]:
-        return self.quakes
+    def get_earthquakes(self, days: int | None = None) -> list[dict]:
+        """Merged TMD + USGS list, newest first: the whole kept month, or the last `days` days."""
+        if days is None:
+            return self.quakes
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        return [q for q in self.quakes if datetime.fromisoformat(q["time"]) >= since]
 
     def get_storms(self) -> list[dict]:
         return self.storms

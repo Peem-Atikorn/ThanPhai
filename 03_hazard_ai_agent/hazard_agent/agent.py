@@ -43,7 +43,8 @@ SOURCE_TH = {
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
 # Answers built from real records that the LLM may reword (validate() keeps every number and level).
 # Not media (links must stay exact), prepare (official guidance), emergency, clarify or sources.
-REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history", "river", "earthquake", "storms",
+# Earthquake lists are not reworded: a rewrite dropped the period and the note on how far the kept TMD history goes.
+REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history", "river", "storms",
                    "waves", "water_quality", "pm25_stations", "fire_hotspots"}
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
@@ -128,6 +129,45 @@ def _window_th(u: Understanding) -> str:
     if e - s <= timedelta(days=1):
         return f"วันที่ {s.day}/{s.month}"
     return f"ช่วง {s.day}/{s.month}–{e.day}/{e.month}"
+
+
+QUAKE_NEAR_KM = 100
+QUAKE_LIST_MAX = 10
+
+
+def _parse_time(value: str | None) -> datetime | None:
+    try:
+        when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return when.replace(tzinfo=BANGKOK) if when.tzinfo is None else when
+
+
+def _km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+
+    a = sin(radians(lat2 - lat1) / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371 * asin(sqrt(a))
+
+
+def _quake_period(question: str, now: datetime) -> tuple[datetime, str]:
+    """Start of the past period an earthquake question asks about, and its Thai label (default: 7 days)."""
+    lowered = question.lower()
+    local = now.astimezone(BANGKOK)
+    today = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    match = re.search(r"(\d+)\s*(วัน|days?)", lowered)
+    if match:
+        days = min(int(match.group(1)), 30)
+        return local - timedelta(days=days), f" ย้อนหลัง {days} วัน"
+    if "เดือนนี้" in lowered or "this month" in lowered:
+        return today.replace(day=1), " ตั้งแต่ต้นเดือนนี้"
+    if any(w in lowered for w in ("เดือน", "month")):
+        return local - timedelta(days=30), " ย้อนหลัง 30 วัน"
+    if any(w in lowered for w in ("วันนี้", "today")):
+        return today, " วันนี้"
+    if any(w in lowered for w in ("เมื่อวาน", "yesterday")):
+        return today - timedelta(days=1), " ตั้งแต่เมื่อวาน"
+    return local - timedelta(days=7), " ย้อนหลัง 7 วัน"
 
 
 def _time_th(value: str | None) -> str | None:
@@ -415,13 +455,36 @@ class HazardAgent:
             return [station for station in stations if province(station) in wanted], label
 
         if intent == "earthquake":
-            quakes = rows("get_earthquakes")[:5]
+            since, period = _quake_period(question, now)
+            all_quakes = rows("get_earthquakes")
+            quakes = [q for q in all_quakes if (_parse_time(q.get("time")) or since) >= since]
+            where = ""
+            if u.areas:
+                # Province or district centre: events within QUAKE_NEAR_KM of it (a province is up to ~150 km across).
+                area = u.areas[0]
+                near = []
+                for q in quakes:
+                    if q.get("lat") is None or q.get("lon") is None:
+                        continue
+                    km = _km(area.lat, area.lon, q["lat"], q["lon"])
+                    if km <= QUAKE_NEAR_KM:
+                        near.append({**q, "distance_km": round(km)})
+                quakes, where = near, f"ใกล้{_area_label(area, self.gazetteer)} (ภายใน {QUAKE_NEAR_KM} กม.)"
+            total = len(quakes)
+            quakes = quakes[:QUAKE_LIST_MAX if u.areas else 5]
+            # TMD lists only its last 10 events, so ThanPhai keeps what it has seen; say when that starts after the period.
+            tmd_times = [t for q in all_quakes if q.get("source") == "กรมอุตุนิยมวิทยา" and (t := _parse_time(q.get("time")))]
+            kept_from = min(tmd_times) if tmd_times else None
+            gap = (f"ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ {_time_th(kept_from.isoformat())} "
+                   "เหตุการณ์ขนาดเล็กก่อนหน้านั้นอาจไม่อยู่ในรายการ (USGS รายงานเฉพาะขนาด 3.5 ขึ้นไป)"
+                   if kept_from is not None and kept_from - since > timedelta(hours=12) else None)
             if not quakes:
                 message = ("แหล่งข้อมูลแผ่นดินไหวขัดข้อง จึงยังตรวจสอบรายการล่าสุดไม่ได้"
                            if sources_down("tmd_earthquakes", "usgs_earthquakes")
-                           else "ไม่พบรายการแผ่นดินไหวในข้อมูลย้อนหลัง 7 วันจาก TMD/USGS")
-                return finish([message], [], ["กรมอุตุนิยมวิทยา (TMD)", "USGS"])
-            lines = ["แผ่นดินไหวล่าสุดในข้อมูลย้อนหลัง 7 วัน:"]
+                           else f"ไม่พบแผ่นดินไหว{where or 'ในข้อมูล'}{period}จาก TMD/USGS")
+                return finish([message] + ([gap] if gap else []), [], ["กรมอุตุนิยมวิทยา (TMD)", "USGS"])
+            lines = [f"แผ่นดินไหว{where}{period}: {total} ครั้ง" + (f" (แสดง {len(quakes)} ครั้งล่าสุด)" if total > len(quakes) else "")
+                     if u.areas else f"แผ่นดินไหวล่าสุด{period}:"]
             if sources_down("tmd_earthquakes", "usgs_earthquakes"):
                 lines.append("แหล่งข้อมูลแผ่นดินไหวบางแห่งขัดข้อง รายการอาจไม่ครบ")
             sources = []
@@ -433,6 +496,10 @@ class HazardAgent:
                 sources.append(source)
                 lines.append(f"• ขนาด {magnitude:g}" if isinstance(magnitude, (int, float)) else "• ไม่ระบุขนาด")
                 lines[-1] += f" · {place} · {time or 'เวลาไม่ระบุ'}"
+                if q.get("distance_km") is not None:
+                    lines[-1] += f" · ห่างราว {q['distance_km']} กม."
+            if gap:
+                lines.append(gap)
             return finish(lines, quakes, sources)
 
         if intent == "storms":

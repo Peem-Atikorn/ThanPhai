@@ -42,6 +42,9 @@ PREPARE_WORDS = ("เตรียม", "ต้องทำ", "ทำยังไ
 EMERGENCY_WORDS = ("ช่วยด้วย", "ติดอยู่", "บาดเจ็บ", "จมน้ำ", "ฉุกเฉิน", "help", "trapped", "injured")
 SOURCE_WORDS = ("แหล่งข้อมูล", "ข้อมูลจากไหน", "ข้อมูลมาจากไหน", "ที่มาของข้อมูล", "ใช้ข้อมูลจาก", "data source")
 GREETING = re.compile(r"(?:(?:สวัสดี|หวัดดี)(?:\s*(?:ครับ|ค่ะ|คะ))?|hello|hi|hey)[!?.\s]*")
+# A past period or a count turns an earthquake question about a place into the list of events there.
+QUAKE_LIST_WORDS = ("เดือนนี้", "เดือนที่แล้ว", "สัปดาห์", "อาทิตย์", "ย้อนหลัง", "ที่ผ่านมา", "กี่ครั้ง", "กี่รอบ", "บ่อย",
+                    "ที่ไหนบ้าง", "รายการ", "วันก่อน", "เมื่อวาน", "this month", "this week", "past", "how many", "list")
 # Relative Thai/English time words -> (start offset days, end offset days).
 TIME_WORDS = {
     "วันนี้": (0, 1), "today": (0, 1), "คืนนี้": (0, 1), "tonight": (0, 1),
@@ -161,10 +164,11 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
               and any(w in lowered for w in ("อะไร", "ไหน", "ชื่อ", "รายชื่อ", "ล่าสุด", "ตอนนี้", "ปัจจุบัน", "active", "current")))):
         data_intent = "storms"
     elif any(w in lowered for w in ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "earthquake", "aftershock", "quake")) and (
-            not areas or any(w in lowered for w in ("ล่าสุด", "ที่ไหน", "เกิดเมื่อ", "ขนาด", "magnitude"))):
+            not areas or any(w in lowered for w in ("ล่าสุด", "ที่ไหน", "เกิดเมื่อ", "ขนาด", "magnitude", *QUAKE_LIST_WORDS))):
         data_intent = "earthquake"
     explicit_media = data_intent == "media" and any(w in lowered for w in ("ขอ", "ลิงก์", "ดูภาพ"))
-    if data_intent and areas and "ไหม" in lowered and detect_hazards(text) and not explicit_media:
+    asks_list = data_intent == "earthquake" and any(w in lowered for w in QUAKE_LIST_WORDS)
+    if data_intent and areas and "ไหม" in lowered and detect_hazards(text) and not explicit_media and not asks_list:
         data_intent = None
     if data_intent:
         return Understanding(data_intent, [], areas, start, end, language, regions=regions)
