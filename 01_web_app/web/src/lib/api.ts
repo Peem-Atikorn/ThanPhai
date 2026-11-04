@@ -1,7 +1,7 @@
 export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone" | "landslide";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
 export type RadarFrame = {
-  tiles: string;
+  tiles: string | null;
   time: number;
   kind?: "observed" | "forecast";
   horizonMin?: number;
@@ -331,7 +331,7 @@ export const api = {
     const res = await fetch("/api/v1/radar", { cache: "no-store" });
     if (res.status === 404) return { enabled: false, frames: [] };
     if (!res.ok) throw new Error(`${res.status}`);
-    return { enabled: true, frames: (await res.json()).frames };
+    return { enabled: true, frames: (await res.json()).frames.map((frame: { tiles: string; time: number }) => ({ ...frame, kind: "observed" as const })) };
   },
   radarNowcast: async (): Promise<RadarNowcast> => {
     const res = await fetch("/api/v1/radar/nowcast", { cache: "no-store" });

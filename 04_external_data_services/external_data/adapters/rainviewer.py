@@ -5,6 +5,9 @@ from typing import Any
 import httpx
 
 RAINVIEWER_MAPS_URL = "https://api.rainviewer.com/public/weather-maps.json"
+RADAR_HISTORY_SECONDS = 3600
+RADAR_MAX_FRAME_AGE_SECONDS = 7200
+RADAR_FRAME_LIMIT = 7
 
 _CACHE_FRAMES: list[dict[str, Any]] | None = None
 _CACHE_TIME: float = 0.0
@@ -53,6 +56,19 @@ def parse_radar_frames(data: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return frames
+
+
+def recent_radar_frames(frames: list[dict[str, Any]], *, now: float | None = None, limit: int = RADAR_FRAME_LIMIT) -> list[dict[str, Any]]:
+    """Keep the latest frame fresh and at most an hour of history behind it."""
+    current_time = time.time() if now is None else now
+    fresh = [frame for frame in frames
+             if isinstance(frame.get("time"), (int, float)) and not isinstance(frame["time"], bool)
+             and 0 <= current_time - frame["time"] <= RADAR_MAX_FRAME_AGE_SECONDS]
+    if not fresh:
+        return []
+    latest = max(frame["time"] for frame in fresh)
+    history = [frame for frame in fresh if 0 <= latest - frame["time"] <= RADAR_HISTORY_SECONDS]
+    return history[-limit:]
 
 
 def _cached() -> list[dict[str, Any]] | None:

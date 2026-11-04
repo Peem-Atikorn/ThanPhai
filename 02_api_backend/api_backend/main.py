@@ -17,7 +17,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from api_backend.hazard_service import HazardService
-from external_data.adapters.rainviewer import fetch_radar_maps
+from external_data.adapters.rainviewer import RADAR_FRAME_LIMIT, fetch_radar_maps, recent_radar_frames
 from geo_integration.gazetteer import LEVEL_RANK, normalize, split_prefix
 from decision_engine.explainer import create_explainer_from_env
 from hazard_agent import HazardAgent
@@ -315,9 +315,6 @@ async def media() -> dict:
 
 RADAR_TTL_S = 300
 RADAR_RETRY_S = 30
-RADAR_HISTORY_S = 3600
-RADAR_MAX_FRAME_AGE_S = 7200
-RADAR_FRAME_LIMIT = 7
 _radar_lock = asyncio.Lock()
 _radar_retry_at = 0.0
 _radar_cache: tuple[float, list[dict] | None] | None = None  # (monotonic time fetched, recent frames)
@@ -345,10 +342,8 @@ async def radar() -> dict:
             if (_radar_cache is None or now - _radar_cache[0] >= RADAR_TTL_S) and now >= _radar_retry_at:
                 try:
                     frames = await fetch_radar_maps()
-                    recent = [
-                        {"tiles": frame["tile_url"], "time": frame["time"]}
-                        for frame in frames[-RADAR_FRAME_LIMIT:]
-                    ]
+                    recent = [{"tiles": frame["tile_url"], "time": frame["time"]}
+                              for frame in recent_radar_frames(frames, limit=RADAR_FRAME_LIMIT)]
                     _radar_cache = (time.monotonic(), recent)
                     _radar_retry_at = 0.0
                 except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
@@ -356,17 +351,7 @@ async def radar() -> dict:
                     _radar_retry_at = time.monotonic() + RADAR_RETRY_S
     if _radar_cache is None:
         raise HTTPException(502, "RainViewer did not answer; try again later")
-    frames = _radar_cache[1] or []
-    # RainViewer's latest image can lag wall time; retain an hour relative to it, but never serve a stale cache.
-    latest_time = max((frame["time"] for frame in frames), default=None)
-    latest_age = time.time() - latest_time if latest_time is not None else None
-    if latest_age is None or not 0 <= latest_age <= RADAR_MAX_FRAME_AGE_S:
-        return {"frames": []}
-    frames = [
-        frame for frame in frames
-        if 0 <= latest_time - frame["time"] <= RADAR_HISTORY_S
-    ]
-    return {"frames": frames}
+    return {"frames": recent_radar_frames(_radar_cache[1] or [])}
 
 
 @app.get("/v1/radar/nowcast")

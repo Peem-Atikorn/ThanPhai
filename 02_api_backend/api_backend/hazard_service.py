@@ -1657,7 +1657,7 @@ class HazardService:
 
     async def get_radar_nowcast(self) -> dict:
         """Return 1-hour radar nowcast calculated from real radar frames with Qwen explanation."""
-        from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes
+        from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes, recent_radar_frames
         from risk_models.nowcast import decode_png_radar, detect_rain_cells, estimate_motion, track_cells_to_districts
         from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget
 
@@ -1668,7 +1668,7 @@ class HazardService:
             log.warning("Failed to fetch radar maps from RainViewer: %s", exc)
             frames = []
 
-        past_frames = frames[-6:] if frames else []
+        past_frames = recent_radar_frames(frames, limit=6)
         curr_time = past_frames[-1]["time"] if past_frames else 0
 
         # Fast path check outside lock
@@ -1758,7 +1758,7 @@ class HazardService:
                 # Generate extrapolated forecast frames metadata (+10 to +60 minutes)
                 # If motion is undetermined (direction_th == "ทิศทางไม่แน่นอน"), dx/dy are 0
                 is_undetermined = motion.direction_th == "ทิศทางไม่แน่นอน"
-                forecast_frames = [
+                forecast_frames = [] if is_undetermined else [
                     {
                         "time": curr_frame_meta["time"] + step * int(interval_min * 60),
                         "horizon_min": step * int(interval_min),
@@ -1776,7 +1776,7 @@ class HazardService:
                         intensity_desc="ไม่มีฝน",
                         targets=[],
                     )
-                    return None, [], summary, forecast_frames
+                    return None, [], summary, []
 
                 lead_cell = cells[0]
                 closest_amphoe = min(

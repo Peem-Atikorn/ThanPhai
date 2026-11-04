@@ -44,7 +44,7 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
     <input type="range" min={0} max={frames.length - 1} step={1} value={index} aria-label={tr("เลือกเวลาเรดาร์")}
       onChange={(event) => { setPlaying(false); onChange(Number(event.target.value)); }}/>
     <div className="radar-frame-time">
-      <span className={"radar-frame-badge" + (forecast ? " is-forecast" : "")}>{tr(forecast ? `ค่าคาดการณ์ +${frame.horizonMin ?? 0} นาที` : "เรดาร์จริง")}</span>
+      <span className={"radar-frame-badge" + (forecast ? " is-forecast" : "")}>{forecast ? <>{tr("ค่าคาดการณ์")} +{frame.horizonMin ?? 0} {tr("นาที")}</> : tr("เรดาร์จริง")}</span>
       <time dateTime={new Date(frame.time * 1000).toISOString()}>{time}{tr(" น. เวลาไทย")}</time>
     </div>
     {forecast && <div className="radar-forecast-copy">
