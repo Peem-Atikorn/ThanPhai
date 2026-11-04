@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 import api_backend.main as main
+from external_data.adapters.rainviewer import parse_radar_frames
 
 
 @pytest.fixture
@@ -19,10 +20,11 @@ def radar_state(monkeypatch):
 
 
 def maps(timestamp=1800000000):
-    return {"host": "https://tilecache.rainviewer.com", "radar": {"past": [
+    # The frame list the module 04 adapter returns for a weather-maps.json response.
+    return parse_radar_frames({"host": "https://tilecache.rainviewer.com", "radar": {"past": [
         {"time": timestamp - 600, "path": "/v2/radar/a"},
         {"time": timestamp, "path": "/v2/radar/b"},
-    ]}}
+    ]}})
 
 
 @pytest.mark.parametrize("initial", ["cold", "expired", "failed"])
@@ -38,7 +40,7 @@ async def test_radar_shares_concurrent_refresh(radar_state, monkeypatch, initial
             raise httpx.ConnectError("offline")
         return maps()
 
-    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         responses = await asyncio.gather(*(client.get("/v1/radar") for _ in range(20)))
     assert calls == [1]
@@ -63,7 +65,7 @@ async def test_radar_failure_waits_before_retry_and_recovers(radar_state, monkey
             raise httpx.ConnectError("offline")
         return maps()
 
-    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         for now in (10000.0, 10001.0, 10029.0):
             radar_state.monotonic = lambda: now
@@ -85,7 +87,7 @@ async def test_radar_drops_old_frame_even_during_cache_ttl(radar_state, monkeypa
     async def fetch():
         raise httpx.ConnectError("offline")
 
-    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         response = await client.get("/v1/radar")
     assert response.status_code == 200 and response.json() == {"frame": None}
@@ -99,7 +101,7 @@ async def test_radar_frame_can_expire_while_retry_is_delayed(radar_state, monkey
         calls.append(1)
         raise httpx.ConnectError("offline")
 
-    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         assert (await client.get("/v1/radar")).json()["frame"] is not None
         radar_state.time = lambda: 1800000020.0
@@ -118,7 +120,7 @@ async def test_radar_disabled_never_fetches(radar_state, monkeypatch, setting):
     async def fetch():
         pytest.fail("disabled radar must not call RainViewer")
 
-    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         assert (await client.get("/v1/radar")).status_code == 404
 
@@ -129,9 +131,9 @@ async def test_radar_success_is_cached_for_five_minutes(radar_state, monkeypatch
 
     async def fetch():
         calls.append(1)
-        return {"radar": {"past": []}} if empty else maps()
+        return [] if empty else maps()
 
-    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         first = await client.get("/v1/radar")
         radar_state.monotonic = lambda: 10299.0
@@ -158,7 +160,7 @@ async def test_radar_cached_response_does_not_wait_for_refresh(radar_state, monk
         await release.wait()
         return maps()
 
-    monkeypatch.setattr(main, "fetch_rainviewer_maps", fetch)
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         refresh = asyncio.create_task(client.get("/v1/radar"))
         try:
