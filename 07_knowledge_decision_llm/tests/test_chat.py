@@ -25,9 +25,17 @@ def test_chat_reply_with_a_level_or_number_is_rejected():
     assert qwen("น้ำจะท่วม 2 เมตรครับ")[0].chat("พรุ่งนี้น้ำท่วมไหม") is None
 
 
+def test_chat_reply_that_states_any_level_is_rejected():
+    # "ระดับปกติ" sounds reassuring, but only the rules may say an area is NORMAL.
+    for reply in ("วันนี้ทุกอย่างอยู่ในระดับปกติครับ", "ตอนนี้อยู่ในเกณฑ์เฝ้าระวังครับ", "สถานะ: วิกฤต",
+                  "Everything is NORMAL here", "Bangkok is on WATCH today"):
+        assert "hazard level in chat" in validate_chat(reply), reply
+
+
 def test_ordinary_words_that_contain_level_words_are_allowed():
     assert validate_chat("ผมเป็นผู้ช่วยในแอปเตือนภัยทันภัย วันนี้อากาศดีตามปกติไหมครับ") == []
     assert validate_chat("ผมคือ qwen2.5-7b ครับ", model="qwen2.5-7b") == []
+    assert validate_chat("Life is back to normal, ask me about floods anytime") == []
 
 
 def test_chat_is_cached_and_a_failure_returns_none():
