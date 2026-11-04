@@ -17,6 +17,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from api_backend.hazard_service import HazardService
+from external_data.adapters.rainviewer import fetch_radar_maps
 from geo_integration.gazetteer import LEVEL_RANK, normalize, split_prefix
 from decision_engine.explainer import create_explainer_from_env
 from hazard_agent import HazardAgent
@@ -312,7 +313,6 @@ async def media() -> dict:
     return {**(svc.media or empty), **meta(svc)}
 
 
-RAINVIEWER_MAPS = "https://api.rainviewer.com/public/weather-maps.json"
 RADAR_TTL_S = 300
 RADAR_RETRY_S = 30
 RADAR_MAX_FRAME_AGE_S = 7200
@@ -321,20 +321,14 @@ _radar_retry_at = 0.0
 _radar_cache: tuple[float, dict | None] | None = None  # (monotonic time fetched, latest frame)
 
 
-async def fetch_rainviewer_maps() -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.get(RAINVIEWER_MAPS)
-        response.raise_for_status()
-        return response.json()
-
-
 @app.get("/v1/radar")
 async def radar() -> dict:
     """Latest RainViewer radar frame as a tile URL template (`frame` is null when there is none).
 
     RainViewer's free tier is for personal/educational use and allows 100 requests/min per IP, so the layer is
     for the team only: it answers 404 unless RADAR_LAYER=internal, and the frame list is fetched once per 5 minutes
-    for everyone. Failed refreshes wait 30 seconds before retrying; frames older than 2 hours are omitted.
+    for everyone through the module 04 adapter, which the nowcast shares. Failed refreshes wait 30 seconds before
+    retrying; frames older than 2 hours are omitted.
     Concurrent readers can use the cached image while one request refreshes it.
     Login (admin/user) replaces the env flag later.
     """
@@ -348,13 +342,11 @@ async def radar() -> dict:
             now = time.monotonic()
             if (_radar_cache is None or now - _radar_cache[0] >= RADAR_TTL_S) and now >= _radar_retry_at:
                 try:
-                    maps = await fetch_rainviewer_maps()
-                    last = (maps.get("radar", {}).get("past") or [None])[-1]
-                    # 256 px tiles, colour scheme 2 (Universal Blue, the only one left), smoothed, snow shown.
-                    frame = {"tiles": f"{maps['host']}{last['path']}/256/{{z}}/{{x}}/{{y}}/2/1_1.png", "time": last["time"]} if last else None
+                    frames = await fetch_radar_maps()
+                    frame = {"tiles": frames[-1]["tile_url"], "time": frames[-1]["time"]} if frames else None
                     _radar_cache = (time.monotonic(), frame)
                     _radar_retry_at = 0.0
-                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
                     logging.getLogger("api").warning("RainViewer frame list failed", exc_info=True)
                     _radar_retry_at = time.monotonic() + RADAR_RETRY_S
     if _radar_cache is None:

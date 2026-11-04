@@ -6,6 +6,22 @@ from external_data.adapters.thaiwater import ThaiWaterWaterLevel, river_flow, st
 from external_data.adapters.thaiwater_graphs import parse_dam_year, parse_station_graph
 from external_data.adapters.thaiwater_media import MEDIA_URL, parse_media, radar_name
 
+
+def test_sync_dam_year_fetches_requested_metric_and_years():
+    import httpx
+    from external_data.adapters.thaiwater_graphs import fetch_dam_year_sync
+
+    def respond(request):
+        assert request.url.params["data_type"] == "dam_released"
+        assert request.url.params["year"] == "2025,2026"
+        assert request.url.params["dam_id"] == "123"
+        return httpx.Response(200, json={"data": {"graph_data": [
+            {"year": 2026, "data": [{"date": "2026-11-03", "value": 12}]}]}})
+
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        result = fetch_dam_year_sync(client, 123, "released", [2025, 2026])
+    assert result["series"] == [{"year": 2026, "values": [["2026-11-03", 12]]}]
+
 FIXTURES = Path(__file__).parent / "fixtures"
 MEDIA = json.loads((FIXTURES / "tw_thailand_main_media.json").read_text(encoding="utf-8"))
 RIVERS = json.loads((FIXTURES / "tw_waterlevel_rivers.json").read_text(encoding="utf-8"))

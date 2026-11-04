@@ -13,6 +13,8 @@ import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
 import EventsPanel from "@/components/EventsPanel";
 import EnvironmentSummary, { type EnvironmentState } from "@/components/EnvironmentSummary";
+import StormsPanel from "@/components/StormsPanel";
+import AreaWarnings from "@/components/AreaWarnings";
 import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
@@ -720,7 +722,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const counts = LEVELS.map((level) => ({ ...level, n: displayedLayer?.features.filter((f) => (f.properties?.level ?? "NONE") === level.id).length ?? 0 }));
     const summaryCounts = LEVELS.map(level => ({ ...level, n: summaryLayer?.features.filter(f => (f.properties?.level ?? "NONE") === level.id).length ?? 0 }));
     const warningCount = counts.filter((l) => l.id === "CRITICAL" || l.id === "WARNING").reduce((sum, l) => sum + l.n, 0);
-    const warnings = (area?.official_warnings ?? []).filter(w => hazard === "overview" || w.hazards.includes(hazard));
     const assessments = (area?.assessments ?? []).filter(a => hazard === "overview" || a.hazard === hazard)
         .sort((a, b) => LEVELS.findIndex(l => l.id === (a.level ?? "NONE")) - LEVELS.findIndex(l => l.id === (b.level ?? "NONE")));
     const locationScope = place && <div className="location-scope"><Icon name="pin"/><div><strong>{tr(prefix(place.level))}{tr(place.name_th)}</strong><small>{tr("ข้อมูล")}{tr(itemTh(currentItem))}{tr("ระดับจังหวัด \u00B7 จ.")}{tr(areaProvince?.name)}</small></div><button type="button" onClick={clearArea}>{tr("ดูทั่วประเทศ")}</button></div>;
@@ -856,6 +857,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(!!layer?.meta.degraded_services.length && <p className="data-notice">{tr("ข้อมูลบางแหล่งไม่พร้อมใช้งาน: ")}{tr(layer.meta.degraded_services.join(", "))}</p>)}
           </div>)}
           {tr(view === "hazard" && hazard === "rain_storm" && <div id="weather-images" className="media-anchor"><MediaPanel revision={revision}/></div>)}
+          {view === "hazard" && hazard === "tropical_cyclone" && <StormsPanel revision={revision}/>}
           {tr(view === "hazard" && (hazard === "earthquake" || hazard === "tropical_cyclone") && <EventsPanel revision={revision} quakes={hazard === "earthquake"}/>)}
           </div></details>
         </section>
@@ -868,7 +870,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(areaStatus === "loading" ? <div className="empty-area" role="status"><span className="spinner"/><h3>{tr("กำลังดูข้อมูลพื้นที่\u2026")}</h3><p>{tr("รวบรวมระดับความเสี่ยงและข้อมูลล่าสุด")}</p></div> : areaStatus === "error" ? <div className="empty-area" role="alert"><Icon name="info"/><h3>{tr("ยังเปิดข้อมูลพื้นที่ไม่ได้")}</h3><p>{tr("กรุณาลองใหม่ หรือเลือกพื้นที่อื่น")}</p><button className="secondary-button" onClick={() => selectedCode.current && select(selectedCode.current, selected)}>{tr("ลองใหม่")}</button></div> : area ? <>
               <div className="area-title"><span className="area-icon"><Icon name="pin"/></span><div><h2>{tr(prefix(area.area.level))}{tr(area.area.name_th)}</h2><p>{tr(area.area.parents.join(" · ") || "ประเทศไทย")}</p></div><button type="button" className="text-button area-reset" onClick={clearArea}>{tr("ดูทั่วประเทศ")}</button></div>
               {tr(area.area.level === "province" && <p className="data-notice">{tr("ระดับจังหวัดแสดงความเสี่ยงสูงสุดของอำเภอในจังหวัด")}</p>)}
-              {tr(warnings.length > 0 && <div className="official-warning"><strong><Icon name="info"/>{tr("ประกาศทางการ \u00B7 กรมอุตุนิยมวิทยา")}</strong><ul>{tr(warnings.map((w) => <li key={w.title}>{tr(w.url ? <a href={w.url} target="_blank" rel="noreferrer">{tr(w.title)}</a> : w.title)}</li>))}</ul><small>{tr("ประกาศระดับประเทศ โปรดตรวจสอบพื้นที่ที่ระบุในประกาศ")}</small></div>)}
+              <AreaWarnings warnings={area.official_warnings} code={area.area.code} hazard={hazard} assessments={assessments}/>
               <ul className="assessment-list">{tr(assessments.map((assessment) => {
                 const info = levelInfo(assessment.level);
                 const reasons = Object.entries(assessment.observations).map(([key, value]) => describeObservation(key, value)).filter(Boolean);
@@ -881,7 +883,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               <p className="source-note">{tr("อัปเดต ")}{tr(formatTime(area.data_updated_at))}{tr(" (เวลาไทย)")}</p>
             </> : <div className="area-intro"><h2>{tr(areaIntroductions()[hazard].title)}</h2><p className="section-description">{tr(areaIntroductions()[hazard].description)}</p>{tr(!searchInHeader && <button type="button" className="text-button" onClick={() => searchInput.current?.focus()}>{tr("ค้นหาพื้นที่")}<Icon name="arrow"/></button>)}</div>)}
             {tr(!area && areaStatus === "idle" && layer && <div className="national-summary"><span className={"summary-dot " + (warningCount ? "has-warning" : "")}/><p>{tr(warningCount ? <><strong>{tr(number.format(warningCount))}{tr(" อำเภอ")}</strong>{tr(" อยู่ในระดับเตือนภัยหรือวิกฤต")}</> : "ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤตในข้อมูลชุดนี้")}<small>{tr("ภาพรวม")}{tr(itemTh(hazard))}{tr("ทั่วประเทศ")}</small></p></div>)}
-            {tr(!area && areaStatus === "idle" && hazard === "overview" && nationalWarnings.length > 0 && <div className="official-warning official-warning--regions"><strong><Icon name="info"/>{tr("ประกาศทางการ · กรมอุตุนิยมวิทยา")}</strong>{tr(nationalWarnings.map((w) => <div key={w.title}><p className="official-warning-title">{tr(w.url ? <a href={w.url} target="_blank" rel="noreferrer">{tr(w.title)}</a> : w.title)}</p>{tr(!!w.by_region?.length && <ul className="warning-regions">{tr(w.by_region.map((r) => <li key={r.from + r.level + r.areas.join()}><span className={"risk-badge level-" + r.level}>{tr(levelInfo(r.level).th)}</span><span><b>{tr(r.areas.map((a) => tr(a)).join(" · "))}</b><small>{tr(dayRange(r.from, r.to))}{tr(" · ")}{tr(r.hazards.map((h) => itemTh(h)).join(", "))}</small></span></li>))}</ul>)}</div>))}<small>{tr("สีตามถ้อยคำในประกาศ: ฝนตกหนักบางแห่ง = เฝ้าระวัง, ฝนตกหนักถึงหนักมาก หลายพื้นที่ หรือระบุจังหวัด = เตือนภัย")}</small></div>)}
+            {tr(!area && areaStatus === "idle" && hazard === "overview" && nationalWarnings.length > 0 && <div className="official-warning official-warning--regions"><strong><Icon name="info"/>{tr("ประกาศทางการ · กรมอุตุนิยมวิทยา")}</strong>{tr(nationalWarnings.map((w) => <div key={w.title}><p className="official-warning-title">{tr(w.url ? <a href={w.url} target="_blank" rel="noreferrer">{tr(w.title)}</a> : w.title)}</p>{tr(!!w.by_region?.length && <ul className="warning-regions">{tr(w.by_region.map((r) => <li key={r.from + r.level + r.areas.join()}><span className={"risk-badge level-" + r.level}>{tr(levelInfo(r.level).th)}</span><span><b>{tr(r.areas.map((a) => tr(a)).join(" · "))}</b><small>{tr(dayRange(r.from, r.to))}{tr(" · ")}{tr(r.hazards.map((h) => itemTh(h)).join(", "))}</small></span></li>))}</ul>)}{tr(!!w.rain_days?.length && <><p className="official-warning-title">{tr("รายวันตามประกาศ")}</p><ul className="warning-regions">{tr(w.rain_days.map((d) => <li key={d.day + d.very_heavy}><span className={"risk-badge level-" + (d.very_heavy ? "WARNING" : "WATCH")}>{tr(d.very_heavy ? "ฝนตกหนักมาก" : "ฝนตกหนัก")}</span><span title={d.provinces.join(", ")}><b>{tr(dayRange(d.day, d.day))}</b><small>{tr(d.provinces.length <= 6 ? d.provinces.join(", ") : number.format(d.provinces.length) + tr(" จังหวัด"))}</small></span></li>))}</ul></>)}</div>))}<small>{tr("ระดับสีเป็นการประเมินของทันภัยจากประกาศ")}</small></div>)}
             {tr(!area && areaStatus === "idle" && hazard === "overview" && overviewBreakdown.length > 0 && <div className="overview-breakdown"><h3>{tr("อำเภอที่เฝ้าระวังขึ้นไป แยกตามภัยที่หนักที่สุด")}</h3><ul>{tr(overviewBreakdown.map(([id, n]) => <li key={id}><button type="button" onClick={() => openItem(id)}><Icon name={id}/><span>{tr(itemTh(id))}</span><strong>{tr(number.format(n))}</strong><Icon name="arrow"/></button></li>))}</ul></div>)}
           </section>
 
