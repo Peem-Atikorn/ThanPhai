@@ -82,6 +82,13 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert(!content(metrics).includes('30'), 'Loading another area hides old values');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, layers: { air_quality: { data: null, error: true }, heat: { data: null, error: false } } });
   assert(content(metrics).includes('โหลดข้อมูลไม่ได้') && content(metrics).includes('กำลังโหลด'), 'Independent failure and loading states');
+  const heatPending = { ...environmentLayer, meta: { ...environmentLayer.meta, inputs_pending: ['heat_model', 'marine_model'] },
+    features: environmentLayer.features.map(f => ({ properties: { ...f.properties, heat_index_max_24h: null } })) };
+  metrics = instance(EnvironmentSummary).render({ ...metricProps, layers: { air_quality: { data: { ...environmentLayer, meta: { ...environmentLayer.meta, inputs_pending: ['marine_model'] } }, error: false }, heat: { data: heatPending, error: false } } });
+  const [airCard, heatCard] = nodes(metrics).filter(n => n.type === 'article');
+  assert(content(heatCard).includes('กำลังโหลด') && !content(heatCard).includes('ไม่มีข้อมูล'), 'A heat forecast still loading reads as loading, not as no data');
+  assert(content(heatCard).includes('ข้อมูลยังไม่ครบ'), 'The heat card says its own forecast is incomplete');
+  assert(content(airCard).includes('80') && !content(airCard).includes('ข้อมูลยังไม่ครบ'), 'Another input still loading does not mark the PM2.5 card incomplete');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: { ...metricArea, assessments: [{ hazard: 'air_quality', level: 'NORMAL', observations: { pm25_24h: null, pm25_model_24h: 12 }, sources: ['Open-Meteo / CAMS (แบบจำลอง)'] }] } });
   assert(content(metrics).includes('12') && content(metrics).includes('แบบจำลอง') && content(metrics).includes('CAMS'), 'Selected model fallback is labelled and credited');
   load('@/lib/i18n').setLanguage('en');

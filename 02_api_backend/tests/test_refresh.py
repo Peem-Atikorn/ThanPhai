@@ -300,6 +300,18 @@ async def test_inputs_pending_only_while_first_load_runs(base_service):
         svc._jobs, svc.satellite_updated_at = saved
 
 
+def test_arrived_input_stays_pending_until_decisions_use_it():
+    # Without data files: inputs_pending reads only these attributes.
+    svc = HazardService.__new__(HazardService)
+    svc.satellite_updated_at = svc.forecast_updated_at = svc.fire_updated_at = None
+    svc.grid_updated_at = {"heat_model": datetime.now(timezone.utc), "marine_model": None}
+    svc._jobs, svc._built_with = {}, set()
+    # The heat forecast has arrived, but the decisions on show were built without it: keep clients polling.
+    assert svc.inputs_pending == ["heat_model"]
+    svc._built_with = {"heat_model"}
+    assert svc.inputs_pending == []
+
+
 def test_pm25_station_wins_and_model_fills_districts_without_one(base_service, monkeypatch):
     from thanphai_shared import SourceRecord
 

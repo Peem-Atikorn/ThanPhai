@@ -8,6 +8,8 @@ type Metric = "air_quality" | "heat";
 export type EnvironmentLayer = GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } };
 export type EnvironmentState = { key: string; data: EnvironmentLayer | null; error: boolean };
 const fields = { air_quality: "pm25_24h", heat: "heat_index_max_24h" } as const;
+// The backend's name for each card's Open-Meteo forecast while it is still loading after a restart (`inputs_pending`).
+const models = { air_quality: "air_model", heat: "heat_model" } as const;
 
 export function highestEnvironmentValue(layer: GeoJSON.FeatureCollection | null, metric: Metric) {
     let highest: { value: number; name: string; province: string; level: Level } | null = null;
@@ -40,19 +42,21 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             const measured = assessment?.observations[fields[metric]];
             const model = metric === "air_quality" && area && measured == null;
             const value = area ? (model ? assessment?.observations.pm25_model_24h : measured) : maximum?.value;
-            const loading = loadingArea || (!area && !areaError && !state?.data && !state?.error);
+            const hasValue = typeof value === "number" && Number.isFinite(value);
+            // Only this card's own forecast counts; another input still loading does not make this card incomplete.
+            const pending = !area && !!state?.data?.meta.inputs_pending?.includes(models[metric]);
+            const loading = loadingArea || (!area && !areaError && !state?.data && !state?.error) || (pending && !hasValue);
             const error = areaError || (!area && state?.error);
-            const available = !loading && !error && typeof value === "number" && Number.isFinite(value);
+            const available = !loading && !error && hasValue;
             const level = available ? (area ? assessment?.level : maximum?.level) ?? null : null;
             const source = model ? "Open-Meteo / CAMS (แบบจำลอง)" : metric === "air_quality" ? "Air4Thai / กรมควบคุมมลพิษ" : "Open-Meteo";
-            const pending = !area && state?.data?.meta.inputs_pending?.length;
             const degraded = area ? area.degraded_services.length : state?.data?.meta.degraded_services.length;
             return <article key={metric}>
                 <h3><Icon name={metric}/>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
                 <p className="environment-scope">{tr(area || loadingArea || areaError ? "พื้นที่ที่เลือก" : "สูงสุดในประเทศ · อำเภอที่มีข้อมูล")}</p>
                 <p className="environment-value">{metric === "heat" && available && <span>{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
                 <span className={"risk-badge level-" + (level ?? "NONE")}>{tr(loading ? "กำลังโหลด…" : error ? "โหลดข้อมูลไม่ได้" : levelInfo(level).th)}</span>
-                <p className="environment-place">{tr(area ? area.area.name_th : available ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : "ยังไม่มีข้อมูล")}</p>
+                <p className="environment-place">{tr(area ? area.area.name_th : available ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : loading ? "" : "ยังไม่มีข้อมูล")}</p>
                 <small>{tr(metric === "air_quality" ? model ? "แบบจำลอง · เฉลี่ย 24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม." : "สูงสุดใน 24 ชม. ข้างหน้า")}</small>
                 <small>{tr(source)}</small>
                 <small>{tr("อัปเดต ")}{updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at)}{tr(" · เวลาไทย")}</small>

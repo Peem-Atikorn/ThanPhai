@@ -36,6 +36,7 @@ async def test_ask_data_tools_http(monkeypatch, question, intent, expected):
     service.satellite_updated_at = service.forecast_updated_at = service.fire_updated_at = now
     service.grid_updated_at = {}
     service._jobs = {}
+    service._built_with = {"gistda_flood", "tmd_nwp_daily", "fire_model"}  # the decisions above include them
     service.quakes = [{"magnitude": 4.2, "place_th": "เชียงใหม่", "time": now.isoformat(), "source": "USGS"}]
     service.storms = [{"name": "TEST-STORM", "wind_kmh": 90, "time": now.isoformat()}]
     service.cyclone_overlay = lambda: {"features": []}

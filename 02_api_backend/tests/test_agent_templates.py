@@ -16,6 +16,7 @@ def test_ask_source_list_matches_sources_endpoint(monkeypatch):
     service.satellite_updated_at = service.forecast_updated_at = service.fire_updated_at = service.updated_at
     service.grid_updated_at = {}
     service._jobs = {}
+    service._built_with = {"gistda_flood", "tmd_nwp_daily", "fire_model"}
 
     async def fresh_service():
         return service
