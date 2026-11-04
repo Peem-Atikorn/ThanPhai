@@ -152,6 +152,8 @@ class HazardService:
         # Set when slower inputs (satellite, fire model) change, so decisions are rebuilt without
         # pretending the live data is missing (clearing updated_at showed "data time: —" in the UI).
         self._inputs_changed = False
+        # Slow inputs that had arrived when the current decisions were built (see inputs_pending).
+        self._built_with: set[str] = set()
         self._drought: dict | None = None
         self.dams: list[dict] = []  # 35 large dams, refreshed with the live data
         self.rivers: list[dict] = []  # river stations with a flow gauge or over their bank
@@ -216,13 +218,19 @@ class HazardService:
         return {f["properties"]["code"]: {**f["geometry"], "coordinates": _round_coords(f["geometry"]["coordinates"])}
                 for f in features}
 
+    def _slow_inputs(self) -> dict[str, datetime | None]:
+        return {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at,
+                **self.grid_updated_at}
+
     @property
     def inputs_pending(self) -> list[str]:
-        """Slow inputs still loading for the first time (after a restart), so clients can check back soon."""
-        slow = {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at,
-                **self.grid_updated_at}
-        return [name for name, updated in slow.items()
-                if updated is None and name in self._jobs and not self._jobs[name].done()]
+        """Slow inputs still loading for the first time (after a restart), so clients can check back soon.
+
+        An input that has arrived stays pending until the decisions are rebuilt with it: otherwise a client
+        polling in between got "not pending" with the old, empty values and stopped polling."""
+        return [name for name, updated in self._slow_inputs().items()
+                if (updated is None and name in self._jobs and not self._jobs[name].done())
+                or (updated is not None and name not in self._built_with)]
 
     @property
     def stale(self) -> bool:
@@ -237,6 +245,7 @@ class HazardService:
                 return
             # Reset before the snapshot: inputs that change while this refresh runs set it again.
             self._inputs_changed = False
+            built_with = {name for name, updated in self._slow_inputs().items() if updated is not None}
             results, warnings_result = await self._fetch()
             media = results.pop("thaiwater_media", None)
             raw = (results, warnings_result)
@@ -274,6 +283,7 @@ class HazardService:
                 self.warnings = warnings  # keep the last good warnings if TMD failed this time
             # Merge, not replace: the forecast refresh writes its own entry on a different schedule.
             self.source_status = {**self.source_status, **status}
+            self._built_with = built_with
             self.updated_at = datetime.now(timezone.utc)
 
     def refresh_in_background(self) -> None:
