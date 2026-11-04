@@ -126,6 +126,8 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     if any(w in lowered for w in DAM_WORDS):
         # A real tambon is named "เขื่อน" (TH440310, Maha Sarakham); in a dam question the word is not a place.
         places = [a for a in areas if a.name_th not in DAM_WORDS]
+        if any(w in lowered for w in ("เทียบ", "เปรียบเทียบ", "เมื่อวาน", "สัปดาห์ก่อน", "อาทิตย์ก่อน", "history", "เทียบกับ")):
+            return Understanding("dam_history", [], places, start, end, language, regions=regions)
         return Understanding("dam", [], places, start, end, language, regions=regions)
     if any(w in lowered for w in RIVER_WORDS):
         # Tambons named like river words exist (ต.แม่น้ำ, Ko Samui): "แม่น้ำเจ้าพระยา" matched it live.
@@ -135,6 +137,26 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     if (any(w in lowered for w in FLOW_WORDS) or STATION_CODE.search(text)
             or (any(w in lowered for w in RIVER_WORDS) and not areas)):
         return Understanding("river", [], areas, start, end, language, regions=regions)
+    # These requests need numeric source records, rather than a model-generated risk summary.
+    # Keep ordinary area risk questions (e.g. "เชียงใหม่แผ่นดินไหวไหม") on the existing assessment path.
+    data_intent = None
+    if any(w in lowered for w in ("ความเค็ม", "น้ำเค็มรุก", "salinity", "เค็ม")):
+        data_intent = "water_quality"
+    elif ("pm2.5" in lowered or "pm 2.5" in lowered or "pm25" in lowered) and any(w in lowered for w in ("สถานี", "ตัวเลข", "ค่าเท่า", "สูงสุด")):
+        data_intent = "pm25_stations"
+    elif any(w in lowered for w in ("จุดความร้อน", "hotspot")) and any(w in lowered for w in ("กี่", "จำนวน", "จุด")):
+        data_intent = "fire_hotspots"
+    elif any(w in lowered for w in ("เรดาร์", "ภาพพยากรณ์", "ภาพฝน", "media", "ลิงก์ภาพ")):
+        data_intent = "media"
+    elif any(w in lowered for w in ("คลื่น", "wave")) and any(w in lowered for w in ("สูงสุด", "ความสูง", "เท่าไหร่", "กี่", "ตัวเลข", "ข้อมูลคลื่น", "wave")):
+        data_intent = "waves"
+    elif any(w in lowered for w in ("พายุอะไร", "พายุไหน", "ชื่อพายุ", "พายุล่าสุด", "พายุที่กำลัง", "active storm", "cyclone")):
+        data_intent = "storms"
+    elif any(w in lowered for w in ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "earthquake", "aftershock", "quake")) and (
+            not areas or any(w in lowered for w in ("ล่าสุด", "ที่ไหน", "เกิดเมื่อ", "ขนาด", "magnitude"))):
+        data_intent = "earthquake"
+    if data_intent:
+        return Understanding(data_intent, [], areas, start, end, language, regions=regions)
     hazards = detect_hazards(text)
     if MUEANG_QUERY.search(text) and not any(a.level == "amphoe" and a.name_th.startswith("เมือง") for a in areas):
         return Understanding("clarify", hazards, areas, start, end, language, notes=["mueang province required"])

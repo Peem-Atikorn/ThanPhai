@@ -11,6 +11,7 @@ from typing import Callable, Protocol
 from decision_engine.rag import get_disaster_guidance
 from decision_engine.rag.models import format_page_ranges
 from geo_integration import Area, Gazetteer
+from geo_integration.regions import REGION_CODES
 from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, understand
 from thanphai_shared import HazardType
 
@@ -78,6 +79,16 @@ class HazardTools(Protocol):
     def get_assessments(self, area_code: str) -> list[dict]: ...
     def get_official_warnings(self) -> list[dict]: ...
     def get_sources(self) -> dict[str, dict]: ...
+    def get_earthquakes(self) -> list[dict]: ...
+    def get_storms(self) -> list[dict]: ...
+    def get_cyclones(self) -> list[dict]: ...
+    def get_waves(self) -> list[dict]: ...
+    def get_water_quality(self) -> list[dict]: ...
+    def get_pm25_stations(self) -> list[dict]: ...
+    def get_fire_hotspots(self) -> list[dict]: ...
+    def get_media(self) -> dict: ...
+    def get_dams(self) -> list[dict]: ...
+    def get_dam_history(self, dam_id: str, series: str = "storage") -> dict | None: ...
 
 
 @dataclass
@@ -110,6 +121,17 @@ def _window_th(u: Understanding) -> str:
     if e - s <= timedelta(days=1):
         return f"วันที่ {s.day}/{s.month}"
     return f"ช่วง {s.day}/{s.month}–{e.day}/{e.month}"
+
+
+def _time_th(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        when = when.replace(tzinfo=BANGKOK) if when.tzinfo is None else when.astimezone(BANGKOK)
+    except (TypeError, ValueError):
+        return None
+    return f"{when:%H:%M} น. วันที่ {when.day}/{when.month}/{when.year + 543}"
 
 
 def _warning_applies(warning: dict, u: Understanding) -> bool:
@@ -264,6 +286,9 @@ class HazardAgent:
                     if not any(a.level == "province" for a in u.areas)
                     else "ไม่พบอำเภอเมืองในพื้นที่ที่ระบุ กรุณาระบุชื่ออำเภอและจังหวัดครับ")
             return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards], notes=u.notes)
+        data_intents = {"earthquake", "storms", "waves", "water_quality", "pm25_stations", "fire_hotspots", "dam_history", "media"}
+        if u.intent in data_intents:
+            return self._data_answer(question, u, now.astimezone(BANGKOK))
         if u.regions:
             text = (f"คำถามนี้ครอบคลุม{' / '.join(u.regions)} ทันภัยยังไม่สรุปข้อมูลทั้งภาคในคำตอบนี้ "
                     "กรุณาระบุจังหวัดหรืออำเภอที่ต้องการครับ")
@@ -298,6 +323,216 @@ class HazardAgent:
                 tail = [line for line in answer.text.splitlines() if line.startswith(VERBATIM_PREFIXES)]
                 answer.text, answer.llm_used = "\n".join([rewritten.strip(), *tail]), True
         return answer
+
+    def _data_answer(self, question: str, u: Understanding, now: datetime) -> AgentAnswer:
+        """Answer data questions from backend records without asking the LLM to supply facts."""
+        intent = u.intent
+        calls: list[str] = []
+
+        def rows(method: str) -> list[dict]:
+            fn = getattr(self.tools, method, None)
+            if not fn:
+                return []
+            calls.append(f"{method}()")
+            value = fn()
+            return value if isinstance(value, list) else []
+
+        def sources_down(*names: str) -> bool:
+            get = getattr(self.tools, "get_sources", None)
+            if not get:
+                return False
+            calls.append("get_sources()")
+            statuses = get()
+            found = [statuses[name] for name in names if name in statuses]
+            return bool(found) and all(state.get("ok") is False for state in found)
+
+        def finish(lines: list[str], evidence: list[dict], sources: list[str]) -> AgentAnswer:
+            if sources:
+                lines.append("ที่มา: " + ", ".join(dict.fromkeys(sources)))
+            return AgentAnswer("\n".join(lines), intent, None, [], evidence=evidence,
+                               sources=list(dict.fromkeys(sources)), tool_calls=calls)
+
+        if intent == "earthquake":
+            quakes = rows("get_earthquakes")[:5]
+            if not quakes:
+                message = ("แหล่งข้อมูลแผ่นดินไหวขัดข้อง จึงยังตรวจสอบรายการล่าสุดไม่ได้"
+                           if sources_down("tmd_earthquakes", "usgs_earthquakes")
+                           else "ไม่พบรายการแผ่นดินไหวในข้อมูลย้อนหลัง 7 วันจาก TMD/USGS")
+                return finish([message], [], ["กรมอุตุนิยมวิทยา (TMD)", "USGS"])
+            lines = ["แผ่นดินไหวล่าสุดในข้อมูลย้อนหลัง 7 วัน:"]
+            sources = []
+            for q in quakes:
+                magnitude = q.get("magnitude")
+                place = q.get("place_th") or q.get("where_th") or q.get("place") or "ไม่ระบุสถานที่"
+                time = _time_th(q.get("time"))
+                source = q.get("source") or "TMD/USGS"
+                sources.append(source)
+                lines.append(f"• ขนาด {magnitude:g}" if isinstance(magnitude, (int, float)) else "• ไม่ระบุขนาด")
+                lines[-1] += f" · {place} · {time or 'เวลาไม่ระบุ'}"
+            return finish(lines, quakes, sources)
+
+        if intent == "storms":
+            storms, cyclones = rows("get_storms"), rows("get_cyclones")
+            records = [(s, "ThaiWater (สสน.)") for s in storms] + [(c, "GDACS") for c in cyclones]
+            if not records:
+                message = ("แหล่งข้อมูลพายุขัดข้อง จึงยังตรวจสอบรายการล่าสุดไม่ได้"
+                           if sources_down("thaiwater_storms", "gdacs_cyclones")
+                           else "ไม่พบรายการพายุที่กำลังติดตามในข้อมูลล่าสุด")
+                return finish([message], [], ["ThaiWater (สสน.)", "GDACS"])
+            lines, evidence = ["พายุที่พบในข้อมูลติดตามล่าสุด:"], []
+            for row, source in records[:8]:
+                props = row.get("properties", row)
+                name = props.get("name") or props.get("event") or props.get("event_id") or "ไม่ระบุชื่อ"
+                wind = props.get("wind_kmh")
+                time = _time_th(props.get("time") or row.get("time"))
+                detail = f" · ลม {wind:g} กม./ชม." if isinstance(wind, (int, float)) else ""
+                lines.append(f"• {name}{detail} · {time or 'เวลาไม่ระบุ'}")
+                evidence.append(row)
+            return finish(lines, evidence, [source for _, source in records])
+
+        if intent == "waves":
+            waves = rows("get_waves")
+            waves.sort(key=lambda row: row.get("wave_height_max_24h") or 0, reverse=True)
+            if not waves:
+                message = ("แบบจำลองคลื่นขัดข้อง จึงยังดึงข้อมูลล่าสุดไม่ได้"
+                           if sources_down("open_meteo_waves") else "ยังไม่มีข้อมูลคลื่นจากแบบจำลอง Open-Meteo Marine")
+                return finish([message], [], ["Open-Meteo Marine"])
+            lines = ["ค่าคลื่นสูงสุดที่มีข้อมูลใน 24 ชั่วโมงข้างหน้า:"]
+            for wave in waves[:5]:
+                height = wave.get("wave_height_max_24h")
+                time = _time_th(wave.get("peak_time") or wave.get("time"))
+                where = f"พิกัด {wave['lat']:.2f}, {wave['lon']:.2f}" if wave.get("lat") is not None and wave.get("lon") is not None else ""
+                lines.append((f"• {height:g} เมตร" if isinstance(height, (int, float)) else "• ไม่มีค่าคลื่น")
+                             + (f" · {where}" if where else "") + f" · ช่วงสูงสุด {time or 'เวลาไม่ระบุ'}")
+            return finish(lines, waves[:5], ["Open-Meteo Marine"])
+
+        if intent == "water_quality":
+            stations = rows("get_water_quality")
+            stations.sort(key=lambda row: row.get("salinity_gl") or 0, reverse=True)
+            if not stations:
+                message = ("แหล่งข้อมูลคุณภาพน้ำขัดข้อง จึงยังตรวจสอบค่าความเค็มล่าสุดไม่ได้"
+                           if sources_down("thaiwater_waterquality") else "ยังไม่มีข้อมูลสถานีคุณภาพน้ำที่รายงานค่าความเค็ม")
+                return finish([message], [], ["คลังข้อมูลน้ำแห่งชาติ (สสน.)"])
+            lines = ["สถานีที่มีค่าความเค็มสูงสุด:"]
+            for station in stations[:5]:
+                value = station.get("salinity_gl")
+                time = _time_th(station.get("time"))
+                name = station.get("name_th") or "ไม่ระบุชื่อสถานี"
+                province = station.get("province_th")
+                agency = station.get("agency_th")
+                lines.append((f"• {name}" + (f" จ.{province}" if province else "")
+                              + (f": {value:g} กรัม/ลิตร" if isinstance(value, (int, float)) else ": ไม่มีค่าความเค็ม")
+                              + (f" · {agency}" if agency else "") + f" · {time or 'เวลาไม่ระบุ'}"))
+            return finish(lines, stations[:5], ["คลังข้อมูลน้ำแห่งชาติ (สสน.)", "กรมควบคุมมลพิษ", "การประปานครหลวง"])
+
+        if intent == "pm25_stations":
+            stations = rows("get_pm25_stations")
+            stations.sort(key=lambda row: row.get("pm25") or 0, reverse=True)
+            if not stations:
+                message = ("แหล่งข้อมูล Air4Thai ขัดข้อง จึงยังตรวจสอบค่า PM2.5 ล่าสุดไม่ได้"
+                           if sources_down("air4thai") else "ยังไม่มีสถานี Air4Thai ที่รายงานค่า PM2.5 ล่าสุด")
+                return finish([message], [], ["กรมควบคุมมลพิษ (Air4Thai)"])
+            lines = ["สถานีที่มีค่า PM2.5 สูงสุด:"]
+            for station in stations[:5]:
+                value = station.get("pm25")
+                where = station.get("area_th")
+                time = _time_th(station.get("time"))
+                lines.append((f"• {station.get('name_th') or 'ไม่ระบุชื่อสถานี'}"
+                              + (f" ({where})" if where else "")
+                              + (f": {value:g} มคก./ลบ.ม." if isinstance(value, (int, float)) else ": ไม่มีค่า PM2.5")
+                              + f" · {time or 'เวลาไม่ระบุ'}"))
+            return finish(lines, stations[:5], ["กรมควบคุมมลพิษ (Air4Thai)"])
+
+        if intent == "fire_hotspots":
+            hotspots = rows("get_fire_hotspots")
+            wanted_provinces: set[str] | None = None
+            label = "ประเทศไทย"
+            if u.regions:
+                label = " / ".join(u.regions)
+                wanted_provinces = {code for region in u.regions for code in REGION_CODES.get(region, ())}
+            elif u.areas:
+                area = u.areas[0]
+                province = area.code[:4] if area.level != "province" else area.code
+                wanted_provinces = {province}
+                province_area = self.gazetteer.by_code.get(province)
+                label = province_area.name_th if province_area else area.name_th
+            selected = [row for row in hotspots if wanted_provinces is None or row.get("area_code", "")[:4] in wanted_provinces]
+            if not selected:
+                message = (f"แหล่งข้อมูล FIRMS ขัดข้อง จึงยังนับจุดความร้อนใน{label}ไม่ได้"
+                           if sources_down("nasa_firms") else f"ไม่มีรายการจุดความร้อนในข้อมูล FIRMS สำหรับ{label}")
+                return finish([message], [], ["NASA FIRMS"])
+            count = sum(row.get("hotspots_24h") or 0 for row in selected)
+            latest = max((row.get("time") for row in selected if row.get("time")), default=None)
+            time = _time_th(latest)
+            lines = [f"พบจุดความร้อนใน{label} {count:g} จุดใน 24 ชั่วโมงล่าสุด (ข้อมูล {time or 'เวลาไม่ระบุ'})"]
+            return finish(lines, selected, ["NASA FIRMS"])
+
+        if intent == "dam_history":
+            dams = rows("get_dams")
+            lowered = question.lower()
+            named = [d for d in sorted(dams, key=lambda d: -len(d.get("name_th") or ""))
+                     if (d.get("name_th") and d["name_th"] in question)
+                     or (d.get("name_en") and d["name_en"].lower() in lowered)]
+            if not named:
+                return AgentAnswer("กรุณาระบุชื่อเขื่อนที่ต้องการเทียบข้อมูลย้อนหลังครับ", "clarify", None, [],
+                                   tool_calls=calls, notes=["dam name required"])
+            dam = named[0]
+            get_history = getattr(self.tools, "get_dam_history", None)
+            if get_history is None:
+                return finish(["ยังดึงประวัติเขื่อนจาก ThaiWater ไม่ได้ในขณะนี้"], [], ["ThaiWater (สสน.)"])
+            series = "storage"
+            calls.append(f"get_dam_history({dam['id']}, {series})")
+            try:
+                history = get_history(dam["id"], series)
+            except Exception:
+                return finish([f"ไม่สามารถดึงประวัติเขื่อน{dam['name_th']}จาก ThaiWater ได้ในขณะนี้"], [], ["ThaiWater (สสน.)"])
+            values = [tuple(item) for year in (history or {}).get("series", []) for item in year.get("values", [])]
+            parsed = sorted(((date.fromisoformat(day), value) for day, value in values if day and value is not None), key=lambda item: item[0])
+            if not parsed:
+                return finish([f"ยังไม่มีข้อมูลย้อนหลังของเขื่อน{dam['name_th']} ให้เปรียบเทียบ"], [], ["ThaiWater (สสน.)"])
+            current = next((item for item in reversed(parsed) if item[0] <= now.date()), None)
+            comparison_day = now.date() - timedelta(days=7 if any(w in question for w in ("สัปดาห์", "อาทิตย์")) else 1)
+            previous = min((item for item in parsed if item[0] < current[0] and abs((item[0] - comparison_day).days) <= 1),
+                           key=lambda item: abs((item[0] - comparison_day).days), default=None)
+            if not current or not previous:
+                return finish([f"ข้อมูลย้อนหลังของเขื่อน{dam['name_th']} ยังไม่ครบพอสำหรับเทียบกับวันที่ {comparison_day.day}/{comparison_day.month}"],
+                              history.get("series", []) if history else [], ["ThaiWater (สสน.)"])
+            delta = current[1] - previous[1]
+            trend = "เพิ่มขึ้น" if delta > 0 else "ลดลง" if delta < 0 else "เท่าเดิม"
+            updated = _time_th((history or {}).get("data_updated_at"))
+            lines = [f"เขื่อน{dam['name_th']} ปริมาณน้ำกักเก็บ: {current[1]:,.0f} ล้าน ลบ.ม. ณ {current[0].day}/{current[0].month}/{current[0].year + 543}"
+                     + (f" (ข้อมูลปรับปรุง {updated})" if updated else ""),
+                     f"เทียบกับ {previous[0].day}/{previous[0].month}/{previous[0].year + 543}: {previous[1]:,.0f} ล้าน ลบ.ม. · {trend} {abs(delta):,.0f} ล้าน ลบ.ม."]
+            return finish(lines, history.get("series", []) if history else [], ["ThaiWater (สสน.)"])
+
+        if intent == "media":
+            fn = getattr(self.tools, "get_media", None)
+            media = fn() if fn else {}
+            if fn:
+                calls.append("get_media()")
+            groups = [("เรดาร์ฝน", media.get("radar", [])), ("ภาพพยากรณ์ฝน", media.get("rain_forecast", {})),
+                      ("ภาพพายุ", media.get("storm", [])), ("ภาพคลื่น", media.get("wave", []))]
+            links = []
+            for label, group in groups:
+                if isinstance(group, list):
+                    items = group
+                elif isinstance(group, dict) and "image" in group:
+                    items = [group]
+                elif isinstance(group, dict):
+                    items = [image for section in group.values() if isinstance(section, dict)
+                             for image in section.get("days", []) if isinstance(image, dict)]
+                else:
+                    items = []
+                links.extend((label, item) for item in items if item and item.get("image"))
+            if not links:
+                return finish(["ยังไม่มีลิงก์ภาพเรดาร์หรือภาพพยากรณ์ล่าสุด"], [], ["คลังข้อมูลน้ำแห่งชาติ (สสน.)"])
+            lines = ["ลิงก์ภาพล่าสุด:"]
+            for label, item in links[:5]:
+                time = _time_th(item.get("time"))
+                lines.append(f"• {label}: {item['image']} · {time or 'เวลาไม่ระบุ'}")
+            return finish(lines, [item for _, item in links[:5]], [media.get("source") or "คลังข้อมูลน้ำแห่งชาติ (สสน.)"])
+
+        return AgentAnswer("ยังไม่มีข้อมูลสำหรับคำถามนี้", intent, None, [])
 
     def _sources(self) -> AgentAnswer:
         get = getattr(self.tools, "get_sources", None)
