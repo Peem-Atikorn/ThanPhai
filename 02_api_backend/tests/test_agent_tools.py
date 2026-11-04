@@ -42,7 +42,7 @@ def test_sync_dam_history_tool_returns_cached_history():
     assert service.get_dam_history("123") == value
 
 
-def test_cyclone_tool_deduplicates_wind_bands_to_the_strongest_event_value():
+def test_cyclone_tool_preserves_wind_band_threshold_semantics():
     service = HazardService.__new__(HazardService)
     service.cyclone_overlay = lambda: {"features": [
         {"properties": {"kind": "wind_area", "event_id": "EV1", "name": "TEST", "event": "TC", "wind_kmh": 64}},
@@ -53,6 +53,6 @@ def test_cyclone_tool_deduplicates_wind_bands_to_the_strongest_event_value():
     service.cyclone_updated_at = datetime(2026, 11, 4, tzinfo=timezone.utc)
 
     assert service.get_cyclones() == [
-        {"event_id": "EV1", "name": "TEST", "event": "TC", "wind_kmh": 93, "time": "2026-11-04T00:00:00+00:00"},
-        {"event_id": "EV2", "name": "TRACK ONLY", "event": "TC", "wind_kmh": None, "time": "2026-11-04T00:00:00+00:00"},
+        {"event_id": "EV1", "name": "TEST", "event": "TC", "wind_threshold_kmh": 93, "time": "2026-11-04T00:00:00+00:00"},
+        {"event_id": "EV2", "name": "TRACK ONLY", "event": "TC", "wind_threshold_kmh": None, "time": "2026-11-04T00:00:00+00:00"},
     ]

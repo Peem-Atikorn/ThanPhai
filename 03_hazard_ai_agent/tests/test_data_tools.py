@@ -66,6 +66,40 @@ class DataTools:
 agent = HazardAgent(GAZ, DataTools())
 
 
+@pytest.mark.parametrize("question,providers", [
+    ("ตอนนี้มีพายุอะไรบ้าง", ("thaiwater_storms", "gdacs_cyclones")),
+    ("แผ่นดินไหวล่าสุดเกิดที่ไหน", ("tmd_earthquakes", "usgs_earthquakes")),
+])
+@pytest.mark.parametrize("failed", [0, 1])
+@pytest.mark.parametrize("empty", [True, False])
+def test_partial_event_source_failure_is_disclosed(question, providers, failed, empty):
+    class PartialTools(DataTools):
+        def get_sources(self):
+            return {name: {"ok": i != failed} for i, name in enumerate(providers)}
+
+    tools = PartialTools()
+    if empty:
+        tools.get_earthquakes = tools.get_storms = tools.get_cyclones = lambda: []
+    answer = HazardAgent(GAZ, tools).ask(question, NOW)
+    assert "ขัดข้อง" in answer.text
+    if empty:
+        assert "ไม่พบรายการ" not in answer.text
+
+
+def test_gdacs_wind_band_is_not_presented_as_exact_storm_wind():
+    class CycloneTools(DataTools):
+        def get_storms(self):
+            return []
+
+        def get_cyclones(self):
+            return [{"name": "TEST", "wind_threshold_kmh": 119, "time": NOW.isoformat()}]
+
+    answer = HazardAgent(GAZ, CycloneTools()).ask("ตอนนี้มีพายุอะไรบ้าง", NOW)
+    assert "ขอบเขตลมตั้งแต่ 119 กม./ชม." in answer.text
+    assert "รวมแนวคาดการณ์" in answer.text
+    assert "อัปเดตข้อมูล" in answer.text
+
+
 @pytest.mark.parametrize("question,intent", [
     ("อาหารเค็มทำให้ความดันสูงไหม", "out_of_scope"),
     ("เชียงใหม่มีจุดความร้อนเสี่ยงไฟป่าไหม", "risk"),

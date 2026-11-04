@@ -349,7 +349,7 @@ class HazardAgent:
             calls.append("get_sources()")
             statuses = get()
             found = [statuses[name] for name in names if name in statuses]
-            return bool(found) and all(state.get("ok") is False for state in found)
+            return any(state.get("ok") is False for state in found)
 
         def finish(lines: list[str], evidence: list[dict], sources: list[str]) -> AgentAnswer:
             if sources:
@@ -365,6 +365,8 @@ class HazardAgent:
                            else "ไม่พบรายการแผ่นดินไหวในข้อมูลย้อนหลัง 7 วันจาก TMD/USGS")
                 return finish([message], [], ["กรมอุตุนิยมวิทยา (TMD)", "USGS"])
             lines = ["แผ่นดินไหวล่าสุดในข้อมูลย้อนหลัง 7 วัน:"]
+            if sources_down("tmd_earthquakes", "usgs_earthquakes"):
+                lines.append("แหล่งข้อมูลแผ่นดินไหวบางแห่งขัดข้อง รายการอาจไม่ครบ")
             sources = []
             for q in quakes:
                 magnitude = q.get("magnitude")
@@ -385,12 +387,19 @@ class HazardAgent:
                            else "ไม่พบรายการพายุที่กำลังติดตามในข้อมูลล่าสุด")
                 return finish([message], [], ["ThaiWater (สสน.)", "GDACS"])
             lines, evidence = ["พายุที่พบในข้อมูลติดตามล่าสุด:"], []
+            if sources_down("thaiwater_storms", "gdacs_cyclones"):
+                lines.append("แหล่งข้อมูลพายุบางแห่งขัดข้อง รายการอาจไม่ครบ")
             for row, source in records[:8]:
                 props = row.get("properties", row)
                 name = props.get("name") or props.get("event") or props.get("event_id") or "ไม่ระบุชื่อ"
                 wind = props.get("wind_kmh")
                 time = _time_th(props.get("time") or row.get("time"))
                 detail = f" · ลม {wind:g} กม./ชม." if isinstance(wind, (int, float)) else ""
+                if source == "GDACS":
+                    threshold = props.get("wind_threshold_kmh")
+                    detail = (f" · ขอบเขตลมตั้งแต่ {threshold:g} กม./ชม. (รวมแนวคาดการณ์)"
+                              if isinstance(threshold, (int, float)) else "")
+                    time = f"อัปเดตข้อมูล {time}" if time else None
                 lines.append(f"• {name}{detail} · {time or 'เวลาไม่ระบุ'}")
                 evidence.append(row)
             return finish(lines, evidence, [source for _, source in records])

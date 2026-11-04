@@ -1219,7 +1219,7 @@ class HazardService:
         return self.storms
 
     def get_cyclones(self) -> list[dict]:
-        """One compact row per GDACS cyclone, using the strongest forecast wind band."""
+        """One row per GDACS cyclone; wind bands are thresholds over analysed and forecast areas."""
         grouped: dict[str, dict] = {}
         for feature in self.cyclone_overlay()["features"]:
             props = feature.get("properties", {})
@@ -1227,10 +1227,10 @@ class HazardService:
                 continue
             event_id = props.get("event_id")
             row = grouped.setdefault(event_id, {"event_id": event_id, "name": props.get("name"),
-                                                 "event": props.get("event"), "wind_kmh": None})
+                                                 "event": props.get("event"), "wind_threshold_kmh": None})
             wind = props.get("wind_kmh")
             if wind is not None:
-                row["wind_kmh"] = max(row["wind_kmh"] or 0, wind)
+                row["wind_threshold_kmh"] = max(row["wind_threshold_kmh"] or 0, wind)
         timestamp = self.cyclone_updated_at.isoformat() if self.cyclone_updated_at else None
         return [{**row, "time": timestamp} for row in grouped.values()]
 
