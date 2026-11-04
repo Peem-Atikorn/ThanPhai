@@ -47,16 +47,17 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             const source = model ? "Open-Meteo / CAMS (แบบจำลอง)" : metric === "air_quality" ? "Air4Thai / กรมควบคุมมลพิษ" : "Open-Meteo";
             const pending = !area && state?.data?.meta.inputs_pending?.length;
             const degraded = area ? area.degraded_services.length : state?.data?.meta.degraded_services.length;
-            return <article key={metric}>
-                <h3><Icon name={metric}/>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
-                <p className="environment-scope">{tr(area || loadingArea || areaError ? "พื้นที่ที่เลือก" : "สูงสุดในประเทศ · อำเภอที่มีข้อมูล")}</p>
-                <p className="environment-value">{metric === "heat" && available && <span>{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
-                <span className={"risk-badge level-" + (level ?? "NONE")}>{tr(loading ? "กำลังโหลด…" : error ? "โหลดข้อมูลไม่ได้" : levelInfo(level).th)}</span>
-                <p className="environment-place">{tr(area ? area.area.name_th : available ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : "ยังไม่มีข้อมูล")}</p>
-                <small>{tr(metric === "air_quality" ? model ? "แบบจำลอง · เฉลี่ย 24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม." : "สูงสุดใน 24 ชม. ข้างหน้า")}</small>
-                <small>{tr(source)}</small>
-                <small>{tr("อัปเดต ")}{updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at)}{tr(" · เวลาไทย")}</small>
-                {!!(pending || degraded) && <small className="data-notice">{tr(pending ? "ข้อมูลยังไม่ครบ" : "ข้อมูลบางแหล่งไม่พร้อมใช้งาน")}</small>}
+            const status = loading ? "กำลังโหลด…" : error ? "โหลดข้อมูลไม่ได้" : !available ? "ยังไม่มีข้อมูล" : levelInfo(level).th;
+            const scope = area ? area.area.name_th : "สูงสุดในประเทศ · อำเภอที่มีข้อมูล";
+            const place = available && !area ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : "";
+            const period = metric === "heat" || model ? "24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม.";
+            const details = [scope, place, period, source, updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at), pending ? "ข้อมูลยังไม่ครบ" : degraded ? "ข้อมูลบางแหล่งไม่พร้อมใช้งาน" : ""].filter(Boolean).map(text => tr(text)).join(" · ");
+            return <article key={metric} title={details}>
+                <span className="environment-icon" aria-hidden="true"><Icon name={metric}/></span>
+                <h3>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
+                <p className="environment-value">{metric === "heat" && available && <span className="sr-only">{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
+                <small className="environment-status">{tr(available ? (model ? "แบบจำลอง · " : "") + period : status)}</small>
+                <span className="sr-only"><span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span> · {details}</span>
             </article>;
         })}
     </section>;

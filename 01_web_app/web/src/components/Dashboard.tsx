@@ -862,10 +862,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(currentGroup.items.map((item) => { const active = item === currentItem; return <button key={item} type="button" data-subcategory={item} className={active ? "is-active" : ""} aria-pressed={active} onClick={() => openItem(item)}><Icon name={item === "overview" ? "shield" : item === "dams" ? "dam" : item === "rivers" || item === "water-quality" ? "river" : item}/>{tr(itemTh(item))}</button>; }))}
           </div>)}
   </>);
-    const mapControls = (<div className="map-controls">
-          {tr(!hideToolbar && <div className="hazard-toolbar" role="group" aria-label={tr("เลือกกลุ่มภัย")}>
-            {tr(GROUPS.map((group) => { const active = group.id === currentGroup.id; return <button key={group.id} type="button" className={"hazard-button " + (active ? "is-active" : "")} aria-pressed={active} onClick={() => openItem(lastInGroup.current[group.id] ?? group.items[0])}><Icon name={group.icon}/><span>{tr(group.th)}</span></button>; }))}
-          </div>)}
+    const overviewControls = (<>
         {tr(overview && <aside className="layer-toolbar" aria-label={tr("ชั้นข้อมูลบนแผนที่")}>
           <div className="layer-toolbar-buttons" role="group" aria-label={tr("เปิดปิดชั้นข้อมูลภาพรวม")}>
             <button type="button" data-layer="pm25" aria-pressed={pmOn} onClick={() => setPmOn(on => !on)}><Icon name="air_quality"/><span>{tr("ฝุ่น PM2.5")}<small>{tr(!pmOn ? "ปิด" : airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ" : "เปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
@@ -873,6 +870,11 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             <OverlayControls data={overlays.data} enabled={overlays.enabled} onToggle={overlays.toggle}/>
           </div>
         </aside>)}
+    </>);
+    const mapControls = (<div className="map-controls">
+          {tr(!hideToolbar && <div className="hazard-toolbar" role="group" aria-label={tr("เลือกกลุ่มภัย")}>
+            {tr(GROUPS.map((group) => { const active = group.id === currentGroup.id; return <button key={group.id} type="button" className={"hazard-button " + (active ? "is-active" : "")} aria-pressed={active} onClick={() => openItem(lastInGroup.current[group.id] ?? group.items[0])}><Icon name={group.icon}/><span>{tr(group.th)}</span></button>; }))}
+          </div>)}
           {tr(!hideToolbar && subTabs)}
           </div>);
     return (<>
@@ -882,7 +884,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
       <div className="dashboard-grid">
         {tr(!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search"/>{tr("ค้นหาจังหวัด อำเภอ หรือตำบล")}<Icon name="arrow"/></a>)}
         <section className="map-panel" aria-label={tr("ภาพรวมความเสี่ยง")}>
-          {view === "hazard" && (hazard === "overview" || areaStatus !== "idle") && <EnvironmentSummary layers={environmentLayers} area={area} loadingArea={areaStatus === "loading"} areaError={areaStatus === "error"}/>}
           <div className="map-chrome">{tr(!hideToolbar && mapControls)}<div className="map-heading">
             <div className="map-heading-copy">
               <h2>{tr(selectedRiskLevel ? tr("พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("ทั่วประเทศ") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่ปริมาณน้ำในเขื่อน" : view === "rivers" ? "แผนที่ระดับน้ำในแม่น้ำ" : tr("แผนที่ความเสี่ยง") + tr(itemTh(hazard)) + tr(""))}</h2>
@@ -895,6 +896,10 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
+            {overview && <div className="overview-map-widgets">
+              <EnvironmentSummary layers={environmentLayers} area={area} loadingArea={areaStatus === "loading"} areaError={areaStatus === "error"}/>
+              {overviewControls}
+            </div>}
             <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel ? radarNextFrame?.tiles ?? null : null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
