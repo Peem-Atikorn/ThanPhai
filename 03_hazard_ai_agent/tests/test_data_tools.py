@@ -373,3 +373,15 @@ def test_quake_count_is_partial_when_no_tmd_history_is_kept():
     answer = HazardAgent(PHAYAO, UsgsOnly()).ask("พะเยาแผ่นดินไหวสัปดาห์นี้กี่ครั้ง", NOW)
     assert "อย่างน้อย 1 ครั้ง" in answer.text
     assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้" in answer.text
+
+
+def test_quake_count_is_partial_when_the_period_overlaps_a_tmd_gap():
+    class MonthWithGap(MonthOfQuakes):
+        def get_quake_gaps(self):
+            return [{"start": "2026-11-02T00:00:00+00:00", "end": "2026-11-03T00:00:00+00:00"}]
+
+    answer = HazardAgent(PHAYAO, MonthWithGap()).ask("พะเยาแผ่นดินไหวเดือนนี้กี่ครั้ง", NOW)
+    assert "อย่างน้อย 2 ครั้ง" in answer.text
+    assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ข้อมูลกรมอุตุฯ อาจขาดช่วง 07:00 น. วันที่ 2/11/2569" in answer.text
+    # Last month does not overlap the gap: no gap note from it.
+    assert "อาจขาดช่วง" not in HazardAgent(PHAYAO, MonthWithGap()).ask("พะเยาแผ่นดินไหวเดือนที่แล้วกี่ครั้ง", NOW).text

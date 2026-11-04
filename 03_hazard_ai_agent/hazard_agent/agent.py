@@ -87,6 +87,7 @@ class HazardTools(Protocol):
     def get_official_warnings(self) -> list[dict]: ...
     def get_sources(self) -> dict[str, dict]: ...
     def get_earthquakes(self) -> list[dict]: ...
+    def get_quake_gaps(self) -> list[dict]: ...  # optional: spans the kept TMD history may miss
     def get_storms(self) -> list[dict]: ...
     def get_cyclones(self) -> list[dict]: ...
     def get_waves(self) -> list[dict]: ...
@@ -158,7 +159,7 @@ def _quake_period(question: str, now: datetime) -> tuple[datetime, datetime, str
     today = local.replace(hour=0, minute=0, second=0, microsecond=0)
     match = re.search(r"(\d+)\s*(วัน|days?)", lowered)
     if match:
-        days = min(int(match.group(1)), 30)
+        days = min(int(match.group(1)), 62)  # the backend keeps 62 days
         return local - timedelta(days=days), local, f" ย้อนหลัง {days} วัน"
     if "เดือนนี้" in lowered or "this month" in lowered:
         return today.replace(day=1), local, " ตั้งแต่ต้นเดือนนี้"
@@ -176,7 +177,7 @@ def _quake_period(question: str, now: datetime) -> tuple[datetime, datetime, str
     if any(w in lowered for w in ("วันนี้", "today")):
         return today, local, " วันนี้"
     if any(w in lowered for w in ("เมื่อวาน", "yesterday")):
-        return today - timedelta(days=1), today, " ตั้งแต่เมื่อวาน"
+        return today - timedelta(days=1), today, " เมื่อวาน"
     return local - timedelta(days=7), local, " ย้อนหลัง 7 วัน"
 
 
@@ -483,15 +484,22 @@ class HazardAgent:
             total = len(quakes)
             quakes = quakes[:QUAKE_LIST_MAX if u.areas else 5]
             # TMD lists only its last 10 events, so ThanPhai keeps what it has seen (the backend keeps 62 days and
-            # fetches USGS for the same span, so USGS covers every period asked about). When the kept TMD history
-            # starts after the period begins, the count is partial: say so and give the date it starts.
+            # fetches USGS for the same span, so USGS covers every period asked about). The count is partial when
+            # the kept TMD history starts after the period begins, or when the period overlaps a span the backend
+            # may have missed (TMD or ThanPhai down): say so and give the dates.
             tmd_times = [t for q in all_quakes if q.get("source") == "กรมอุตุนิยมวิทยา" and (t := _parse_time(q.get("time")))]
             kept_from = min(tmd_times) if tmd_times else None
-            tmd_part = (f"ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ {_time_th(kept_from.isoformat())}"
-                        if kept_from is not None else "ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้")
-            gap = (f"{QUAKE_PARTIAL_TH}: {tmd_part} ช่วงก่อนหน้านั้นมีเฉพาะแผ่นดินไหวขนาด 3.5 ขึ้นไปจาก USGS "
-                   "จำนวนที่แสดงจึงอาจน้อยกว่าจริง"
-                   if kept_from is None or kept_from > since else None)
+            missed = [(s, e) for g in rows("get_quake_gaps")
+                      if (s := _parse_time(g.get("start"))) and (e := _parse_time(g.get("end"))) and s < until and e > since]
+            usgs_only = "ช่วงนั้นมีเฉพาะแผ่นดินไหวขนาด 3.5 ขึ้นไปจาก USGS จำนวนที่แสดงจึงอาจน้อยกว่าจริง"
+            gap = None
+            if kept_from is None or kept_from > since:
+                tmd_part = (f"ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ {_time_th(kept_from.isoformat())}"
+                            if kept_from is not None else "ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้")
+                gap = f"{QUAKE_PARTIAL_TH}: {tmd_part} {usgs_only.replace('ช่วงนั้น', 'ช่วงก่อนหน้านั้น')}"
+            elif missed:
+                spans = ", ".join(f"{_time_th(s.isoformat())} ถึง {_time_th(e.isoformat())}" for s, e in missed)
+                gap = f"{QUAKE_PARTIAL_TH}: ข้อมูลกรมอุตุฯ อาจขาดช่วง {spans} {usgs_only}"
             if not quakes:
                 message = ("แหล่งข้อมูลแผ่นดินไหวขัดข้อง จึงยังตรวจสอบรายการล่าสุดไม่ได้"
                            if sources_down("tmd_earthquakes", "usgs_earthquakes")

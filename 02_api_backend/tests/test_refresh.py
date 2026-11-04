@@ -25,7 +25,7 @@ def stale_copy(svc: HazardService) -> HazardService:
     svc.decisions = {code: OLD for code in svc.amphoe_codes}
     svc.updated_at = datetime.now(timezone.utc) - timedelta(hours=1)
     svc._background = None
-    svc._tmd_quakes = {}  # earthquakes kept by earlier tests
+    svc._tmd_quakes, svc._tmd_last_ok, svc._tmd_gaps = {}, None, []  # earthquakes kept by earlier tests
     svc._lock = asyncio.Lock()
     # Fresh forecasts, so fresh_service() does not start real Open-Meteo jobs in the background.
     svc.grid_updated_at = {name: datetime.now(timezone.utc) for name in svc.grid_updated_at}

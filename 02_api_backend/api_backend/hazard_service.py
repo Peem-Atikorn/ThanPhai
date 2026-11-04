@@ -199,7 +199,11 @@ class HazardService:
         self._offshore: list[tuple[str, float, float]] | None = None  # built on the first marine refresh
         self._last_quakes: list[dict] | None = None
         self._quake_file = Path(os.environ["QUAKE_HISTORY_FILE"]) if os.getenv("QUAKE_HISTORY_FILE") else None
-        self._tmd_quakes: dict[str, SourceRecord] = self._load_quake_history()
+        # TMD events seen, when the feed last answered, and the spans it may have missed (see _remember_tmd_quakes).
+        self._tmd_quakes: dict[str, SourceRecord] = {}
+        self._tmd_last_ok: datetime | None = None
+        self._tmd_gaps: list[tuple[datetime, datetime]] = []
+        self._load_quake_history()
         self._last_pm25: list[dict] | None = None
         # Past landslides per district, from scripts/build_landslide_districts.py; optional.
         self.landslide_traces = self._load_landslide_traces()
@@ -751,30 +755,59 @@ class HazardService:
         return r.station_id or f"{r.observed_at.isoformat()}:{r.lat}:{r.lon}"
 
     def _remember_tmd_quakes(self, tmd: list[SourceRecord], now: datetime) -> list[SourceRecord]:
-        """Add this feed's events to those seen before, drop ones older than the window, save; return them all."""
-        before = set(self._tmd_quakes)
+        """Add this feed's events to those seen before, drop ones older than the window, save; return them all.
+
+        The feed lists only its last 10 events. When even the oldest of them is newer than the previous answer
+        (TMD or the API was down, or many quakes in between), events in that span may be missing: it is kept as a
+        gap, so a count over a period that overlaps it is reported as partial. An empty feed counts as no answer.
+        """
+        if tmd:
+            oldest = min(r.observed_at for r in tmd)
+            if self._tmd_last_ok is not None and oldest > self._tmd_last_ok:
+                start = self._tmd_last_ok
+                if self._tmd_gaps and self._tmd_gaps[-1][1] >= start:  # joins the previous gap
+                    start = self._tmd_gaps.pop()[0]
+                self._tmd_gaps.append((start, oldest))
+            self._tmd_last_ok = now
         self._tmd_quakes.update((self._quake_key(r), r) for r in tmd)
         self._tmd_quakes = {k: r for k, r in self._tmd_quakes.items() if now - r.observed_at <= QUAKE_HISTORY_WINDOW}
-        if self._quake_file is not None and set(self._tmd_quakes) != before:
+        self._tmd_gaps = [(s, e) for s, e in self._tmd_gaps if now - e <= QUAKE_HISTORY_WINDOW]
+        if self._quake_file is not None and tmd:
             try:
                 self._quake_file.parent.mkdir(parents=True, exist_ok=True)
                 tmp = self._quake_file.with_suffix(".tmp")
-                tmp.write_text(json.dumps([r.model_dump(mode="json") for r in self._tmd_quakes.values()], ensure_ascii=False),
-                               encoding="utf-8")
+                state = {"events": [r.model_dump(mode="json") for r in self._tmd_quakes.values()],
+                         "last_ok": self._tmd_last_ok.isoformat() if self._tmd_last_ok else None,
+                         "gaps": [[s.isoformat(), e.isoformat()] for s, e in self._tmd_gaps]}
+                tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
                 tmp.replace(self._quake_file)
             except OSError:
                 log.exception("could not save earthquake history to %s", self._quake_file)
         return list(self._tmd_quakes.values())
 
     def _load_quake_history(self) -> dict[str, SourceRecord]:
+        """Load the saved TMD events, last answer time and gaps; returns the events."""
         if self._quake_file is None or not self._quake_file.exists():
-            return {}
+            return self._tmd_quakes
         try:
-            rows = [SourceRecord.model_validate(row) for row in json.loads(self._quake_file.read_text(encoding="utf-8"))]
-        except (OSError, ValueError):
+            state = json.loads(self._quake_file.read_text(encoding="utf-8"))
+            if isinstance(state, list):  # first format: events only
+                state = {"events": state}
+            rows = [SourceRecord.model_validate(row) for row in state.get("events", [])]
+            last_ok = datetime.fromisoformat(state["last_ok"]) if state.get("last_ok") else None
+            gaps = [(datetime.fromisoformat(s), datetime.fromisoformat(e)) for s, e in state.get("gaps", [])]
+        except (OSError, ValueError, TypeError, AttributeError):
             log.exception("could not read earthquake history %s; starting empty", self._quake_file)
-            return {}
-        return {self._quake_key(r): r for r in rows}
+            return self._tmd_quakes
+        self._tmd_quakes = {self._quake_key(r): r for r in rows}
+        # Without a saved answer time (first format), the newest kept event is the latest point known to be covered.
+        self._tmd_last_ok = last_ok or max((r.observed_at for r in rows), default=None)
+        self._tmd_gaps = gaps
+        return self._tmd_quakes
+
+    def get_quake_gaps(self) -> list[dict]:
+        """Spans in which TMD events may be missing from the kept history (the agent marks such counts partial)."""
+        return [{"start": s.isoformat(), "end": e.isoformat()} for s, e in self._tmd_gaps]
 
     def _load_landslide_traces(self) -> dict[str, int] | None:
         path = self.data_dir / "landslide_districts.json"
