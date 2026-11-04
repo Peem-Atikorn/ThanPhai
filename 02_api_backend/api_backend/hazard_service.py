@@ -86,8 +86,6 @@ FAILURE_TTL = timedelta(seconds=60)
 USER_AGENT = {"User-Agent": "ThanPhai/0.1 (student project)"}
 
 log = logging.getLogger("hazard_service")
-NOWCAST_MAX_FRAME_AGE_S = 7200
-NOWCAST_HISTORY_S = 3600
 # A new radar frame waits at most this long for Qwen; after that the template answers and Qwen's text replaces it in the cache.
 NOWCAST_EXPLAIN_WAIT_S = 4.0
 SOURCES = {
@@ -1780,8 +1778,8 @@ class HazardService:
                     {
                         "time": curr_frame_meta["time"] + step * int(interval_min * 60),
                         "horizon_min": step * int(interval_min),
-                        "dx_pixels": round(motion.dx * step, 1) if (motion and not is_undetermined) else 0.0,
-                        "dy_pixels": round(motion.dy * step, 1) if (motion and not is_undetermined) else 0.0,
+                        "dx_pixels": round(motion.dx * step, 1),
+                        "dy_pixels": round(motion.dy * step, 1),
                     }
                     for step in range(1, 7)
                 ]
@@ -1834,7 +1832,7 @@ class HazardService:
                         intensity_desc=intensity_th,
                         targets=[],
                     )
-                    return None, rain_cells_data, summary, forecast_frames
+                    return None, rain_cells_data, summary, []
 
                 is_moving = motion.speed_kmh >= 2.0
                 motion_data = {

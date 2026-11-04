@@ -305,7 +305,9 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert.equal(forecastMap.props.radarForecast.features.length, 2, 'Forecast shows the projected path and position for each rain cell');
       const projected = forecastMap.props.radarForecast.features[1].geometry.coordinates;
       assert(Math.abs(projected[0] - 100.5554) < 0.001 && Math.abs(projected[1] - 13.5) < 0.001, 'Forecast projection follows the measured eastward motion');
-      assert.equal(forecastMap.props.radar, null, 'A forecast frame does not present the current image as a forecast');
+      assert.equal(forecastMap.props.radar, radarFrames.at(-1).tiles, 'Forecast keeps the latest observed source without reloading it');
+      assert.equal(forecastMap.props.radarDimmed, true, 'The observed image is clearly dimmed during forecasts');
+      assert.equal(playback.props.frames[2].imageTime, radarFrames.at(-1).time, 'Forecast retains the actual image time');
       const forecastNote = nodes(forecastTree).find(n => String(n.props.className || '').split(/\s+/).includes('radar-note'));
       assert.equal(forecastNote, undefined, 'The map hides the observed-radar note while a forecast is selected');
       const RadarPlayback = load('@/components/RadarPlayback').default;
@@ -314,6 +316,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert(content(forecastPlayback).includes('อธิบายโดย AI ที่รันในเครื่องของทันภัย'), 'Qwen is credited with explanation only');
       assert(content(forecastPlayback).includes('ค่าคาดการณ์ +10 นาที'), 'The selected forecast stays visibly labelled in the playback controls');
       assert(content(forecastPlayback).includes('กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก'), 'The validated Qwen explanation accompanies its frame');
+      assert(content(forecastPlayback).includes('ภาพจางคือเรดาร์จริงล่าสุดเวลา') && content(forecastPlayback).includes('ไม่ใช่ภาพฝนคาดการณ์'), 'The retained image is explicitly labelled observed, not predicted');
       assert(content(forecastPlayback).includes('ไม่ทำนายฝนที่เกิดใหม่'), 'The forecast limitation stays next to its timeline');
 
       let selectedFrame = 1, timerCallback, timerCount = 0, clearCount = 0;
@@ -381,6 +384,26 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
     }
     cleanupRadar?.();
   }
+  // A delayed lightweight-endpoint failure must not discard successful nowcast history.
+  const savedRadarApi = lib.api.radar, savedNowcastApi = lib.api.radarNowcast;
+  for (const failFirst of [false, true]) {
+    let rejectObserved;
+    lib.api.radar = () => new Promise((_, reject) => { rejectObserved = reject; });
+    let resolveNowcast;
+    lib.api.radarNowcast = () => new Promise(resolve => { resolveNowcast = resolve; });
+    const effects = [], app = instance(Dashboard, effects);
+    const props = { activeView: 'hazard', activeHazard: 'overview' };
+    app.render(props);
+    const cleanup = effects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
+    if (failFirst) { rejectObserved(new Error('timeout')); await tick(); }
+    resolveNowcast({ enabled: true, past_frames: [{ tile_url: 'https://tiles.test/fallback.png', time: 1800000000 }], forecast_frames: [], motion: null, rain_cells: [], explanation: '', explanation_source: 'template' });
+    await tick();
+    if (!failFirst) { rejectObserved(new Error('timeout')); await tick(); }
+    const tree = app.render(props);
+    assert(nodes(tree).some(n => n.type.name === 'RadarPlayback' && n.props.frames.length === 1), 'Nowcast history survives observed endpoint failure in either response order');
+    cleanup?.();
+  }
+  lib.api.radar = savedRadarApi; lib.api.radarNowcast = savedNowcastApi;
   radarEnabled = false;
   const disabledRadarEffects = [];
   const disabledRadarApp = instance(Dashboard, disabledRadarEffects);

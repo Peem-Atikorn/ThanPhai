@@ -66,7 +66,7 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
                 <h3>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
                 <p className="environment-value">{metric === "heat" && available && <span>{tr("ตอนนี้ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
                 <div className="environment-status"><span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span>{available && <small>{tr((model ? "แบบจำลอง · " : "") + period)}{metric === "heat" && typeof peak === "number" && Number.isFinite(peak) ? `${tr(" · สูงสุดใน 24 ชม. ข้างหน้า ")}${peak.toLocaleString(getLocale(), { maximumFractionDigits: 1 })}°C` : ""}</small>}</div>
-                <small className="environment-meta"><span>{tr(area ? scope : place || scope)}</span><span>{tr(source)}</span><span>{tr("อัปเดต ")}{tr(updated)}</span></small>
+                <small className="environment-meta"><span>{tr(scope)}{!area && place && <> · {tr(place)}</>}</span><span>{tr(source)}</span><span>{tr("อัปเดต ")}{tr(updated)}</span></small>
                 {!!(pending || degraded) && <small className="environment-notice">{tr(pending ? "ข้อมูลยังไม่ครบ" : "ข้อมูลบางแหล่งไม่พร้อมใช้งาน")}</small>}
             </article>;
         })}

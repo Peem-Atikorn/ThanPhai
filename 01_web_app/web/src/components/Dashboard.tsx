@@ -452,21 +452,27 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         if (!showRadar)
             return;
         let cancelled = false;
+        let nowcastHasFrames = false;
         // Show observed tiles as soon as the lightweight endpoint responds; nowcast/Qwen can finish later.
         api.radar().then((result) => { if (!cancelled) {
-            setRadarAvailable(result.enabled);
-            setObservedRadarFrames(result.frames);
+            setRadarAvailable(result.enabled || nowcastHasFrames);
+            if (result.frames.length || !nowcastHasFrames) setObservedRadarFrames(result.frames);
         } }).catch(() => { if (!cancelled) {
-            setRadarAvailable(false);
-            setObservedRadarFrames([]);
+            if (!nowcastHasFrames) {
+                setRadarAvailable(false);
+                setObservedRadarFrames([]);
+            }
         } });
         api.radarNowcast().then((result) => { if (!cancelled) {
             if (result.enabled) setRadarAvailable(true);
             const observed = result.past_frames.map((frame) => ({ tiles: frame.tile_url, time: frame.time, kind: "observed" as const }));
+            nowcastHasFrames = observed.length > 0;
             if (observed.length) setObservedRadarFrames(current => current.length ? current : observed);
-            const forecasts = result.past_frames.length && result.motion
+            const latestObserved = result.past_frames.at(-1);
+            const forecasts = latestObserved && result.motion
                 ? result.forecast_frames.map((frame) => ({
-                    tiles: null,
+                    tiles: latestObserved.tile_url,
+                    imageTime: latestObserved.time,
                     time: frame.time,
                     kind: "forecast" as const,
                     horizonMin: frame.horizon_min,
@@ -912,7 +918,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               <EnvironmentSummary layers={environmentLayers} area={area} loadingArea={areaStatus === "loading"} areaError={areaStatus === "error"}/>
               {overviewControls}
             </div>}
-            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel ? radarNextFrame?.tiles ?? null : null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
+            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
               <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>{tr("แผนที่กลางคืน")}</button>

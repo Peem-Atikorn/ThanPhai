@@ -48,6 +48,8 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
       <time dateTime={new Date(frame.time * 1000).toISOString()}>{time}{tr(" น. เวลาไทย")}</time>
     </div>
     {forecast && <div className="radar-forecast-copy">
+      {frame.imageTime != null && <p>{tr("ภาพจางคือเรดาร์จริงล่าสุดเวลา ")}{new Intl.DateTimeFormat(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }).format(frame.imageTime * 1000)}{tr(" น. ไม่ใช่ภาพฝนคาดการณ์")}</p>}
+      {explanationSource === "template" && <small>{tr("คำอธิบาย AI ที่มาช้าจะแสดงเมื่อรีเฟรชข้อมูลครั้งถัดไป")}</small>}
       {explanation && <p>{tr(explanation)}</p>}
       <small>{tr("ค่าคาดการณ์จากการคำนวณทิศทางการเคลื่อนที่ของกลุ่มฝน")}{tr(explanationSource === "qwen" ? " · อธิบายโดย AI ที่รันในเครื่องของทันภัย" : " · ใช้ข้อความแม่แบบจากผลคำนวณ")}{tr(" · ไม่ทำนายฝนที่เกิดใหม่")}</small>
     </div>}

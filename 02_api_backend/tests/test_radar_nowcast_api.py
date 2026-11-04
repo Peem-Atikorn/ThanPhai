@@ -451,15 +451,17 @@ def test_get_radar_nowcast_keeps_only_the_last_hour(monkeypatch):
 
 def test_slow_qwen_answers_with_template_then_fills_cache(monkeypatch):
     """The radar does not wait for a slow Qwen; its validated text replaces the template for later readers."""
-    import time as real_time
+    import threading
     import api_backend.hazard_service as hs
     from decision_engine.nowcast_explainer import NowcastExplainer
 
     svc = _bare_service()
     monkeypatch.setattr(hs, "NOWCAST_EXPLAIN_WAIT_S", 0.05)
 
+    release = threading.Event()
+
     def slow_explain(self, summary, gazetteer=None):
-        real_time.sleep(0.3)
+        assert release.wait(timeout=5), "test did not release the explainer"
         return "ข้อความจาก Qwen", "qwen"
 
     monkeypatch.setattr(NowcastExplainer, "explain_with_source", slow_explain)
@@ -478,8 +480,16 @@ def test_slow_qwen_answers_with_template_then_fills_cache(monkeypatch):
     monkeypatch.setattr(rv, "fetch_tile_bytes", fake_fetch_tile)
 
     async def run():
-        first = await svc.get_radar_nowcast()
-        await asyncio.sleep(0.5)
+        try:
+            first = await svc.get_radar_nowcast()
+            assert first["explanation_source"] == "template"
+        finally:
+            release.set()
+
+        async def wait_for_cache():
+            while svc._radar_nowcast_cache[1]["explanation_source"] != "qwen":
+                await asyncio.sleep(0)  # Yield until the completion callback updates the cache.
+        await asyncio.wait_for(wait_for_cache(), timeout=5)
         return first, await svc.get_radar_nowcast()
 
     first, later = asyncio.run(run())
