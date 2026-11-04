@@ -113,8 +113,20 @@ async def test_radar_drops_old_frame_even_during_cache_ttl(radar_state, monkeypa
     assert response.status_code == 200 and response.json() == {"frames": []}
 
 
+async def test_radar_drops_history_when_latest_frame_is_over_two_hours_old(radar_state, monkeypatch):
+    monkeypatch.setattr(main, "_radar_cache", (10000.0, [{"tiles": "expired", "time": 1799992799}]))
+
+    async def fetch():
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(main, "fetch_radar_maps", fetch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
+        response = await client.get("/v1/radar")
+    assert response.status_code == 200 and response.json() == {"frames": []}
+
+
 async def test_radar_frame_can_expire_while_retry_is_delayed(radar_state, monkeypatch):
-    monkeypatch.setattr(main, "_radar_cache", (9600.0, [{"tiles": "last-good", "time": 1799996410}]))
+    monkeypatch.setattr(main, "_radar_cache", (9600.0, [{"tiles": "last-good", "time": 1799992810}]))
     calls = []
 
     async def fetch():

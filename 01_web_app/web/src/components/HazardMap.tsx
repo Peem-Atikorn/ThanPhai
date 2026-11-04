@@ -154,7 +154,7 @@ function applyRadar(m: MapLibreMap, radar: string | null, radarNext: string | nu
         sources.activeTiles = radar;
     }
     if (sources.preloadTiles !== radarNext) {
-        applyRadarSource(m, sources.preloadId, radarNext, 0);
+        applyRadarSource(m, sources.preloadId, radarNext, 0, RADAR_ATTRIBUTION);
         sources.preloadTiles = radarNext;
     }
 }
