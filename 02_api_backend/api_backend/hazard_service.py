@@ -1672,7 +1672,7 @@ class HazardService:
             log.warning("Failed to fetch radar maps from RainViewer: %s", exc)
             frames = []
 
-        past_frames = recent_radar_frames(frames, limit=6)
+        past_frames = recent_radar_frames(frames, now=time.time(), limit=6)
         curr_time = past_frames[-1]["time"] if past_frames else 0
 
         # Fast path check outside lock

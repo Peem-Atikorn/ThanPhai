@@ -85,20 +85,21 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   const { highestEnvironmentValue, default: EnvironmentSummary } = load('@/components/EnvironmentSummary');
   const environmentLayer = { type: 'FeatureCollection', meta: { data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] }, features: [
     { properties: { name_th: 'ไม่มีค่า', pm25_24h: null, heat_index_max_24h: null } },
-    { properties: { name_th: 'อำเภอ ก', province_th: 'เชียงใหม่', pm25_24h: 80, heat_index_max_24h: 41, level: 'NORMAL' } },
-    { properties: { name_th: 'อำเภอ ข', province_th: 'สงขลา', pm25_24h: 0, heat_index_max_24h: 39, level: 'WARNING' } },
+    { properties: { name_th: 'อำเภอ ก', province_th: 'เชียงใหม่', pm25_24h: 80, heat_index_now: 35, heat_index_max_24h: 41, level: 'NORMAL' } },
+    { properties: { name_th: 'อำเภอ ข', province_th: 'สงขลา', pm25_24h: 0, heat_index_now: 33, heat_index_max_24h: 39, level: 'WARNING' } },
   ] };
   assert.equal(highestEnvironmentValue(environmentLayer, 'air_quality').name, 'อำเภอ ก');
-  assert.equal(highestEnvironmentValue(environmentLayer, 'heat').value, 41);
+  assert.equal(highestEnvironmentValue(environmentLayer, 'heat').value, 35);
+  assert.equal(highestEnvironmentValue(environmentLayer, 'heat').peak, 41);
   assert.equal(highestEnvironmentValue({ features: [{ properties: { pm25_24h: null } }] }, 'air_quality'), null, 'Null is not zero');
   assert.equal(highestEnvironmentValue({ features: [environmentLayer.features[2]] }, 'air_quality').value, 0, 'A measured zero remains valid');
   const metricProps = { layers: { air_quality: { data: environmentLayer, error: false, key: 'air_quality:0' }, heat: { data: environmentLayer, error: false, key: 'heat:0' } }, loadingArea: false, area: null };
   let metrics = instance(EnvironmentSummary).render(metricProps);
-  assert(content(metrics).includes('80') && content(metrics).includes('41') && content(metrics).includes('เชียงใหม่'), 'National maxima show values and places');
+  assert(content(metrics).includes('80') && content(metrics).includes('35') && content(metrics).includes('เชียงใหม่'), 'National maxima show values and places');
   assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-NORMAL'), 'API level wins even when value exceeds a frontend threshold');
-  const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
+  const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_now: 30, heat_index_max_24h: 38 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea });
-  assert(content(metrics).includes('30') && !content(metrics).includes('41'), 'Selected area never shows national maximum');
+  assert(content(metrics).includes('30') && !content(metrics).includes('35'), 'Selected area never shows national maximum');
   assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-WATCH'), 'Selected area keeps API assessment level');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea, loadingArea: true });
   assert(!content(metrics).includes('30'), 'Loading another area hides old values');
@@ -108,7 +109,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert(content(metrics).includes('12') && content(metrics).includes('แบบจำลอง') && content(metrics).includes('CAMS'), 'Selected model fallback is labelled and credited');
   load('@/lib/i18n').setLanguage('en');
   metrics = instance(EnvironmentSummary).render(metricProps);
-  assert(content(metrics).includes('Feels like 41') && content(metrics).includes('National maximum'), 'Summary copy translates without changing readings');
+  assert(content(metrics).includes('Feels like 35') && content(metrics).includes('Forecast for this hour') && nodes(metrics).some(n => n.type === 'article' && n.props.title.includes('National maximum')), 'Summary copy translates without changing readings');
   load('@/lib/i18n').setLanguage('th');
   const { areaWarnings } = load('@/lib/area-warnings');
   const notice = { title: 'ต้นฉบับประกาศ', hazards: ['rain_storm', 'flood'], provinces: ['TH50', 'TH90'],
@@ -248,6 +249,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   let radarRequests = 0;
   let radarEnabled = true;
   let radarFrames = [{ tiles: 'https://tiles.test/old/{z}/{x}/{y}.png', time: 1799996400 }, { tiles: 'https://tiles.test/new/{z}/{x}/{y}.png', time: 1800000000 }];
+  lib.api.radar = async () => ({ enabled: radarEnabled, frames: radarEnabled ? radarFrames : [] });
   lib.api.radarNowcast = async () => { radarRequests++; return {
     enabled: radarEnabled,
     status: radarEnabled ? 'ok' : 'unavailable',
@@ -266,13 +268,16 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
     const radarApp = instance(Dashboard, radarEffects);
     const props = { activeView: 'hazard', activeHazard: hazard };
     const radarTree = radarApp.render(props);
+    const syncRadarSelection = () => radarEffects.filter(effect => /setRadarFrameIndex/.test(String(effect))).at(-1)?.();
     const before = radarRequests;
     const cleanupRadar = radarEffects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
     assert.equal(radarRequests - before, ['overview', 'rain_storm', 'tropical_cyclone'].includes(hazard) ? 1 : 0, `Only overview and weather topics request radar: ${hazard}`);
     if (hazard === 'overview') {
       assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Radar stays hidden while availability is unknown');
       await tick();
-      const enabledTree = radarApp.render(props);
+      let enabledTree = radarApp.render(props);
+      syncRadarSelection();
+      enabledTree = radarApp.render(props);
       assert(nodes(enabledTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
       const playback = nodes(enabledTree).find(n => n.type.name === 'RadarPlayback');
       assert(playback && playback.props.frames.length === 4 && playback.props.index === 1, 'Radar playback appends forecasts and opens on the latest observed frame');
@@ -281,7 +286,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert.equal(nodes(enabledTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Idle radar playback does not preload another frame');
       playback.props.onPlaybackChange(true);
       const playingTree = radarApp.render(props);
-      assert.equal(nodes(playingTree).find(n => 'radarNext' in n.props).props.radarNext, radarFrames[1].tiles, 'The next forecast frame reuses the latest observed image while playback is active');
+      assert.equal(nodes(playingTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Forecast entries do not preload a radar image');
       playback.props.onPlaybackChange(false);
       radarApp.render(props);
       playback.props.onChange(2);
@@ -290,11 +295,9 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert.equal(forecastMap.props.radarForecast.features.length, 2, 'Forecast shows the projected path and position for each rain cell');
       const projected = forecastMap.props.radarForecast.features[1].geometry.coordinates;
       assert(Math.abs(projected[0] - 100.5554) < 0.001 && Math.abs(projected[1] - 13.5) < 0.001, 'Forecast projection follows the measured eastward motion');
-      assert.equal(forecastMap.props.radarFaded, true, 'The reused real image is faded on forecast frames');
-      assert.equal(forecastMap.props.radar, radarFrames[1].tiles, 'A forecast frame shows the latest real image underneath');
+      assert.equal(forecastMap.props.radar, null, 'A forecast frame does not present the current image as a forecast');
       const forecastNote = nodes(forecastTree).find(n => String(n.props.className || '').split(/\s+/).includes('radar-note'));
-      assert(content(forecastNote).includes('ภาพจางคือเรดาร์จริงล่าสุดเวลา'), 'The map note says the faded image is the latest real radar');
-      assert(!content(forecastNote).includes('ไม่ทำนายฝนที่เกิดใหม่'), 'The forecast attribution is not repeated in the map note');
+      assert.equal(forecastNote, undefined, 'The map hides the observed-radar note while a forecast is selected');
       const RadarPlayback = load('@/components/RadarPlayback').default;
       const forecastPlayback = instance(RadarPlayback).render(nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props);
       assert(content(forecastPlayback).includes('ค่าคาดการณ์จากการคำนวณทิศทางการเคลื่อนที่ของกลุ่มฝน'), 'Forecast is attributed to motion calculations');
@@ -331,7 +334,9 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       const refreshRadar = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
       await tick();
       refreshRadar?.();
-      const refreshedTree = radarApp.render(props);
+      let refreshedTree = radarApp.render(props);
+      syncRadarSelection();
+      refreshedTree = radarApp.render(props);
       assert.equal(nodes(refreshedTree).find(n => n.type.name === 'RadarPlayback').props.index, 1, 'Radar refresh preserves the selected frame timestamp when it remains available');
       nodes(refreshedTree).find(n => n.type.name === 'RadarPlayback').props.onChange(0);
       radarFrames = [radarFrames[1], radarFrames[2]];
@@ -339,7 +344,9 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       const removedRadarFrame = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
       await tick();
       removedRadarFrame?.();
-      const missingFrameTree = radarApp.render(props);
+      let missingFrameTree = radarApp.render(props);
+      syncRadarSelection();
+      missingFrameTree = radarApp.render(props);
       assert.equal(nodes(missingFrameTree).find(n => n.type.name === 'RadarPlayback').props.index, 1, 'Radar refresh selects the latest frame if the selected timestamp expired');
       nodes(missingFrameTree).find(n => n.type.name === 'RadarPlayback').props.onChange(2);
       const pickedForecastTime = radarFrames.at(-1).time + 600;
@@ -348,7 +355,9 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       const realAtForecastTime = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
       await tick();
       realAtForecastTime?.();
-      const realAtForecastTree = radarApp.render(props);
+      let realAtForecastTree = radarApp.render(props);
+      syncRadarSelection();
+      realAtForecastTree = radarApp.render(props);
       assert.equal(nodes(realAtForecastTree).find(n => n.type.name === 'RadarPlayback').props.index, 2, 'A selected forecast does not turn into the real frame with the same time; the latest real frame is shown');
 
       lib.api.radarNowcast = async () => { throw new Error('offline'); };
@@ -357,7 +366,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       await tick();
       failRadar?.();
       const failedTree = radarApp.render(props);
-      assert(nodes(failedTree).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note') && content(n).includes('ยังโหลดเรดาร์ไม่ได้')), 'Radar failure keeps its unavailable note visible');
+      assert(nodes(failedTree).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note') && content(n).includes('RainViewer')), 'Nowcast failure keeps the observed radar visible');
       lib.api.radarNowcast = async () => { radarRequests++; return { enabled: radarEnabled, status: 'unavailable', past_frames: [], forecast_frames: [], motion: null, rain_cells: [], explanation: '', explanation_source: 'template' }; };
     }
     cleanupRadar?.();

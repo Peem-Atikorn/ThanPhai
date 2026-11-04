@@ -7,16 +7,19 @@ import Icon from "@/components/Icon";
 type Metric = "air_quality" | "heat";
 export type EnvironmentLayer = GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } };
 export type EnvironmentState = { key: string; data: EnvironmentLayer | null; error: boolean };
-const fields = { air_quality: "pm25_24h", heat: "heat_index_max_24h" } as const;
+const fields = { air_quality: "pm25_24h", heat: "heat_index_now" } as const;
+const HEAT_PEAK = "heat_index_max_24h";
+const models = { air_quality: "air_model", heat: "heat_model" } as const;
 
 export function highestEnvironmentValue(layer: GeoJSON.FeatureCollection | null, metric: Metric) {
-    let highest: { value: number; name: string; province: string; level: Level } | null = null;
+    let highest: { value: number; peak: number | null; name: string; province: string; level: Level } | null = null;
     for (const feature of layer?.features ?? []) {
         const p = feature.properties;
         const value = p?.[fields[metric]];
         if (typeof value !== "number" || !Number.isFinite(value)) continue;
         if (!highest || value > highest.value)
-            highest = { value, name: p?.name_th ?? "", province: p?.province_th ?? "", level: p?.level ?? null };
+            highest = { value, peak: metric === "heat" ? p?.[HEAT_PEAK] ?? null : null,
+                name: p?.name_th ?? "", province: p?.province_th ?? "", level: p?.level ?? null };
     }
     return highest;
 }
@@ -40,24 +43,26 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             const measured = assessment?.observations[fields[metric]];
             const model = metric === "air_quality" && area && measured == null;
             const value = area ? (model ? assessment?.observations.pm25_model_24h : measured) : maximum?.value;
-            const loading = loadingArea || (!area && !areaError && !state?.data && !state?.error);
+            const hasValue = typeof value === "number" && Number.isFinite(value);
+            const peak = metric === "heat" ? (area ? assessment?.observations[HEAT_PEAK] : maximum?.peak) : null;
+            const pending = !area && !!state?.data?.meta.inputs_pending?.includes(models[metric]);
+            const loading = loadingArea || (!area && !areaError && !state?.data && !state?.error) || (pending && !hasValue);
             const error = areaError || (!area && state?.error);
             const available = !loading && !error && typeof value === "number" && Number.isFinite(value);
             const level = available ? (area ? assessment?.level : maximum?.level) ?? null : null;
             const source = model ? "Open-Meteo / CAMS (แบบจำลอง)" : metric === "air_quality" ? "Air4Thai / กรมควบคุมมลพิษ" : "Open-Meteo";
-            const pending = !area && state?.data?.meta.inputs_pending?.includes(metric === "air_quality" ? "air_model" : "heat_model");
             const degraded = area ? area.degraded_services.length : state?.data?.meta.degraded_services.length;
             const status = loading ? "กำลังโหลด…" : error ? "โหลดข้อมูลไม่ได้" : !available ? "ยังไม่มีข้อมูล" : levelInfo(level).th;
             const scope = area ? area.area.name_th : "สูงสุดในประเทศ · อำเภอที่มีข้อมูล";
             const place = available && !area ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : "";
-            const period = metric === "heat" || model ? "24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม.";
+            const period = metric === "heat" ? "ค่าคาดการณ์ชั่วโมงนี้" : model ? "เฉลี่ย 24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม.";
             const updated = updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at);
             const details = [scope, place, period, source, updated, pending ? "ข้อมูลยังไม่ครบ" : degraded ? "ข้อมูลบางแหล่งไม่พร้อมใช้งาน" : ""].filter(Boolean).map(text => tr(text)).join(" · ");
             return <article key={metric} title={details}>
                 <span className="environment-icon" aria-hidden="true"><Icon name={metric}/></span>
                 <h3>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
-                <p className="environment-value">{metric === "heat" && available && <span className="sr-only">{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
-                <div className="environment-status"><span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span>{available && <small>{tr((model ? "แบบจำลอง · " : "") + period)}</small>}</div>
+                <p className="environment-value">{metric === "heat" && available && <span>{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
+                <div className="environment-status"><span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span>{available && <small>{tr((model ? "แบบจำลอง · " : "") + period)}{metric === "heat" && typeof peak === "number" && Number.isFinite(peak) ? `${tr(" · สูงสุดใน 24 ชม. ข้างหน้า ")}${peak.toLocaleString(getLocale(), { maximumFractionDigits: 1 })}°C` : ""}</small>}</div>
                 <small className="environment-meta"><span>{tr(area ? scope : place || scope)}</span><span>{tr(source)}</span><span>{tr("อัปเดต ")}{tr(updated)}</span></small>
                 {!!(pending || degraded) && <small className="environment-notice">{tr(pending ? "ข้อมูลยังไม่ครบ" : "ข้อมูลบางแหล่งไม่พร้อมใช้งาน")}</small>}
             </article>;

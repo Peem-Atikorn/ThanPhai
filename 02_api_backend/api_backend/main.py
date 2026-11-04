@@ -343,7 +343,7 @@ async def radar() -> dict:
                 try:
                     frames = await fetch_radar_maps()
                     recent = [{"tiles": frame["tile_url"], "time": frame["time"]}
-                              for frame in recent_radar_frames(frames, limit=RADAR_FRAME_LIMIT)]
+                              for frame in recent_radar_frames(frames, now=time.time(), limit=RADAR_FRAME_LIMIT)]
                     _radar_cache = (time.monotonic(), recent)
                     _radar_retry_at = 0.0
                 except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
@@ -351,7 +351,7 @@ async def radar() -> dict:
                     _radar_retry_at = time.monotonic() + RADAR_RETRY_S
     if _radar_cache is None:
         raise HTTPException(502, "RainViewer did not answer; try again later")
-    return {"frames": recent_radar_frames(_radar_cache[1] or [])}
+    return {"frames": recent_radar_frames(_radar_cache[1] or [], now=time.time())}
 
 
 @app.get("/v1/radar/nowcast")
