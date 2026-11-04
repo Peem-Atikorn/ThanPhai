@@ -133,6 +133,7 @@ def _window_th(u: Understanding) -> str:
 
 QUAKE_NEAR_KM = 100
 QUAKE_LIST_MAX = 10
+QUAKE_PARTIAL_TH = "ข้อมูลยังไม่ครบช่วงที่ถาม"
 
 
 def _parse_time(value: str | None) -> datetime | None:
@@ -481,18 +482,23 @@ class HazardAgent:
                 quakes, where = near, f"ใกล้{_area_label(area, self.gazetteer)} (ภายใน {QUAKE_NEAR_KM} กม.)"
             total = len(quakes)
             quakes = quakes[:QUAKE_LIST_MAX if u.areas else 5]
-            # TMD lists only its last 10 events, so ThanPhai keeps what it has seen; say when that starts after the period.
+            # TMD lists only its last 10 events, so ThanPhai keeps what it has seen (the backend keeps 62 days and
+            # fetches USGS for the same span, so USGS covers every period asked about). When the kept TMD history
+            # starts after the period begins, the count is partial: say so and give the date it starts.
             tmd_times = [t for q in all_quakes if q.get("source") == "กรมอุตุนิยมวิทยา" and (t := _parse_time(q.get("time")))]
             kept_from = min(tmd_times) if tmd_times else None
-            gap = (f"ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ {_time_th(kept_from.isoformat())} "
-                   "เหตุการณ์ขนาดเล็กก่อนหน้านั้นอาจไม่อยู่ในรายการ (USGS รายงานเฉพาะขนาด 3.5 ขึ้นไป)"
-                   if kept_from is not None and kept_from - since > timedelta(hours=12) else None)
+            tmd_part = (f"ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ {_time_th(kept_from.isoformat())}"
+                        if kept_from is not None else "ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้")
+            gap = (f"{QUAKE_PARTIAL_TH}: {tmd_part} ช่วงก่อนหน้านั้นมีเฉพาะแผ่นดินไหวขนาด 3.5 ขึ้นไปจาก USGS "
+                   "จำนวนที่แสดงจึงอาจน้อยกว่าจริง"
+                   if kept_from is None or kept_from - since > timedelta(hours=12) else None)
             if not quakes:
                 message = ("แหล่งข้อมูลแผ่นดินไหวขัดข้อง จึงยังตรวจสอบรายการล่าสุดไม่ได้"
                            if sources_down("tmd_earthquakes", "usgs_earthquakes")
                            else f"ไม่พบแผ่นดินไหว{where or 'ในข้อมูล'}{period}จาก TMD/USGS")
                 return finish([message] + ([gap] if gap else []), [], ["กรมอุตุนิยมวิทยา (TMD)", "USGS"])
-            lines = [f"แผ่นดินไหว{where}{period}: {total} ครั้ง" + (f" (แสดง {len(quakes)} ครั้งล่าสุด)" if total > len(quakes) else "")
+            lines = [f"แผ่นดินไหว{where}{period}: {'อย่างน้อย ' if gap else ''}{total} ครั้ง"
+                     + (f" (แสดง {len(quakes)} ครั้งล่าสุด)" if total > len(quakes) else "")
                      if u.areas else f"แผ่นดินไหวล่าสุด{period}:"]
             if sources_down("tmd_earthquakes", "usgs_earthquakes"):
                 lines.append("แหล่งข้อมูลแผ่นดินไหวบางแห่งขัดข้อง รายการอาจไม่ครบ")

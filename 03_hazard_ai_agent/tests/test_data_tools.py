@@ -353,3 +353,23 @@ def test_quakes_last_month_uses_previous_calendar_month():
     assert "1 ครั้ง" in answer.text
     assert "20/10/2569" in answer.text
     assert "1/11/2569" not in answer.text and "4/11/2569" not in answer.text
+    # The kept TMD history starts on 20 Oct, after the month began: the count is partial, and the answer says so.
+    assert "อย่างน้อย 1 ครั้ง" in answer.text
+    assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ 10:10 น. วันที่ 20/10/2569" in answer.text
+
+
+def test_quake_count_is_exact_when_the_kept_history_covers_the_period():
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("พะเยาแผ่นดินไหวเดือนนี้กี่ครั้ง", NOW)
+    assert "ตั้งแต่ต้นเดือนนี้: 2 ครั้ง" in answer.text
+    assert "อย่างน้อย" not in answer.text and "ข้อมูลยังไม่ครบ" not in answer.text
+
+
+def test_quake_count_is_partial_when_no_tmd_history_is_kept():
+    class UsgsOnly(DataTools):
+        def get_earthquakes(self):
+            return [{"magnitude": 4.1, "place": "Myanmar", "time": "2026-11-03T03:10:00+00:00", "lat": 19.5, "lon": 100.0,
+                     "source": "USGS"}]
+
+    answer = HazardAgent(PHAYAO, UsgsOnly()).ask("พะเยาแผ่นดินไหวสัปดาห์นี้กี่ครั้ง", NOW)
+    assert "อย่างน้อย 1 ครั้ง" in answer.text
+    assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้" in answer.text

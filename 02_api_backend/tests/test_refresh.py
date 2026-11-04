@@ -867,10 +867,10 @@ def test_tmd_quakes_are_kept_after_they_leave_the_feed_and_saved_for_a_restart(b
                             station_id=f"tmd:{id_}", observed_at=now - timedelta(days=days_ago), fetched_at=now, attribution="t",
                             extra={"depth_km": 2.0, "place_th": "ต.ปง อ.ปง จ.พะเยา"})
 
-    svc._quake_shaking([quake("1", 4), quake("old", 40)], [])
+    svc._quake_shaking([quake("1", 4), quake("old", 70)], [])
     # TMD's feed has moved on (only its last 10 events): the event from 4 days ago must stay.
     svc._quake_shaking([quake("2", 0.1)], [])
-    assert [q["id"] for q in svc._last_quakes] == ["tmd:2", "tmd:1"]  # the 40-day-old one is past the month
+    assert [q["id"] for q in svc._last_quakes] == ["tmd:2", "tmd:1"]  # the 70-day-old one is past the 62 days kept
     svc.quakes = svc._last_quakes
     assert [q["id"] for q in svc.get_earthquakes(days=2)] == ["tmd:2"]
     assert {r.station_id for r in svc._load_quake_history().values()} == {"tmd:1", "tmd:2"}

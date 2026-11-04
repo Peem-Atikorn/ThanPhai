@@ -56,12 +56,13 @@ MAX_PM25_AGE = timedelta(hours=6)
 # Fires in Myanmar, Laos and Cambodia within this distance of a district centre are shown with its PM2.5:
 # context for where the smoke may come from, not a rule input.
 CROSS_BORDER_KM = 100
-# Earthquakes count for district levels for a day; the list endpoint shows a week, the assistant a month.
+# Earthquakes count for district levels for a day; the list endpoint shows a week, the assistant up to 62 days.
 QUAKE_WINDOW = timedelta(hours=24)
 QUAKE_LIST_WINDOW = timedelta(days=7)
 # TMD's RSS feed holds only its last 10 events (about a day when Laos/Myanmar are active), so every event seen
-# is kept this long, and saved to QUAKE_HISTORY_FILE (if set) to survive restarts.
-QUAKE_HISTORY_WINDOW = timedelta(days=31)
+# is kept this long, and saved to QUAKE_HISTORY_FILE (if set) to survive restarts. 62 days so that "last month"
+# (up to 61 days back on the last day of a month) is always covered; USGS is fetched for the same span.
+QUAKE_HISTORY_WINDOW = timedelta(days=62)
 NEAR_QUAKE_KM = 30  # an epicentre this close to a district centre is reported there, however weak the shaking
 # Observation that decides which district speaks for a province when several share its worst level.
 PROVINCE_TIEBREAK = {"earthquake": "quake_mmi_24h", "rain_storm": "rain_24h", "flood": "above_bank_m",
@@ -1335,7 +1336,7 @@ class HazardService:
             return history
 
     def get_earthquakes(self, days: int | None = None) -> list[dict]:
-        """Merged TMD + USGS list, newest first: the whole kept month, or the last `days` days."""
+        """Merged TMD + USGS list, newest first: all 62 kept days, or the last `days` days."""
         if days is None:
             return self.quakes
         since = datetime.now(timezone.utc) - timedelta(days=days)
