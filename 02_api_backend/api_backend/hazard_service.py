@@ -1268,23 +1268,44 @@ class HazardService:
             body = w_dict.get("body") or w_dict.get("headline") or ""
             by_region = w_dict.get("by_region", [])
             rain_days = w_dict.get("rain_days")
+            provinces_by_hazard = w_dict.get("provinces_by_hazard")
+            periods_by_hazard = w_dict.get("periods_by_hazard")
 
             auditor = WarningAuditor()
-            auditor.audit(title=title, body=body, by_region=by_region, rain_days=rain_days)
+            auditor.audit(
+                title=title,
+                body=body,
+                by_region=by_region,
+                rain_days=rain_days,
+                provinces_by_hazard=provinces_by_hazard,
+                periods_by_hazard=periods_by_hazard,
+            )
 
             explainer = WarningExplainer()
-            summary_res = explainer.summarize(title=title, body=body, by_region=by_region, rain_days=rain_days)
+            summary_res = explainer.summarize(
+                title=title,
+                body=body,
+                by_region=by_region,
+                rain_days=rain_days,
+                provinces_by_hazard=provinces_by_hazard,
+                periods_by_hazard=periods_by_hazard,
+            )
             if summary_res and summary_res.valid:
                 res = (summary_res.summary_text, summary_res.attribution)
                 if cache is not None:
                     cache[cache_key] = res
                 return res
+            elif getattr(explainer, "validation_failed", False):
+                # Qwen responded, but validation failed (safe fallback) -> cache (None, None) so we don't re-query
+                if cache is not None:
+                    cache[cache_key] = (None, None)
+                return None, None
+            else:
+                # Timeout, exception, or provider disabled -> do NOT cache so next refresh can retry
+                return None, None
         except Exception as exc:
             log.warning("Warning audit/summary failed: %s", exc)
-
-        if cache is not None:
-            cache[cache_key] = (None, None)
-        return None, None
+            return None, None
 
     def get_official_warnings(self) -> list[dict]:
         return self.warnings

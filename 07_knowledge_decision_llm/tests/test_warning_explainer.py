@@ -100,6 +100,101 @@ def test_validate_catches_dropped_bang_haeng(bulletin_5_data):
     assert any("บางแห่ง" in p or "ความแรง" in p for p in problems)
 
 
+def test_validate_catches_dropped_bang_haeng_in_south(bulletin_5_data):
+    # Review 2 Case 1: ตอนบนมีบางแห่งถูกต้อง แต่ภาคใต้มี "หนักมาก" แล้วตัด "บางแห่ง" ออก
+    bad_summary = (
+        "ช่วงวันที่ 5–7 พ.ย. ประเทศไทยตอนบนมีสภาพอากาศแปรปรวน และมีฝนตกหนักบางแห่ง "
+        "ส่วนภาคใต้มีฝนตกหนักถึงหนักมากวันที่ 7-9 พ.ย."
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("บางแห่ง" in p or "ความแรง" in p for p in problems)
+
+
+def test_validate_catches_fon_nak_dropping_bang_haeng(bulletin_5_data):
+    # Review 2 Case 2: เขียน "ฝนหนัก" แทน "ฝนตกหนัก" แล้วตัด "บางแห่ง"
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนหนักวันที่ 5-7 พ.ย. "
+        "ส่วนภาคใต้มีฝนตกหนักถึงหนักมากบางแห่งวันที่ 7-9 พ.ย."
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("บางแห่ง" in p or "ความแรง" in p for p in problems)
+
+
+def test_validate_catches_hazard_clause_inheriting_region_without_flood(bulletin_5_data):
+    # Review 2 Case 3: ประโยคที่ไม่มีภาคและไม่มีวันที่ (ขึ้นบรรทัดใหม่) คนอ่านจะเข้าใจว่าเป็นของภาคก่อนหน้า
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักบางแห่งวันที่ 5-7 พ.ย.\n"
+        "อาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก\n"
+        "ส่วนภาคใต้ช่วงวันที่ 7–9 พ.ย. มีฝนตกหนักบางแห่ง"
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("flood" in p or "น้ำท่วม" in p or "ภัย" in p for p in problems)
+
+
+def test_validate_catches_province_without_date_against_provinces_by_hazard(bulletin_5_data):
+    # Review 2 Case 4: จังหวัดภูเก็ตอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก (ไม่มีวันที่)
+    # แต่ประกาศเตือนน้ำท่วมเฉพาะนครศรีธรรมราชกับสงขลา
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง 5-7 พ.ย. "
+        "ส่วนจังหวัดภูเก็ตอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก"
+    )
+    provinces_by_hazard = {"flood": ["TH80", "TH90"]}  # Only Nakhon Si Thammarat & Songkhla
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+        provinces_by_hazard=provinces_by_hazard,
+    )
+    assert any("flood" in p or "ภูเก็ต" in p or "ภัย" in p for p in problems)
+
+
+def test_validate_catches_very_heavy_escalation_in_rain_days(bulletin_5_data):
+    # Review 2 Case 5: ภูเก็ตในตารางวันที่ 9 พ.ย. อยู่ในแถวฝนตกหนัก (very_heavy: false)
+    # แต่สรุปเขียน "ฝนตกหนักถึงหนักมาก"
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง 5-7 พ.ย. "
+        "ส่วนจังหวัดภูเก็ตฝนตกหนักถึงหนักมากวันที่ 9 พ.ย."
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("หนักมาก" in p or "very_heavy" in p or "ความแรง" in p for p in problems)
+
+
+def test_validate_does_not_falsely_match_ambiguous_names(bulletin_5_data):
+    # "ควรติดตามประกาศเลย" ต้องไม่นับ "เลย" เป็นจังหวัดเลย
+    valid_summary = (
+        "ช่วงวันที่ 5–7 พ.ย. ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง "
+        "ส่วนภาคใต้ช่วงวันที่ 7–9 พ.ย. มีฝนตกหนักบางแห่ง ประชาชนควรติดตามประกาศเลย"
+    )
+    problems = validate_warning_summary(
+        summary=valid_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert problems == []
+
+
 def test_validate_catches_invalid_province_and_date(bulletin_5_data):
     # Review Case 2: ภูเก็ตระบุวันที่ 5 พ.ย. ซึ่งตารางฝนระบุวันที่ 9 พ.ย. และภาคใต้ช่วง 5–7 ไม่มีน้ำท่วม
     bad_summary = (

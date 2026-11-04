@@ -23,33 +23,76 @@ PROHIBITED_ADVICE_WORDS = ["อพยพ", "หลบภัย", "ศูนย�
 LEVELS_TH = ("ปกติ", "เฝ้าระวัง", "เตือนภัย", "วิกฤต")
 LEVELS_EN = {"ปกติ": "NORMAL", "เฝ้าระวัง": "WATCH", "เตือนภัย": "WARNING", "วิกฤต": "CRITICAL"}
 
-PROVINCES_BY_REGION = {
-    "ภาคเหนือ": [
-        "เชียงราย", "แม่ฮ่องสอน", "เชียงใหม่", "ลำพูน", "ลำปาง", "พะเยา", "แพร่", "น่าน", "อุตรดิตถ์", "ตาก",
-        "สุโขทัย", "พิษณุโลก", "พิจิตร", "กำแพงเพชร", "เพชรบูรณ์", "นครสวรรค์", "อุทัยธานี"
-    ],
-    "ภาคตะวันออกเฉียงเหนือ": [
-        "เลย", "หนองคาย", "บึงกาฬ", "หนองบัวลำภู", "อุดรธานี", "สกลนคร", "นครพนม", "มุกดาหาร", "ขอนแก่น",
-        "กาฬสินธุ์", "มหาสารคาม", "ร้อยเอ็ด", "ชัยภูมิ", "นครราชสีมา", "บุรีรัมย์", "สุรินทร์", "ศรีสะเกษ",
-        "ยโสธร", "อำนาจเจริญ", "อุบลราชธานี"
-    ],
-    "ภาคกลาง": [
-        "ชัยนาท", "สิงห์บุรี", "อ่างทอง", "ลพบุรี", "สระบุรี", "พระนครศรีอยุธยา", "สุพรรณบุรี", "กาญจนบุรี",
-        "ราชบุรี", "สมุทรสงคราม"
-    ],
-    "กรุงเทพมหานครและปริมณฑล": [
-        "กรุงเทพมหานคร", "กรุงเทพฯ", "กทม", "นนทบุรี", "ปทุมธานี", "สมุทรปราการ", "สมุทรสาคร", "นครปฐม"
-    ],
-    "ภาคตะวันออก": [
-        "นครนายก", "ปราจีนบุรี", "สระแก้ว", "ฉะเชิงเทรา", "ชลบุรี", "ระยอง", "จันทบุรี", "ตราด"
-    ],
-    "ภาคใต้": [
-        "เพชรบุรี", "ประจวบคีรีขันธ์", "ชุมพร", "สุราษฎร์ธานี", "นครศรีธรรมราช", "พัทลุง", "สงขลา",
-        "ปัตตานี", "ยะลา", "นราธิวาส", "ระนอง", "พังงา", "ภูเก็ต", "กระบี่", "ตรัง", "สตูล"
-    ],
+# 77 Thai provinces: ISO 3166-2:TH code <-> Thai province name
+PROVINCE_CODE_TO_NAME = {
+    "TH10": "กรุงเทพมหานคร", "TH11": "สมุทรปราการ", "TH12": "นนทบุรี", "TH13": "ปทุมธานี",
+    "TH14": "พระนครศรีอยุธยา", "TH15": "อ่างทอง", "TH16": "ลพบุรี", "TH17": "สิงห์บุรี",
+    "TH18": "ชัยนาท", "TH19": "สระบุรี", "TH20": "ชลบุรี", "TH21": "ระยอง",
+    "TH22": "จันทบุรี", "TH23": "ตราด", "TH24": "ฉะเชิงเทรา", "TH25": "ปราจีนบุรี",
+    "TH26": "นครนายก", "TH27": "สระแก้ว", "TH30": "นครราชสีมา", "TH31": "บุรีรัมย์",
+    "TH32": "สุรินทร์", "TH33": "ศรีสะเกษ", "TH34": "อุบลราชธานี", "TH35": "ยโสธร",
+    "TH36": "ชัยภูมิ", "TH37": "อำนาจเจริญ", "TH38": "บึงกาฬ", "TH39": "หนองบัวลำภู",
+    "TH40": "ขอนแก่น", "TH41": "อุดรธานี", "TH42": "เลย", "TH43": "หนองคาย",
+    "TH44": "มหาสารคาม", "TH45": "ร้อยเอ็ด", "TH46": "กาฬสินธุ์", "TH47": "สกลนคร",
+    "TH48": "นครพนม", "TH49": "มุกดาหาร", "TH50": "เชียงใหม่", "TH51": "ลำพูน",
+    "TH52": "ลำปาง", "TH53": "อุตรดิตถ์", "TH54": "แพร่", "TH55": "น่าน",
+    "TH56": "พะเยา", "TH57": "เชียงราย", "TH58": "แม่ฮ่องสอน", "TH60": "นครสวรรค์",
+    "TH61": "อุทัยธานี", "TH62": "กำแพงเพชร", "TH63": "ตาก", "TH64": "สุโขทัย",
+    "TH65": "พิษณุโลก", "TH66": "พิจิตร", "TH67": "เพชรบูรณ์", "TH70": "ราชบุรี",
+    "TH71": "กาญจนบุรี", "TH72": "สุพรรณบุรี", "TH73": "นครปฐม", "TH74": "สมุทรสาคร",
+    "TH75": "สมุทรสงคราม", "TH76": "เพชรบุรี", "TH77": "ประจวบคีรีขันธ์", "TH80": "นครศรีธรรมราช",
+    "TH81": "กระบี่", "TH82": "พังงา", "TH83": "ภูเก็ต", "TH84": "สุราษฎร์ธานี",
+    "TH85": "ระนอง", "TH86": "ชุมพร", "TH90": "สงขลา", "TH91": "สตูล",
+    "TH92": "ตรัง", "TH93": "พัทลุง", "TH94": "ปัตตานี", "TH95": "ยะลา",
+    "TH96": "นราธิวาส",
 }
+PROVINCE_NAME_TO_CODE = {name: code for code, name in PROVINCE_CODE_TO_NAME.items()}
+
+# Load official TMD meteorological regions from geo_integration if available
+try:
+    from geo_integration.warning_areas import REGIONS as _TMD_REGIONS  # type: ignore
+
+    PROVINCES_BY_REGION = {
+        "ภาคเหนือ": list(_TMD_REGIONS["ภาคเหนือ"]),
+        "ภาคตะวันออกเฉียงเหนือ": list(_TMD_REGIONS["ภาคตะวันออกเฉียงเหนือ"]),
+        "ภาคกลาง": list(_TMD_REGIONS["ภาคกลาง"]),
+        "กรุงเทพมหานครและปริมณฑล": list(_TMD_REGIONS["กรุงเทพมหานครและปริมณฑล"]) + ["กทม", "กรุงเทพฯ", "กรุงเทพ"],
+        "ภาคตะวันออก": list(_TMD_REGIONS["ภาคตะวันออก"]),
+        "ภาคใต้": list(_TMD_REGIONS["ภาคใต้"]),
+    }
+except Exception:
+    PROVINCES_BY_REGION = {
+        "ภาคเหนือ": [
+            "เชียงราย", "แม่ฮ่องสอน", "เชียงใหม่", "ลำพูน", "ลำปาง", "พะเยา", "แพร่", "น่าน", "อุตรดิตถ์", "ตาก",
+            "สุโขทัย", "พิษณุโลก", "พิจิตร", "กำแพงเพชร", "เพชรบูรณ์", "นครสวรรค์", "อุทัยธานี"
+        ],
+        "ภาคตะวันออกเฉียงเหนือ": [
+            "เลย", "หนองคาย", "บึงกาฬ", "หนองบัวลำภู", "อุดรธานี", "สกลนคร", "นครพนม", "มุกดาหาร", "ขอนแก่น",
+            "กาฬสินธุ์", "มหาสารคาม", "ร้อยเอ็ด", "ชัยภูมิ", "นครราชสีมา", "บุรีรัมย์", "สุรินทร์", "ศรีสะเกษ",
+            "ยโสธร", "อำนาจเจริญ", "อุบลราชธานี"
+        ],
+        "ภาคกลาง": [
+            "ชัยนาท", "สิงห์บุรี", "อ่างทอง", "ลพบุรี", "สระบุรี", "พระนครศรีอยุธยา", "สุพรรณบุรี", "กาญจนบุรี",
+            "ราชบุรี", "สมุทรสงคราม"
+        ],
+        "กรุงเทพมหานครและปริมณฑล": [
+            "กรุงเทพมหานคร", "กรุงเทพฯ", "กทม", "กรุงเทพ", "นนทบุรี", "ปทุมธานี", "สมุทรปราการ", "สมุทรสาคร", "นครปฐม"
+        ],
+        "ภาคตะวันออก": [
+            "นครนายก", "ปราจีนบุรี", "สระแก้ว", "ฉะเชิงเทรา", "ชลบุรี", "ระยอง", "จันทบุรี", "ตราด"
+        ],
+        "ภาคใต้": [
+            "เพชรบุรี", "ประจวบคีรีขันธ์", "ชุมพร", "สุราษฎร์ธานี", "นครศรีธรรมราช", "พัทลุง", "สงขลา",
+            "ปัตตานี", "ยะลา", "นราธิวาส", "ระนอง", "พังงา", "ภูเก็ต", "กระบี่", "ตรัง", "สตูล"
+        ],
+    }
 
 PROVINCE_TO_REGION = {p: r for r, plist in PROVINCES_BY_REGION.items() for p in plist}
+
+# Short/ambiguous province names that can be common words in Thai
+AMBIGUOUS_PROVINCES = {"เลย", "แพร่", "ตาก"}
+PROVINCE_BEFORE = re.compile(r"(?:^|[\s,:;(]|จังหวัด|จ\.|และ)$")
+PROVINCE_AFTER = re.compile(r"^(?:$|[\s,:;).]|และ)")
 
 REGIONS_COVERED = {
     "ประเทศไทยตอนบน": [
@@ -107,9 +150,10 @@ class WarningAuditResult:
 
 @dataclass(frozen=True)
 class WarningSummaryResult:
-    summary_text: str
+    summary_text: str | None = None
     attribution: str = "สรุปโดย AI จากประกาศกรมอุตุนิยมวิทยา · ดูประกาศฉบับจริง"
     valid: bool = True
+    error: str | None = None
 
 
 def load_strong_words() -> list[str]:
@@ -151,8 +195,18 @@ def _find_region_match(text: str) -> tuple[list[str], list[str]]:
 
     found_provinces = []
     for p, r in sorted(PROVINCE_TO_REGION.items(), key=lambda x: len(x[0]), reverse=True):
-        # Match as whole province or prefixed with จ. / จังหวัด
         if p in text:
+            if p in AMBIGUOUS_PROVINCES:
+                # Require province prefix (จ./จังหวัด) or whitespace/list boundary
+                matched = False
+                for m in re.finditer(re.escape(p), text):
+                    before_ok = bool(PROVINCE_BEFORE.search(text[:m.start()]))
+                    after_ok = bool(PROVINCE_AFTER.match(text[m.end():]))
+                    if before_ok and after_ok:
+                        matched = True
+                        break
+                if not matched:
+                    continue
             found_provinces.append(p)
             if r not in found_regions:
                 found_regions.append(r)
@@ -250,6 +304,8 @@ def validate_warning_summary(
     by_region: list[dict],
     strong_words: list[str] | None = None,
     rain_days: list[dict] | None = None,
+    provinces_by_hazard: dict[str, list[str]] | None = None,
+    periods_by_hazard: dict | None = None,
 ) -> list[str]:
     """Strict zero-trust validator for AI TMD warning summary against ground-truth facts."""
     problems: list[str] = []
@@ -289,6 +345,9 @@ def validate_warning_summary(
     summary_clauses = _split_clauses(summary)
     original_regional_clauses = _split_clauses_with_regions(original_text)
 
+    current_regions: list[str] = []
+    current_provinces: list[str] = []
+
     for s_clause in summary_clauses:
         matched_regions, matched_provinces = _find_region_match(s_clause)
 
@@ -298,12 +357,25 @@ def validate_warning_summary(
         if "2 เมตร" in s_clause or "2เมตร" in s_clause:
             day_candidates.discard("2")
 
-        # Item 4: Orphan clause without explicit region name
+        if matched_regions or matched_provinces:
+            current_regions = list(matched_regions)
+            current_provinces = list(matched_provinces)
+        else:
+            # Check if this clause contains hazard statements (Review Case 3)
+            clause_has_hazard = any(any(kw in s_clause for kw in kws) for kws in HAZARD_KEYWORDS.values())
+            if clause_has_hazard:
+                if current_regions:
+                    # Inherit region from previous clause (same behavior as original text)
+                    matched_regions = list(current_regions)
+                    matched_provinces = list(current_provinces)
+                else:
+                    problems.append(f"Hazard statement without region: '{s_clause}' (ภัย)")
+                    continue
+
+        # Item 4 & orphan statement handling without regions
         if not matched_regions:
-            # If dates are mentioned, verify that any hazards in clause are allowed on those dates
             if day_candidates:
                 for cand_day in day_candidates:
-                    # Find which items in by_region cover this day
                     allowed_h_for_day = set()
                     for item in by_region:
                         f_str, t_str = item.get("from"), item.get("to")
@@ -325,22 +397,59 @@ def validate_warning_summary(
             continue
 
         # Check province against rain_days table if present
-        if rain_days and matched_provinces and day_candidates:
-            for prov in matched_provinces:
-                for cand_day in day_candidates:
-                    matching_rows = [
-                        r for r in rain_days
-                        if str(int(str(r["day"]).split("-")[-1])) == cand_day
-                    ]
-                    if matching_rows:
-                        listed_provs = {p for r in matching_rows for p in r.get("provinces", [])}
-                        if prov not in listed_provs:
+        if rain_days and matched_provinces:
+            if day_candidates:
+                for prov in matched_provinces:
+                    for cand_day in day_candidates:
+                        matching_rows = [
+                            r for r in rain_days
+                            if str(int(str(r["day"]).split("-")[-1])) == cand_day
+                        ]
+                        if matching_rows:
+                            listed_provs = {p for r in matching_rows for p in r.get("provinces", [])}
+                            if prov not in listed_provs:
+                                problems.append(
+                                    f"Province '{prov}' not expected for date '{cand_day}' in rain_days table"
+                                )
+
+            # Review Case 5: Check very_heavy in rain_days table
+            if "หนักมาก" in s_clause:
+                for prov in matched_provinces:
+                    check_days = day_candidates
+                    if not check_days:
+                        matching_rows = [r for r in rain_days if prov in r.get("provinces", [])]
+                        has_vh = any(r.get("very_heavy") is True for r in matching_rows)
+                        if not has_vh and matching_rows:
                             problems.append(
-                                f"Province '{prov}' not expected for date '{cand_day}' in rain_days table"
+                                f"Word strength escalated for province '{prov}': 'หนักมาก' not in daily rain table (very_heavy is false) (ความแรง)"
+                            )
+                    else:
+                        for cand_day in check_days:
+                            matching_rows = [
+                                r for r in rain_days
+                                if str(int(str(r["day"]).split("-")[-1])) == cand_day and prov in r.get("provinces", [])
+                            ]
+                            has_vh = any(r.get("very_heavy") is True for r in matching_rows)
+                            if not has_vh and matching_rows:
+                                problems.append(
+                                    f"Word strength escalated for province '{prov}': 'หนักมาก' not in daily rain table (very_heavy is false) for day {cand_day} (ความแรง)"
+                                )
+
+        # Review Case 4: Check provinces against provinces_by_hazard
+        if provinces_by_hazard and matched_provinces:
+            for prov in matched_provinces:
+                prov_code = PROVINCE_NAME_TO_CODE.get(prov)
+                for h_type, kws in HAZARD_KEYWORDS.items():
+                    if any(kw in s_clause for kw in kws):
+                        allowed_p_list = provinces_by_hazard.get(h_type, [])
+                        is_prov_allowed = prov in allowed_p_list or (prov_code and prov_code in allowed_p_list)
+                        if not is_prov_allowed and h_type in provinces_by_hazard:
+                            problems.append(
+                                f"Hazard '{h_type}' not warned for province '{prov}' in provinces_by_hazard (ภัย)"
                             )
 
         for reg in matched_regions:
-            # Check dates in this clause for reg (Item 5: cross-month handled)
+            # Check dates in this clause for reg (cross-month handled)
             allowed_days = _allowed_days_for_region(reg, by_region)
             if allowed_days:
                 invalid_days = day_candidates - allowed_days
@@ -358,12 +467,13 @@ def validate_warning_summary(
                             f"Hazard '{h_type}' not allowed for region '{reg}' in by_region"
                         )
 
-            # Item 1: Check dropping "บางแห่ง" from rain statement
-            if "ฝนตกหนัก" in s_clause and "บางแห่ง" not in s_clause and "หนักมาก" not in s_clause:
-                if _region_original_has_word(reg, "บางแห่ง", original_regional_clauses):
-                    problems.append(
-                        f"Word strength escalated for '{reg}': dropped 'บางแห่ง' from rain statement (ความแรง)"
-                    )
+            # Review Cases 1 & 2: Check dropping "บางแห่ง" from rain statements (regardless of rain phrasing)
+            if "ฝน" in s_clause or "ตกหนัก" in s_clause or "หนักมาก" in s_clause:
+                if "บางแห่ง" not in s_clause and "หลายพื้นที่" not in s_clause:
+                    if _region_original_has_word(reg, "บางแห่ง", original_regional_clauses):
+                        problems.append(
+                            f"Word strength escalated for '{reg}': dropped 'บางแห่ง' from rain statement (ความแรง)"
+                        )
 
             # Check word strength escalation
             for sw in strong_words:
@@ -373,7 +483,7 @@ def validate_warning_summary(
                             f"Word strength escalated for '{reg}': '{sw}' not present in original announcement (ความแรง)"
                         )
 
-    # Item 3: Check completeness (all regions in by_region must be represented in summary)
+    # Check completeness (all regions in by_region must be represented in summary)
     for item in by_region:
         areas = item.get("areas", [])
         covered = False
@@ -448,6 +558,8 @@ class WarningAuditor:
         body: str,
         by_region: list[dict],
         rain_days: list[dict] | None = None,
+        provinces_by_hazard: dict[str, list[str]] | None = None,
+        periods_by_hazard: dict | None = None,
     ) -> WarningAuditResult:
         """Cross-examine Qwen extraction with by_region without ever altering warning levels."""
         provider = os.getenv("LLM_PROVIDER", "").lower()
@@ -560,6 +672,8 @@ class WarningExplainer:
     ):
         self.requester = requester
         self.config = config or QwenConfig.from_env()
+        self.last_error: str | None = None
+        self.validation_failed: bool = False
 
     def _call_qwen(self, prompt: str) -> str:
         if self.requester:
@@ -581,8 +695,13 @@ class WarningExplainer:
         body: str,
         by_region: list[dict],
         rain_days: list[dict] | None = None,
+        provinces_by_hazard: dict[str, list[str]] | None = None,
+        periods_by_hazard: dict | None = None,
     ) -> WarningSummaryResult | None:
         """Generate verified AI summary for warning card; returns None on validation failure or error."""
+        self.last_error = None
+        self.validation_failed = False
+
         provider = os.getenv("LLM_PROVIDER", "").lower()
         if provider != "qwen" and self.requester is None:
             return None
@@ -596,16 +715,21 @@ class WarningExplainer:
                 original_text=full_context,
                 by_region=by_region,
                 rain_days=rain_days,
+                provinces_by_hazard=provinces_by_hazard,
+                periods_by_hazard=periods_by_hazard,
             )
             if problems:
                 log.warning("Warning summary failed validation: %s", problems)
+                self.validation_failed = True
                 return None
 
             return WarningSummaryResult(
                 summary_text=raw_summary,
                 attribution="สรุปโดย AI จากประกาศกรมอุตุนิยมวิทยา · ดูประกาศฉบับจริง",
                 valid=True,
+                error=None,
             )
         except Exception as exc:
             log.warning("WarningExplainer error during summarize: %s", exc)
+            self.last_error = str(exc)
             return None
