@@ -359,7 +359,10 @@ async def radar_nowcast() -> dict:
     """1-hour radar nowcast with extrapolated frame timestamps and Qwen explanation."""
     if os.getenv("RADAR_LAYER", "off") != "internal":
         raise HTTPException(404, "radar layer is off")
-    svc = await fresh_service()
+    # Radar needs only the gazetteer, so it does not wait for the first hazard refresh after a restart.
+    svc = service
+    if svc is None:
+        raise HTTPException(503, "starting")
     data = await svc.get_radar_nowcast()
     return {**data, **meta(svc)}
 

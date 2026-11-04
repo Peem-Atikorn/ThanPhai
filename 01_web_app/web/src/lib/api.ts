@@ -5,6 +5,8 @@ export type RadarFrame = {
   time: number;
   kind?: "observed" | "forecast";
   horizonMin?: number;
+  /** Forecast frames show the latest real image; this is its time. */
+  imageTime?: number;
 };
 export type RadarNowcast = {
   enabled: boolean;

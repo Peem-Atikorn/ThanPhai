@@ -290,12 +290,15 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert.equal(forecastMap.props.radarForecast.features.length, 2, 'Forecast shows the projected path and position for each rain cell');
       const projected = forecastMap.props.radarForecast.features[1].geometry.coordinates;
       assert(Math.abs(projected[0] - 100.5554) < 0.001 && Math.abs(projected[1] - 13.5) < 0.001, 'Forecast projection follows the measured eastward motion');
+      assert.equal(forecastMap.props.radarFaded, true, 'The reused real image is faded on forecast frames');
+      assert.equal(forecastMap.props.radar, radarFrames[1].tiles, 'A forecast frame shows the latest real image underneath');
       const forecastNote = nodes(forecastTree).find(n => String(n.props.className || '').split(/\s+/).includes('radar-note'));
-      assert(content(forecastNote).includes('ค่าคาดการณ์จากการคำนวณทิศทางการเคลื่อนที่ของกลุ่มฝน'), 'Forecast is attributed to motion calculations');
-      assert(content(forecastNote).includes('อธิบายโดย AI ที่รันในเครื่องของทันภัย'), 'Qwen is credited with explanation only');
-      assert(content(forecastNote).includes('ไม่ทำนายฝนที่เกิดใหม่'), 'Forecast warns that newly forming rain is not predicted');
+      assert(content(forecastNote).includes('ภาพจางคือเรดาร์จริงล่าสุดเวลา'), 'The map note says the faded image is the latest real radar');
+      assert(!content(forecastNote).includes('ไม่ทำนายฝนที่เกิดใหม่'), 'The forecast attribution is not repeated in the map note');
       const RadarPlayback = load('@/components/RadarPlayback').default;
       const forecastPlayback = instance(RadarPlayback).render(nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props);
+      assert(content(forecastPlayback).includes('ค่าคาดการณ์จากการคำนวณทิศทางการเคลื่อนที่ของกลุ่มฝน'), 'Forecast is attributed to motion calculations');
+      assert(content(forecastPlayback).includes('อธิบายโดย AI ที่รันในเครื่องของทันภัย'), 'Qwen is credited with explanation only');
       assert(content(forecastPlayback).includes('ค่าคาดการณ์ +10 นาที'), 'The selected forecast stays visibly labelled in the playback controls');
       assert(content(forecastPlayback).includes('กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก'), 'The validated Qwen explanation accompanies its frame');
       assert(content(forecastPlayback).includes('ไม่ทำนายฝนที่เกิดใหม่'), 'The forecast limitation stays next to its timeline');
@@ -338,6 +341,15 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       removedRadarFrame?.();
       const missingFrameTree = radarApp.render(props);
       assert.equal(nodes(missingFrameTree).find(n => n.type.name === 'RadarPlayback').props.index, 1, 'Radar refresh selects the latest frame if the selected timestamp expired');
+      nodes(missingFrameTree).find(n => n.type.name === 'RadarPlayback').props.onChange(2);
+      const pickedForecastTime = radarFrames.at(-1).time + 600;
+      radarFrames = [radarFrames[1], { tiles: 'https://tiles.test/plus10/{z}/{x}/{y}.png', time: pickedForecastTime }, { tiles: 'https://tiles.test/plus20/{z}/{x}/{y}.png', time: pickedForecastTime + 600 }];
+      radarApp.render(props);
+      const realAtForecastTime = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
+      await tick();
+      realAtForecastTime?.();
+      const realAtForecastTree = radarApp.render(props);
+      assert.equal(nodes(realAtForecastTree).find(n => n.type.name === 'RadarPlayback').props.index, 2, 'A selected forecast does not turn into the real frame with the same time; the latest real frame is shown');
 
       lib.api.radarNowcast = async () => { throw new Error('offline'); };
       radarApp.render(props);
