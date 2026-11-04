@@ -5,6 +5,8 @@ export type RadarFrame = {
   time: number;
   kind?: "observed" | "forecast";
   horizonMin?: number;
+  /** Forecast frames show the latest real image; this is its time. */
+  imageTime?: number;
 };
 export type RadarNowcast = {
   enabled: boolean;
@@ -326,13 +328,7 @@ export const api = {
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
   media: () => get<Media>(`/v1/media`),
   airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
-  /** Seven recent RainViewer frames. `enabled` is false when the team-only backend switch is off. */
-  radar: async (): Promise<{ enabled: boolean; frames: RadarFrame[] }> => {
-    const res = await fetch("/api/v1/radar", { cache: "no-store" });
-    if (res.status === 404) return { enabled: false, frames: [] };
-    if (!res.ok) throw new Error(`${res.status}`);
-    return { enabled: true, frames: (await res.json()).frames };
-  },
+  /** Last hour of RainViewer frames plus the nowcast. `enabled` is false when the team-only backend switch is off. */
   radarNowcast: async (): Promise<RadarNowcast> => {
     const res = await fetch("/api/v1/radar/nowcast", { cache: "no-store" });
     if (res.status === 404) return { enabled: false, status: "unavailable", past_frames: [], forecast_frames: [], motion: null, rain_cells: [], explanation: "", explanation_source: "template" };

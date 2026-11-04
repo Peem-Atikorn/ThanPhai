@@ -51,13 +51,15 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             const scope = area ? area.area.name_th : "สูงสุดในประเทศ · อำเภอที่มีข้อมูล";
             const place = available && !area ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : "";
             const period = metric === "heat" || model ? "24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม.";
-            const details = [scope, place, period, source, updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at), pending ? "ข้อมูลยังไม่ครบ" : degraded ? "ข้อมูลบางแหล่งไม่พร้อมใช้งาน" : ""].filter(Boolean).map(text => tr(text)).join(" · ");
-            return <article key={metric} title={details}>
+            const notice = pending ? "ข้อมูลยังไม่ครบ" : degraded ? "ข้อมูลบางแหล่งไม่พร้อมใช้งาน" : "";
+            return <article key={metric}>
                 <span className="environment-icon" aria-hidden="true"><Icon name={metric}/></span>
                 <h3>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
                 <p className="environment-value">{metric === "heat" && available && <span className="sr-only">{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
-                <small className="environment-status">{tr(available ? (model ? "แบบจำลอง · " : "") + period : status)}</small>
-                <span className="sr-only"><span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span> · {details}</span>
+                <span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span>
+                <small className="environment-status">{[scope, place].filter(Boolean).map(text => tr(text)).join(" · ")}</small>
+                <small className="environment-status">{tr((model ? "แบบจำลอง · " : "") + period)}{" · "}{tr(source)}{tr(" · อัปเดต ")}{updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at)}</small>
+                {notice && <small className="environment-status data-notice">{tr(notice)}</small>}
             </article>;
         })}
     </section>;

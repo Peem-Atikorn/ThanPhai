@@ -12,6 +12,19 @@ from api_backend.hazard_service import HazardService
 from api_backend.main import app
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "processed"
+LATEST_FRAME = 1793723400
+
+
+@pytest.fixture(autouse=True)
+def radar_clock(monkeypatch):
+    """The fake RainViewer frames below are one minute old."""
+    import api_backend.hazard_service as hs
+    import time as real_time
+    from types import SimpleNamespace
+
+    clock = SimpleNamespace(monotonic=real_time.monotonic, time=lambda: LATEST_FRAME + 60.0)
+    monkeypatch.setattr(hs, "time", clock)
+    return clock
 
 
 def make_png(blob_y: int = 0, blob_x: int = 0, color_rgb: tuple[int, int, int] | None = (255, 68, 0)) -> bytes:
@@ -78,14 +91,11 @@ def test_radar_nowcast_endpoint_allowed_with_internal_env(monkeypatch):
     svc.source_status = {}
     monkeypatch.setattr(HazardService, "inputs_pending", property(lambda self: []))
 
-    async def fake_fresh():
-        return svc
-
     async def fake_get_nowcast():
         return {"status": "ok", "rain_cells": []}
 
     svc.get_radar_nowcast = fake_get_nowcast
-    monkeypatch.setattr(main_mod, "fresh_service", fake_fresh)
+    monkeypatch.setattr(main_mod, "service", svc)
 
     client = TestClient(app)
     resp = client.get("/v1/radar/nowcast")
@@ -380,3 +390,99 @@ def test_get_radar_nowcast_unavailable_cached_shortly(monkeypatch):
     res2 = asyncio.run(svc.get_radar_nowcast())
     assert res2["status"] == "unavailable"
     assert fetch_tile_attempts == initial_attempts
+
+
+def _bare_service():
+    svc = HazardService.__new__(HazardService)
+    svc.decisions = {}
+    svc.amphoe_codes = ["TH1001", "TH1047"]
+    svc.gazetteer = FakeGazetteer()
+    svc._radar_nowcast_lock = asyncio.Lock()
+    svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
+    return svc
+
+
+def test_get_radar_nowcast_drops_stale_frames(monkeypatch, radar_clock):
+    """A latest RainViewer image over 2 h old gives no frames and no forecast (same rule as /v1/radar)."""
+    svc = _bare_service()
+    radar_clock.time = lambda: LATEST_FRAME + 3 * 3600.0
+    tile_called = False
+
+    async def fake_fetch_maps(client=None):
+        return [
+            {"time": LATEST_FRAME - 600, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
+            {"time": LATEST_FRAME, "path": "/v2/radar/frame2", "tile_url": "http://tiles/2.png"},
+        ]
+
+    async def fake_fetch_tile(url, client=None):
+        nonlocal tile_called
+        tile_called = True
+        return make_png(90, 112)
+
+    import external_data.adapters.rainviewer as rv
+    monkeypatch.setattr(rv, "fetch_radar_maps", fake_fetch_maps)
+    monkeypatch.setattr(rv, "fetch_tile_bytes", fake_fetch_tile)
+
+    result = asyncio.run(svc.get_radar_nowcast())
+    assert result["status"] == "unavailable"
+    assert result["past_frames"] == [] and result["forecast_frames"] == []
+    assert not tile_called
+
+
+def test_get_radar_nowcast_keeps_only_the_last_hour(monkeypatch):
+    svc = _bare_service()
+    frames = [{"time": LATEST_FRAME - minutes * 60, "path": f"/v2/radar/{minutes}", "tile_url": f"http://tiles/{minutes}.png"}
+              for minutes in (120, 70, 50, 40, 30, 20, 10, 0)]
+
+    async def fake_fetch_maps(client=None):
+        return frames
+
+    async def fake_fetch_tile(url, client=None):
+        return make_png(90, 112)
+
+    import external_data.adapters.rainviewer as rv
+    monkeypatch.setattr(rv, "fetch_radar_maps", fake_fetch_maps)
+    monkeypatch.setattr(rv, "fetch_tile_bytes", fake_fetch_tile)
+
+    result = asyncio.run(svc.get_radar_nowcast())
+    assert [f["time"] for f in result["past_frames"]] == [LATEST_FRAME - m * 60 for m in (50, 40, 30, 20, 10, 0)]
+
+
+def test_slow_qwen_answers_with_template_then_fills_cache(monkeypatch):
+    """The radar does not wait for a slow Qwen; its validated text replaces the template for later readers."""
+    import time as real_time
+    import api_backend.hazard_service as hs
+    from decision_engine.nowcast_explainer import NowcastExplainer
+
+    svc = _bare_service()
+    monkeypatch.setattr(hs, "NOWCAST_EXPLAIN_WAIT_S", 0.05)
+
+    def slow_explain(self, summary, gazetteer=None):
+        real_time.sleep(0.3)
+        return "ข้อความจาก Qwen", "qwen"
+
+    monkeypatch.setattr(NowcastExplainer, "explain_with_source", slow_explain)
+
+    async def fake_fetch_maps(client=None):
+        return [
+            {"time": LATEST_FRAME - 600, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
+            {"time": LATEST_FRAME, "path": "/v2/radar/frame2", "tile_url": "http://tiles/2.png"},
+        ]
+
+    async def fake_fetch_tile(url, client=None):
+        return make_png(90, 112) if "frame1" in url else make_png(91, 113)
+
+    import external_data.adapters.rainviewer as rv
+    monkeypatch.setattr(rv, "fetch_radar_maps", fake_fetch_maps)
+    monkeypatch.setattr(rv, "fetch_tile_bytes", fake_fetch_tile)
+
+    async def run():
+        first = await svc.get_radar_nowcast()
+        await asyncio.sleep(0.5)
+        return first, await svc.get_radar_nowcast()
+
+    first, later = asyncio.run(run())
+    assert first["explanation_source"] == "template" and first["explanation"] != "ข้อความจาก Qwen"
+    assert later["explanation_source"] == "qwen" and later["explanation"] == "ข้อความจาก Qwen"
+    assert later["forecast_frames"] == first["forecast_frames"]

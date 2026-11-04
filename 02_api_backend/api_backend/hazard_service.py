@@ -86,6 +86,10 @@ FAILURE_TTL = timedelta(seconds=60)
 USER_AGENT = {"User-Agent": "ThanPhai/0.1 (student project)"}
 
 log = logging.getLogger("hazard_service")
+NOWCAST_MAX_FRAME_AGE_S = 7200
+NOWCAST_HISTORY_S = 3600
+# A new radar frame waits at most this long for Qwen; after that the template answers and Qwen's text replaces it in the cache.
+NOWCAST_EXPLAIN_WAIT_S = 4.0
 SOURCES = {
     HazardType.FLOOD: ["ThaiWater (สสน.)"],
     HazardType.RAIN_STORM: ["ThaiWater (สสน.)"],
@@ -1659,7 +1663,7 @@ class HazardService:
         """Return 1-hour radar nowcast calculated from real radar frames with Qwen explanation."""
         from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes
         from risk_models.nowcast import decode_png_radar, detect_rain_cells, estimate_motion, track_cells_to_districts
-        from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget
+        from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget, build_template_answer
 
         now = time.monotonic()
         try:
@@ -1668,7 +1672,13 @@ class HazardService:
             log.warning("Failed to fetch radar maps from RainViewer: %s", exc)
             frames = []
 
-        past_frames = frames[-6:] if frames else []
+        # Same freshness rule as /v1/radar: no frames when RainViewer's latest image is over 2 h old,
+        # otherwise only the hour before it (a stale image must not be shown or extrapolated as current).
+        latest_time = max((frame["time"] for frame in frames), default=None)
+        if latest_time is None or not 0 <= time.time() - latest_time <= NOWCAST_MAX_FRAME_AGE_S:
+            frames = []
+        frames = [frame for frame in frames if 0 <= latest_time - frame["time"] <= NOWCAST_HISTORY_S]
+        past_frames = frames[-6:]
         curr_time = past_frames[-1]["time"] if past_frames else 0
 
         # Fast path check outside lock
@@ -1870,7 +1880,22 @@ class HazardService:
             motion_data, rain_cells_data, summary, forecast_frames = await asyncio.to_thread(_compute_nowcast_sync)
 
             explainer = NowcastExplainer()
-            explanation, explanation_source = await asyncio.to_thread(explainer.explain_with_source, summary, self.gazetteer)
+            explain_task = asyncio.ensure_future(asyncio.to_thread(explainer.explain_with_source, summary, self.gazetteer))
+            try:
+                explanation, explanation_source = await asyncio.wait_for(asyncio.shield(explain_task), NOWCAST_EXPLAIN_WAIT_S)
+            except asyncio.TimeoutError:
+                # Show the radar now; a validated Qwen text replaces the template for later readers of this frame.
+                explanation, explanation_source = build_template_answer(summary), "template"
+
+                def _use_late_explanation(task: asyncio.Future) -> None:
+                    if task.cancelled() or task.exception() is not None:
+                        return
+                    cache = self._radar_nowcast_cache
+                    if cache is not None and cache[0] == curr_time:
+                        text, source = task.result()
+                        self._radar_nowcast_cache = (cache[0], {**cache[1], "explanation": text, "explanation_source": source}, cache[2])
+
+                explain_task.add_done_callback(_use_late_explanation)
 
             result = {
                 "status": "ok",
