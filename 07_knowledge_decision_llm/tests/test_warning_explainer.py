@@ -532,22 +532,14 @@ def test_explainer_summarize_title_hanaknak_rejected_for_first_region(bulletin_5
 
 
 def test_validate_province_in_range_passes_at_least_one_day(bulletin_5_data):
-    """Review Round 3, Item 2: A summary that names a province with a *date range*
+    """Review Round 3 & 4: A summary that names a province with a date range
     must pass validation when the province appears in the rain_days table for at
-    least one day within that range — even if it is absent on other days.
-
-    Scenario (mirrors reviewer's example):
-      bulletin says: ภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง
-      rain_days: นครศรีธรรมราช is listed on days 5, 6, 7 (but NOT day 8 or 9)
-      summary names: จ.นครศรีธรรมราช สงขลา ช่วงวันที่ 7-9 พ.ย.
-      Expected: PASS (province is in table for day 7, which is inside the range)
+    least one day within that range — even if absent on other days.
     """
-    # Summary stays within original wording — "บางแห่ง" kept, no "หนักมาก" per province
-    # (the original bulletin body says "หนักมากบางแห่ง" for ภาคใต้, not per-province)
     good_summary = (
-        "ภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักบางแห่ง "
-        "และอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก "
-        "โดยเฉพาะจังหวัดนครศรีธรรมราช สงขลา"
+        "ช่วงวันที่ 5–7 พ.ย. ประเทศไทยตอนบนมีสภาพอากาศแปรปรวน และมีฝนตกหนักบางแห่ง "
+        "ส่วนภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักบางแห่ง "
+        "และอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก โดยเฉพาะจังหวัดนครศรีธรรมราช สงขลา"
     )
     problems = validate_warning_summary(
         summary=good_summary,
@@ -555,9 +547,106 @@ def test_validate_province_in_range_passes_at_least_one_day(bulletin_5_data):
         by_region=bulletin_5_data["by_region"],
         rain_days=bulletin_5_data["rain_days"],
     )
-    prov_errors = [p for p in problems if "นครศรีธรรมราช" in p or "rain_days" in p]
-    assert prov_errors == [], (
-        f"Province present in table for at least one day in range must pass, got: {prov_errors}"
+    assert problems == []
+
+
+def test_validate_exact_announcement_wording_passes_both_rain_tables(bulletin_5_data):
+    """Review Round 4: The exact wording of the official announcement:
+    'ภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง และอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก โดยเฉพาะจังหวัดนครศรีธรรมราช สงขลา'
+    must pass validation (problems == []) under both table structures:
+    1. Table with นครศรีฯ on day 5 and on day 8 (very_heavy: true)
+    2. Table 288 with นครศรีฯ on days 5-9 and on day 8 (very_heavy: true)
+    """
+    by_south_only = [
+        {
+            "from": "2026-11-07",
+            "to": "2026-11-09",
+            "level": "WARNING",
+            "hazards": ["rain_storm", "flood"],
+            "areas": ["ภาคใต้"],
+        }
+    ]
+    exact_wording_summary = (
+        "ภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง "
+        "และอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก "
+        "โดยเฉพาะจังหวัดนครศรีธรรมราช สงขลา"
+    )
+
+    # 1. Table 1: previous round table (นครศรีฯ on day 5 and day 8 very_heavy)
+    rain_days_table_1 = [
+        {"day": "2026-11-05", "very_heavy": False, "provinces": ["นครศรีธรรมราช"]},
+        {"day": "2026-11-07", "very_heavy": False, "provinces": ["สงขลา"]},
+        {"day": "2026-11-08", "very_heavy": True, "provinces": ["นครศรีธรรมราช", "สงขลา"]},
+        {"day": "2026-11-09", "very_heavy": False, "provinces": ["สงขลา"]},
+    ]
+    p1 = validate_warning_summary(
+        summary=exact_wording_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=by_south_only,
+        rain_days=rain_days_table_1,
+    )
+    assert p1 == [], f"Expected problems == [] for Table 1, got {p1}"
+
+    # 2. Table 2: bulletin 288 style (นครศรีฯ on days 5-9, day 8 very_heavy)
+    rain_days_table_2 = [
+        {"day": "2026-11-05", "very_heavy": False, "provinces": ["นครศรีธรรมราช", "สงขลา"]},
+        {"day": "2026-11-06", "very_heavy": False, "provinces": ["นครศรีธรรมราช", "สงขลา"]},
+        {"day": "2026-11-07", "very_heavy": False, "provinces": ["นครศรีธรรมราช", "สงขลา"]},
+        {"day": "2026-11-08", "very_heavy": True, "provinces": ["นครศรีธรรมราช", "สงขลา"]},
+        {"day": "2026-11-09", "very_heavy": False, "provinces": ["นครศรีธรรมราช", "สงขลา"]},
+    ]
+    p2 = validate_warning_summary(
+        summary=exact_wording_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=by_south_only,
+        rain_days=rain_days_table_2,
+    )
+    assert p2 == [], f"Expected problems == [] for Table 2 (bulletin 288), got {p2}"
+
+    # Also test complete summary with both regions
+    complete_summary = (
+        "ช่วงวันที่ 5–7 พ.ย. ประเทศไทยตอนบนมีสภาพอากาศแปรปรวน ฝนฟ้าคะนอง และมีฝนตกหนักบางแห่ง "
+        "ส่วนภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง และอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก "
+        "โดยเฉพาะจังหวัดนครศรีธรรมราช สงขลา"
+    )
+    p_full_1 = validate_warning_summary(
+        summary=complete_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=rain_days_table_1,
+    )
+    assert p_full_1 == [], f"Expected problems == [] for complete summary with Table 1, got {p_full_1}"
+
+    p_full_2 = validate_warning_summary(
+        summary=complete_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=rain_days_table_2,
+    )
+    assert p_full_2 == [], f"Expected problems == [] for complete summary with Table 2, got {p_full_2}"
+
+
+def test_validate_very_heavy_all_days_false_still_rejected(bulletin_5_data):
+    """Review Round 4: When a province in a 'หนักมาก' clause has very_heavy: false
+    for ALL candidate days, it must still be rejected for word strength escalation.
+    """
+    rain_days = [
+        {"day": "2026-11-07", "very_heavy": False, "provinces": ["ภูเก็ต"]},
+        {"day": "2026-11-08", "very_heavy": False, "provinces": ["ภูเก็ต"]},
+        {"day": "2026-11-09", "very_heavy": False, "provinces": ["ภูเก็ต"]},
+    ]
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง 5-7 พ.ย. "
+        "ส่วนภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง โดยเฉพาะจังหวัดภูเก็ต"
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=rain_days,
+    )
+    assert any("หนักมาก" in p or "very_heavy" in p or "ความแรง" in p for p in problems), (
+        f"Expected escalation error for ภูเก็ต where all days have very_heavy: false, got {problems}"
     )
 
 

@@ -357,6 +357,27 @@ def validate_warning_summary(
         if "2 เมตร" in s_clause or "2เมตร" in s_clause:
             day_candidates.discard("2")
 
+        # Expand date ranges: 7-9, 7–9, 7—9, 7 ถึง 9, 7 - 9, 7 – 9
+        for match in re.finditer(r"\b(\d{1,2})\s*(?:[-–—]|ถึง)\s*(\d{1,2})\b", s_clause):
+            start_n, end_n = int(match.group(1)), int(match.group(2))
+            if 1 <= start_n <= 31 and 1 <= end_n <= 31:
+                if start_n <= end_n and (end_n - start_n) <= 15:
+                    for d in range(start_n, end_n + 1):
+                        day_candidates.add(str(d))
+                elif start_n > end_n:
+                    # Potential cross-month range, e.g. 30 ถึง 2
+                    for item in by_region:
+                        f_str, t_str = item.get("from"), item.get("to")
+                        if f_str and t_str:
+                            try:
+                                d_c, d_e = date.fromisoformat(f_str), date.fromisoformat(t_str)
+                                if d_c.day == start_n and d_e.day == end_n:
+                                    while d_c <= d_e:
+                                        day_candidates.add(str(d_c.day))
+                                        d_c += timedelta(days=1)
+                            except (ValueError, IndexError):
+                                pass
+
         if matched_regions or matched_provinces:
             current_regions = list(matched_regions)
             current_provinces = list(matched_provinces)
@@ -432,27 +453,32 @@ def validate_warning_summary(
                             )
 
             # Review Case 5: Check very_heavy in rain_days table
+            # "ฝนตกหนักถึงหนักมาก" across a span of days is valid if the province
+            # is marked with very_heavy: true for AT LEAST ONE day in that span.
+            # It should only be rejected if the province has no very_heavy: true
+            # day at all among the candidate days.
             if "หนักมาก" in s_clause:
                 for prov in matched_provinces:
                     check_days = day_candidates
                     if not check_days:
                         matching_rows = [r for r in rain_days if prov in r.get("provinces", [])]
-                        has_vh = any(r.get("very_heavy") is True for r in matching_rows)
-                        if not has_vh and matching_rows:
+                    else:
+                        matching_rows = [
+                            r for r in rain_days
+                            if str(int(str(r["day"]).split("-")[-1])) in check_days
+                            and prov in r.get("provinces", [])
+                        ]
+
+                    has_vh = any(r.get("very_heavy") is True for r in matching_rows)
+                    if not has_vh and matching_rows:
+                        if check_days:
+                            problems.append(
+                                f"Word strength escalated for province '{prov}': 'หนักมาก' not in daily rain table (very_heavy is false) for days {sorted(check_days)} (ความแรง)"
+                            )
+                        else:
                             problems.append(
                                 f"Word strength escalated for province '{prov}': 'หนักมาก' not in daily rain table (very_heavy is false) (ความแรง)"
                             )
-                    else:
-                        for cand_day in check_days:
-                            matching_rows = [
-                                r for r in rain_days
-                                if str(int(str(r["day"]).split("-")[-1])) == cand_day and prov in r.get("provinces", [])
-                            ]
-                            has_vh = any(r.get("very_heavy") is True for r in matching_rows)
-                            if not has_vh and matching_rows:
-                                problems.append(
-                                    f"Word strength escalated for province '{prov}': 'หนักมาก' not in daily rain table (very_heavy is false) for day {cand_day} (ความแรง)"
-                                )
 
         # Review Case 4: Check provinces against provinces_by_hazard
         if provinces_by_hazard and matched_provinces:
