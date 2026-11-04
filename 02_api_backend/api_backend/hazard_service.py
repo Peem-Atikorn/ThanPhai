@@ -139,6 +139,7 @@ class HazardService:
         self._radar_nowcast_lock = asyncio.Lock()
         self._radar_nowcast_cache: tuple[int, dict, float] | None = None
         self._thai_radar_mask: np.ndarray | None = None
+        self._warning_ai_cache: dict[tuple, tuple[str | None, str | None]] = {}
         self._background: asyncio.Task | None = None
         # Set when slower inputs (satellite, fire model) change, so decisions are rebuilt without
         # pretending the live data is missing (clearing updated_at showed "data time: —" in the UI).
@@ -332,17 +333,25 @@ class HazardService:
                 provinces = {hazard.value: sorted(codes) for hazard, codes in areas.items()}
                 for hazard, codes in periods.items():  # daily tables can name provinces the statements reach only by region
                     provinces[hazard] = sorted(set(provinces.get(hazard, [])) | set(codes))
-                warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
-                                 "provinces_by_hazard": provinces,
-                                 "periods_by_hazard": periods,
-                                 "by_region": self._by_region(statements, window, tables=bool(w.rain_days)),
-                                 "rain_days": rain_days,
-                                 "impact_from": window[0].isoformat() if window else None,
-                                 "impact_to": window[1].isoformat() if window else None,
-                                 # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
-                                 "impact_by_hazard": {hazard.value: {code: [days[0].isoformat(), days[1].isoformat()]
-                                                                     for code, days in codes.items() if days}
-                                                      for hazard, codes in areas.items()}})
+                w_dict = {
+                    **w.model_dump(mode="json"),
+                    "provinces": warning_provinces(self.gazetteer, text),
+                    "provinces_by_hazard": provinces,
+                    "periods_by_hazard": periods,
+                    "by_region": self._by_region(statements, window, tables=bool(w.rain_days)),
+                    "rain_days": rain_days,
+                    "impact_from": window[0].isoformat() if window else None,
+                    "impact_to": window[1].isoformat() if window else None,
+                    # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
+                    "impact_by_hazard": {
+                        hazard.value: {code: [days[0].isoformat(), days[1].isoformat()] for code, days in codes.items() if days}
+                        for hazard, codes in areas.items()
+                    },
+                }
+                ai_summary, ai_attribution = self._audit_and_summarize_warning(w_dict)
+                w_dict["ai_summary"] = ai_summary
+                w_dict["ai_attribution"] = ai_attribution
+                warnings.append(w_dict)
         # Every warning in TMD's current feed is in force: its EffectEndDate is when the next issue is due, not when
         # the hazard ends. If TMD failed this time, the last good warnings still apply.
         official = self._official_by_province(warnings if warnings is not None else self.warnings, self._today(),
@@ -1309,6 +1318,65 @@ class HazardService:
         if area_code is None:
             return self.dams
         return [d for d in self.dams if d["province_code"] == area_code[:4]]
+
+    def _audit_and_summarize_warning(self, w_dict: dict) -> tuple[str | None, str | None]:
+        """Optionally audit TMD warning and generate AI summary with Qwen if LLM_PROVIDER=qwen."""
+        if os.getenv("LLM_PROVIDER", "").lower() != "qwen":
+            return None, None
+
+        cache_key = (
+            w_dict.get("issue_no") or w_dict.get("title", ""),
+            str(w_dict.get("announced_at", "")),
+        )
+        cache = getattr(self, "_warning_ai_cache", None)
+        if cache is not None and cache_key in cache:
+            return cache[cache_key]
+
+        try:
+            from decision_engine.warning_explainer import WarningAuditor, WarningExplainer
+
+            title = w_dict.get("title", "")
+            body = w_dict.get("body") or w_dict.get("headline") or ""
+            by_region = w_dict.get("by_region", [])
+            rain_days = w_dict.get("rain_days")
+            provinces_by_hazard = w_dict.get("provinces_by_hazard")
+            periods_by_hazard = w_dict.get("periods_by_hazard")
+
+            auditor = WarningAuditor()
+            auditor.audit(
+                title=title,
+                body=body,
+                by_region=by_region,
+                rain_days=rain_days,
+                provinces_by_hazard=provinces_by_hazard,
+                periods_by_hazard=periods_by_hazard,
+            )
+
+            explainer = WarningExplainer()
+            summary_res = explainer.summarize(
+                title=title,
+                body=body,
+                by_region=by_region,
+                rain_days=rain_days,
+                provinces_by_hazard=provinces_by_hazard,
+                periods_by_hazard=periods_by_hazard,
+            )
+            if summary_res and summary_res.valid:
+                res = (summary_res.summary_text, summary_res.attribution)
+                if cache is not None:
+                    cache[cache_key] = res
+                return res
+            elif getattr(explainer, "validation_failed", False):
+                # Qwen responded, but validation failed (safe fallback) -> cache (None, None) so we don't re-query
+                if cache is not None:
+                    cache[cache_key] = (None, None)
+                return None, None
+            else:
+                # Timeout, exception, or provider disabled -> do NOT cache so next refresh can retry
+                return None, None
+        except Exception as exc:
+            log.warning("Warning audit/summary failed: %s", exc)
+            return None, None
 
     def get_official_warnings(self) -> list[dict]:
         return self.warnings
