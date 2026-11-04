@@ -12,9 +12,35 @@ Usage on Kaggle T4 x2:
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
+
+
+def stale_explainer_data(train_file: Path) -> str | None:
+    """Why this explainer dataset is from an old generator, or None.
+
+    The current generator (PR #49 and later) answers English questions in English. A file made by the old
+    one answers them in Thai, and a model trained on it does too (seen on 4 Nov 2026).
+    """
+    english = with_english_answer = empty = 0
+    for line in train_file.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        question = row["input"].split("\n", 1)[0].replace("คำถามผู้ใช้: ", "")
+        empty += not row["output"].strip()
+        if question.isascii():
+            english += 1
+            with_english_answer += row["output"][:1].isascii()
+    if empty:
+        return f"{empty} samples have an empty answer"
+    if english == 0:
+        return "no English questions"
+    if with_english_answer < english:
+        return f"{english - with_english_answer} of {english} English questions are answered in Thai"
+    return None
 
 
 # Explainer prompts carry the agent's real facts: up to ~2,200 Qwen tokens with the system prompt and answer.
@@ -28,6 +54,10 @@ def train(task: str, model_name: str, data_dir: str, output_dir: str, max_seq_le
     if not train_file.exists():
         print(f"Error: Dataset {train_file} does not exist.")
         print(f"Run generate_{task}_dataset.py first!")
+        sys.exit(1)
+    if task == "explainer" and (problem := stale_explainer_data(train_file)):
+        print(f"Error: {train_file} looks like it was made by an old generator: {problem}.")
+        print("Pull the latest develop and run generate_explainer_dataset.py again before training.")
         sys.exit(1)
 
     try:
