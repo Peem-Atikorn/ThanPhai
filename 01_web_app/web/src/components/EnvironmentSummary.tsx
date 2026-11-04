@@ -62,7 +62,7 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
                 <span className={"risk-badge level-" + (level ?? "NONE")}>{tr(loading ? "กำลังโหลด…" : error ? "โหลดข้อมูลไม่ได้" : levelInfo(level).th)}</span>
                 <p className="environment-place">{tr(area ? area.area.name_th : available ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : loading ? "" : "ยังไม่มีข้อมูล")}</p>
                 <small>{metric === "air_quality" ? tr(model ? "แบบจำลอง · เฉลี่ย 24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม.")
-                    : <>{tr("ค่าคาดการณ์ชั่วโมงนี้")}{typeof peak === "number" && Number.isFinite(peak) && <>{tr(" · สูงสุดใน 24 ชม. ข้างหน้า ")}{peak.toLocaleString(getLocale(), { maximumFractionDigits: 1 })}°C</>}</>}</small>
+                    : <>{tr("ค่าคาดการณ์ชั่วโมงนี้")}{!loading && !error && typeof peak === "number" && Number.isFinite(peak) && <>{tr(" · สูงสุดใน 24 ชม. ข้างหน้า ")}{peak.toLocaleString(getLocale(), { maximumFractionDigits: 1 })}°C</>}</>}</small>
                 <small>{tr(source)}</small>
                 <small>{tr("อัปเดต ")}{updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at)}{tr(" · เวลาไทย")}</small>
                 {!!(pending || degraded) && <small className="data-notice">{tr(pending ? "ข้อมูลยังไม่ครบ" : "ข้อมูลบางแหล่งไม่พร้อมใช้งาน")}</small>}
