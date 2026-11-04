@@ -11,6 +11,7 @@ global.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key,
 global.window = { innerWidth: 1280, innerHeight: 800, matchMedia: () => ({ matches: true }), requestAnimationFrame: () => 1, cancelAnimationFrame() {}, setTimeout: () => 1, clearTimeout() {}, addEventListener: (name, fn) => listeners.set('window:' + name, fn), removeEventListener() {} };
 global.document = { body: {}, addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
 global.ResizeObserver = class { observe() {} disconnect() {} };
+global.MutationObserver = class { observe() {} disconnect() {} };
 const react = {
   useState(initial) { const slot = cursor++; if (!(slot in slots)) slots[slot] = { value: initial }; return [slots[slot].value, next => { const value = typeof next === 'function' ? next(slots[slot].value) : next; if (!Object.is(value, slots[slot].value)) { slots[slot].value = value; dirty = true; } }]; },
   useRef(value) { const slot = cursor++; return (slots[slot] ??= { current: value }); },
@@ -34,7 +35,7 @@ function load(id) {
 function all(node) { return !node || typeof node !== 'object' ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(all)]; }
 const FloatingMascot = load('@/components/FloatingMascot').default;
 const fakeButton = { focus() {}, setPointerCapture() { captured = true; }, hasPointerCapture: () => captured, releasePointerCapture() { captured = false; } };
-const fakePanel = { scrollHeight: 340, querySelector: () => ({ focus() {} }) };
+const fakePanel = { scrollHeight: 340, querySelector: selector => selector === '.chat-log' ? { scrollHeight: 240, clientHeight: 240 } : ({ focus() {} }) };
 const fakeHome = { getBoundingClientRect: () => ({ left: 980, top: 550, width: 280, height: 220 }) };
 const props = { topic: 'flood', status: 'idle', children: jsx('form', { 'data-preserved': 'existing-chat' }) };
 let tree;

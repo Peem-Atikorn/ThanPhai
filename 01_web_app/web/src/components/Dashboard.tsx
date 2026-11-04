@@ -12,6 +12,7 @@ import RainCloudSkeleton from "@/components/RainCloudSkeleton";
 import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
 import EventsPanel from "@/components/EventsPanel";
+import EnvironmentSummary, { type EnvironmentState } from "@/components/EnvironmentSummary";
 import StormsPanel from "@/components/StormsPanel";
 import AreaWarnings from "@/components/AreaWarnings";
 import RiskAlerts from "@/components/RiskAlerts";
@@ -219,15 +220,17 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const hazard = activeHazard ?? localHazard;
     const setHazard = onHazardChange ?? setLocalHazard;
     const [revision, setRevision] = useState(0);
+    const [environmentLayers, setEnvironmentLayers] = useState<Record<"air_quality" | "heat", EnvironmentState | null>>({ air_quality: null, heat: null });
     const [layerState, setLayerState] = useState<{
         key: string;
         data: Layer | null;
         error: boolean;
     } | null>(null);
     const layerKey = hazard + ":" + revision;
-    const layer = layerState?.key === layerKey || layerState?.key.startsWith(hazard + ":") ? layerState?.data ?? null : null;
-    const layerError = layerState?.key === layerKey && layerState.error;
-    const layerLoading = layerState?.key !== layerKey;
+    const activeLayerState = hazard === "air_quality" || hazard === "heat" ? environmentLayers[hazard] : layerState;
+    const layer = activeLayerState?.key === layerKey || activeLayerState?.key.startsWith(hazard + ":") ? activeLayerState?.data ?? null : null;
+    const layerError = activeLayerState?.key === layerKey && activeLayerState.error;
+    const layerLoading = activeLayerState?.key !== layerKey;
     useEffect(() => { if (!layerLoading)
         onReady?.(); }, [layerLoading, onReady]);
     const [nationalLayer, setNationalLayer] = useState<Layer | null>(null);
@@ -427,6 +430,18 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     }, [revision]);
     useEffect(() => {
         let cancelled = false;
+        for (const metric of ["air_quality", "heat"] as const) {
+            const key = metric + ":" + revision;
+            api.layer(metric)
+                .then(data => !cancelled && setEnvironmentLayers(old => ({ ...old, [metric]: { key, data, error: false } })))
+                .catch(() => !cancelled && setEnvironmentLayers(old => ({ ...old, [metric]: { key, data: null, error: true } })));
+        }
+        return () => { cancelled = true; };
+    }, [revision]);
+    useEffect(() => {
+        // These two layers also feed the persistent summary; switching tabs reuses that request.
+        if (hazard === "air_quality" || hazard === "heat") return;
+        let cancelled = false;
         api.layer(hazard)
             .then((data) => !cancelled && setLayerState({ key: layerKey, data, error: false }))
             .catch(() => !cancelled && setLayerState({ key: layerKey, data: null, error: true }));
@@ -469,6 +484,22 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             .catch(() => latestArea.current === request && setAreaStatus("error"));
     }, []);
     const selectedCode = useRef<string | null>(null);
+    useEffect(() => {
+        const code = selectedCode.current;
+        if (!code) return;
+        const request = ++latestArea.current;
+        let cancelled = false;
+        api.area(code).then(data => {
+            if (!cancelled && latestArea.current === request) {
+                setArea(data);
+                setPlace(data.area);
+                setAreaStatus("success");
+            }
+        }).catch(() => {
+            if (!cancelled && latestArea.current === request) setAreaStatus("error");
+        });
+        return () => { cancelled = true; };
+    }, [revision]);
     const selectFromMap = useCallback((code: string) => {
         outlineRequest.current++;
         setOutline(null); // a tapped district is outlined by the map's own selection layer
@@ -799,6 +830,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
       <div className="dashboard-grid">
         {tr(!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search"/>{tr("ค้นหาจังหวัด อำเภอ หรือตำบล")}<Icon name="arrow"/></a>)}
         <section className="map-panel" aria-label={tr("ภาพรวมความเสี่ยง")}>
+          {view === "hazard" && (hazard === "overview" || areaStatus !== "idle") && <EnvironmentSummary layers={environmentLayers} area={area} loadingArea={areaStatus === "loading"} areaError={areaStatus === "error"}/>}
           <div className="map-chrome">{tr(!hideToolbar && mapControls)}<div className="map-heading">
             <div className="map-heading-copy">
               <h2>{tr(selectedRiskLevel ? tr("พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("ทั่วประเทศ") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่ปริมาณน้ำในเขื่อน" : view === "rivers" ? "แผนที่ระดับน้ำในแม่น้ำ" : tr("แผนที่ความเสี่ยง") + tr(itemTh(hazard)) + tr(""))}</h2>
@@ -933,7 +965,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               </div>)}
               <div ref={chatEnd}/>
             </div>}
-            <form onSubmit={onAsk}><label htmlFor="ask">{tr(answer?.intent === "clarify" ? "ตอบน้องทันภัยได้เลย" : "อยากรู้สถานการณ์เรื่องไหน?")}</label><div className="ask-input"><input id="ask" ref={questionInput} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={tr(answer?.intent === "clarify" ? "พิมพ์ชื่ออำเภอหรือจังหวัด เช่น ธัญบุรี" : "เช่น น้ำจะท่วมอำเภอเสนาไหม")} maxLength={500}/><button className="primary-button" disabled={asking || !question.trim()} aria-label={tr("ส่งคำถาม")}>{tr(asking ? <span className="spinner"/> : <Icon name="arrow"/>)}</button></div></form>
+            <form onSubmit={onAsk}><label htmlFor="ask">{tr(answer?.intent === "clarify" ? "ตอบน้องทันภัยได้เลย" : "อยากรู้สถานการณ์เรื่องไหน?")}</label><div className="ask-input"><input id="ask" ref={questionInput} autoComplete="off" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={tr(answer?.intent === "clarify" ? "พิมพ์ชื่ออำเภอหรือจังหวัด เช่น ธัญบุรี" : "เช่น น้ำจะท่วมอำเภอเสนาไหม")} maxLength={500}/><button className="primary-button" disabled={asking || !question.trim()} aria-label={tr("ส่งคำถาม")}>{tr(asking ? <span className="spinner"/> : <Icon name="arrow"/>)}</button></div></form>
             {chat.length > 0 && !asking && <button type="button" className="text-button chat-clear" onClick={() => setChat([])}>{tr("เริ่มแชทใหม่")}</button>}
             {tr(chat.length === 0 && <div className="question-suggestions">{tr(["อำเภอเสนาเสี่ยงน้ำท่วมไหม", "เขื่อนภูมิพลมีน้ำเท่าไหร่", "เขื่อนเจ้าพระยาระบายน้ำเท่าไหร่"].map((example) => <button key={example} onClick={() => { setQuestion(example); questionInput.current?.focus(); }}>{tr(example)}</button>))}</div>)}
           </FloatingMascot>

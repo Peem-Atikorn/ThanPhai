@@ -415,6 +415,27 @@ def test_small_quake_centred_next_to_a_district_is_reported_there_at_normal_leve
     assert phayao["worst_area"] == pong and phayao["observations"]["quake_magnitude"] == 2.3
 
 
+def test_small_quake_nearby_is_not_pushed_out_by_a_weak_far_one(base_service):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    pong = next(a.code for a in svc.gazetteer.resolve("อำเภอปง"))
+    now = datetime.now(timezone.utc)
+
+    def quake(magnitude, lat, lon, depth, place):
+        return SourceRecord(source="tmd_earthquakes", variable="earthquake", value=magnitude, unit="magnitude", lat=lat,
+                            lon=lon, observed_at=now - timedelta(hours=1), fetched_at=now, attribution="t",
+                            extra={"depth_km": depth, "place_th": place})
+
+    # An M5.0 ~195 km away gives MMI ~1.9 at อ.ปง: more than the M2.3 next door (~1.75), but not felt (< 2).
+    near = quake(2.3, 19.127, 100.293, 2.0, "ต.ปง อ.ปง จ.พะเยา")
+    far = quake(5.0, 20.8, 99.6, 10.0, "ประเทศเมียนมา")
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": [],
+                                    "tmd_earthquakes": [near, far], "usgs_earthquakes": []}, [])
+    obs = next(i for i in decisions[pong] if i["hazard"] == "earthquake")["observations"]
+    assert obs["quake_magnitude"] == 2.3 and obs["quake_distance_km"] == 13
+
+
 def test_earthquake_is_no_data_when_both_feeds_fail(base_service):
     svc = stale_copy(base_service)
     decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": [],

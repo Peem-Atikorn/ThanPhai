@@ -5,7 +5,8 @@ FROM ./models/gguf/qwen2.5-7b-thanphai-q4_k_m.gguf
 
 PARAMETER temperature 0.0
 PARAMETER top_p 0.95
-PARAMETER num_ctx 2048
+# Overview questions send ~2,200 tokens (system prompt + facts for 10 hazards); 2048 would cut the prompt.
+PARAMETER num_ctx 4096
 PARAMETER num_predict 512
 PARAMETER stop "<|im_end|>"
 PARAMETER stop "<|endoftext|>"
