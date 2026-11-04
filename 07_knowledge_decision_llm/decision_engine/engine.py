@@ -10,6 +10,13 @@ from thanphai_shared import AlertLevel, HazardType
 
 RULES_PATH = Path(__file__).with_name("rules.yaml")
 OPS = {">": operator.gt, ">=": operator.ge, "<": operator.lt, "<=": operator.le}
+# How an official warning reaches an area -> (rules.yaml official_warning key for its level, rule id).
+OFFICIAL_KINDS = {
+    "regional": ("regional_level", "OFFICIAL_WARNING_REGIONAL"),  # only through a region ("ภาคใต้")
+    "heavy_rain": ("heavy_rain_level", "OFFICIAL_WARNING_HEAVY_RAIN"),  # daily table: heavy rain
+    "named": ("min_level", "OFFICIAL_WARNING"),  # province named, or a region in strong_words
+    "very_heavy_rain": ("very_heavy_rain_level", "OFFICIAL_WARNING_VERY_HEAVY_RAIN"),  # daily table: very heavy rain
+}
 
 
 @dataclass
@@ -20,8 +27,8 @@ class DecisionInput:
     official_warning_active: bool = False
     # An official warning whose impact starts more than `lead_days` ahead.
     official_warning_upcoming: bool = False
-    # Every active warning reaches the area only through a region, in wording without rules.yaml strong_words.
-    official_warning_regional: bool = False
+    # How each active warning reaches the area (OFFICIAL_KINDS); the highest level wins. Empty: "named".
+    official_warning_kinds: list[str] = field(default_factory=list)
     observations: dict[str, float | None] = field(default_factory=dict)
     degraded_sources: list[str] = field(default_factory=list)
 
@@ -46,12 +53,12 @@ class DecisionEngine:
         candidates: list[tuple[AlertLevel, float, str]] = []
         conf = self.rules["confidence"]
 
-        if data.official_warning_active and data.official_warning_regional:
-            level = AlertLevel[self.rules["official_warning"]["regional_level"]]
-            candidates.append((level, conf["official"], "OFFICIAL_WARNING_REGIONAL"))
-        elif data.official_warning_active:
-            level = AlertLevel[self.rules["official_warning"]["min_level"]]
-            candidates.append((level, conf["official"], "OFFICIAL_WARNING"))
+        if data.official_warning_active:
+            official = self.rules["official_warning"]
+            # Ties go to the kind listed later in OFFICIAL_KINDS (the more specific one).
+            level, _, rule = max((AlertLevel[official[OFFICIAL_KINDS[k][0]]], i, OFFICIAL_KINDS[k][1])
+                                 for i, k in enumerate(OFFICIAL_KINDS) if k in (data.official_warning_kinds or ["named"]))
+            candidates.append((level, conf["official"], rule))
         elif data.official_warning_upcoming:
             level = AlertLevel[self.rules["official_warning"]["upcoming_level"]]
             candidates.append((level, conf["official"], "OFFICIAL_WARNING_UPCOMING"))

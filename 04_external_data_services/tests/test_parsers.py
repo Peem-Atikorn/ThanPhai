@@ -23,8 +23,9 @@ from external_data.adapters import (
 from external_data.adapters.base import BANGKOK, in_thailand_bbox
 from external_data.adapters.thaiwater import bank_quality_flag, signed_bank_diff
 from external_data.adapters.tmd import BASE_URL as BASE
-from external_data.adapters.tmd import as_list, bulletin_body, classify_hazards, impact_window, latest_issues, read_days
-from thanphai_shared import HazardType
+from external_data.adapters.tmd import (as_list, bulletin_body, bulletin_text, classify_hazards, impact_window, latest_issues,
+                                        rain_days, read_days)
+from thanphai_shared import HazardType, RainDay
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NOW = datetime(2026, 10, 19, 0, 0, tzinfo=timezone.utc)
@@ -138,29 +139,45 @@ def test_tmd_latest_issue_replaces_earlier_ones():
     assert [w.issue_no for w in kept] == ["3", "4"]  # issue 4 is another warning (heavy rain, 2026-10-18)
 
 
+BULLETIN_5 = json.loads((Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures"
+                         / "tmd_bulletin_5.json").read_text(encoding="utf-8"))
+
+
 def test_tmd_bulletin_body_keeps_every_region_and_drops_cause_and_advice():
-    # Page 1 of the PDF of issue 5 (288/2569): the API headline has only upper Thailand; the south is in the PDF.
-    bulletin = json.loads((Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures"
-                           / "tmd_bulletin_5.json").read_text(encoding="utf-8"))
-    body = bulletin_body(bulletin["page"])
-    assert body == bulletin["body"]
+    # Issue 5 (288/2569): the API headline has only upper Thailand; the south is in the PDF.
+    text = bulletin_text(BULLETIN_5["pages"])
+    body = bulletin_body(text)
+    assert body == BULLETIN_5["body"]
     assert body.startswith("ในช่วงวันที่ 5 –7 พฤศจิกายน 2569 บริเวณประเทศไทยตอนบน")
     assert "ส่วนในช่วงวันที่ 7–9 พฤศจิกายน 2569 บริเวณภาคใต้" in body and "ประเทศไทยตอนบน" in body  # lines joined
     assert "ทั้งนี้" not in body and "เนื่องจาก" not in body and "ประกาศ ณ" not in body
+    # The forecaster block heading every page is left out, so a table that runs onto a page does not take it in.
+    assert "metalarm" not in text and "ผู้พยากรณ์อากาศ" not in text and "- 3 -" not in text
     assert bulletin_body("หน้าที่ไม่ใช่ประกาศ") is None
+
+
+def test_tmd_bulletin_daily_tables_every_page():
+    days = rain_days(bulletin_text(BULLETIN_5["pages"]), date(2026, 11, 3))
+    assert [(d.day.day, d.very_heavy) for d in days] == [(5, False), (6, False), (7, False), (8, False), (8, True), (9, False), (9, True)]
+    assert days[0].areas.startswith("ภาคเหนือ:") and "และเพชรบูรณ์" in days[0].areas  # a list runs onto the next line
+    assert "รวมทั้งกรุงเทพมหานครและปริมณฑล" in days[0].areas
+    assert days[4].areas == "ภาคใต้: จังหวัดนครศรีธรรมราช และสงขลา"  # the map label "8 พ.ย. 69" is not in it
+    assert rain_days(BULLETIN_5["body"], date(2026, 11, 3)) == []  # no table: nothing
 
 
 @respx.mock
 async def test_tmd_warnings_read_the_bulletin_once_and_fall_back_to_the_headline(monkeypatch):
     single = load_json("tmd_warning_v2.json")["Warning"]
     url = "https://tmd.go.th/media/forecast/warning/test.pdf"
-    monkeypatch.setattr(TmdWarnings, "_bodies", {})
-    monkeypatch.setattr("external_data.adapters.tmd.read_bulletin", lambda pdf: pdf.decode())
+    row = RainDay(day=date(2026, 10, 19), very_heavy=True, areas="จังหวัดสงขลา")
+    monkeypatch.setattr(TmdWarnings, "_bulletins", {})
+    monkeypatch.setattr("external_data.adapters.tmd.read_bulletin", lambda pdf, announced: (pdf.decode(), [row]))
     respx.get(url__startswith=BASE).mock(return_value=httpx.Response(200, json={"Warning": {**single, "WebUrlThai": url}}))
     pdf = respx.get(url).mock(side_effect=[httpx.Response(500), httpx.Response(200, content="ข้อความ".encode())])
     async with httpx.AsyncClient() as client:
-        assert (await TmdWarnings().run_warnings(client))[0].body is None  # PDF failed: the headline is used
-        assert (await TmdWarnings().run_warnings(client))[0].body == "ข้อความ"
+        failed = (await TmdWarnings().run_warnings(client))[0]
+        assert failed.body is None and failed.rain_days == []  # PDF failed: the headline is used
+        assert [(w.body, w.rain_days) for w in await TmdWarnings().run_warnings(client)] == [("ข้อความ", [row])]
         assert (await TmdWarnings().run_warnings(client))[0].body == "ข้อความ"
     assert pdf.call_count == 2  # read once it worked
 

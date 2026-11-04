@@ -156,6 +156,12 @@ def warning_provinces(gazetteer: Gazetteer, text: str) -> list[str]:
     return sorted(named | regional)
 
 
+def table_provinces(gazetteer: Gazetteer, row: str) -> list[str]:
+    """Province codes of a bulletin's daily-table row, sorted. Its "ภาคเหนือ:" labels head the region's own list and
+    do not mean the whole region; "รวมทั้งกรุงเทพมหานครและปริมณฑล" still does."""
+    return warning_provinces(gazetteer, re.sub(r"ภาค[ก-๙]*\s*:", " ", row))
+
+
 def named_provinces(gazetteer: Gazetteer, text: str) -> list[str]:
     """Province codes that a warning text names by province ("จังหวัดสงขลา", "กทม"), sorted; regions do not count."""
     return sorted(_read_provinces(gazetteer, text)[0])

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -46,13 +46,24 @@ class SourceRecord(BaseModel):
     extra: dict = Field(default_factory=dict)
 
 
+class RainDay(BaseModel):
+    """One row of a bulletin's daily table: provinces TMD expects heavy (35.1-90 mm) or very heavy (> 90 mm) rain."""
+
+    day: date
+    very_heavy: bool
+    # The row's province text as written ("ภาคใต้: จังหวัดนครศรีธรรมราช และสงขลา"); module 05 reads the provinces.
+    areas: str
+
+
 class OfficialWarning(BaseModel):
     source: str
     issue_no: str
     title: str
     headline: str | None = None
-    # The bulletin's statements from its PDF (page 1), with each region's own days; the API headline has only the first.
+    # The bulletin's statements from its PDF, with each region's own days; the API headline has only the first.
     body: str | None = None
+    # The PDF's daily tables (pages 2+ of issue 288/2569); empty when the PDF has none or could not be read.
+    rain_days: list[RainDay] = Field(default_factory=list)
     hazards: list[HazardType]
     announced_at: datetime
     effective_from: datetime | None = None

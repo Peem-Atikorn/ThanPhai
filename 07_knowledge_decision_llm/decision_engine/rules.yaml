@@ -1,6 +1,6 @@
 # Alert-level rules for ThanPhai. Change only through review: bump `version` and add test cases.
 # Final level = max(official warning, safety overrides, model level). Degraded data never lowers a level.
-version: "2026.11.04.2"
+version: "2026.11.05.1"
 
 official_warning:
   # An active official warning for the hazard sets this minimum level.
@@ -12,7 +12,15 @@ official_warning:
   regional_level: WATCH
   # Wording that says heavy impact is likely; a region's statement with one of these keeps min_level. Matched with
   # spaces removed (the PDF has "น้ำป่าไหลหลา ก"). "ฝนตกหนักบางแห่ง" and "ฝนฟ้าคะนอง" are not on the list.
+  # Used only for a bulletin without daily tables: its tables say province by province where rain is heavy.
   strong_words: ["หนักมาก", "หลายพื้นที่", "น้ำท่วมฉับพลัน", "น้ำป่าไหลหลาก"]
+  # A bulletin's daily tables (pages 2+ of issue 288/2569) list the provinces TMD expects heavy rain (35.1-90 mm) and
+  # very heavy rain (> 90 mm), the thresholds of RAIN_FORECAST_HEAVY and RAIN_FORECAST_VERY_HEAVY below. A listed day is
+  # not the only day: the level holds from `lead_days` before the province's first listed day to the end of the
+  # bulletin's period for it. Flood takes very_heavy_rain_level only where the bulletin also warns of flood; its
+  # other flood provinces get regional_level.
+  heavy_rain_level: WATCH
+  very_heavy_rain_level: WARNING
   # TMD warns days ahead ("มีผลกระทบในช่วงวันที่ 5-9 พฤศจิกายน" issued 2 Nov). A warning is active from `lead_days`
   # before its first impact day to the end of its last; before that it sets `upcoming_level`. No dates read: active now.
   lead_days: 1

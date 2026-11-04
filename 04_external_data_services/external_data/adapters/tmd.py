@@ -7,8 +7,8 @@ from typing import Any
 
 import httpx
 
-from external_data.adapters.base import Adapter, parse_local, to_float
-from thanphai_shared import HazardType, OfficialWarning, SourceRecord
+from external_data.adapters.base import BANGKOK, Adapter, parse_local, to_float
+from thanphai_shared import HazardType, OfficialWarning, RainDay, SourceRecord
 
 log = logging.getLogger(__name__)
 
@@ -98,15 +98,29 @@ def impact_window(title: str, announced: date) -> tuple[date, date] | None:
     return read_days(note.group(1), announced) if note else None
 
 
-def bulletin_body(page_text: str) -> str | None:
-    """The statements of a TMD bulletin from its PDF page 1, or None when the page is not laid out as one.
+def bulletin_text(pages: list[str]) -> str:
+    """Every page of a bulletin PDF as one text, without the forecaster block that heads each page.
+
+    Each page of issue 288/2569 starts with the forecaster's name, the 1182 line, the fax line and
+    "https://www.metalarm.tmd.go.th/service"; a statement or table that runs onto the next page must not take them in.
+    """
+    kept = []
+    for page in pages:
+        lines = page.splitlines()
+        end = next((i for i, line in enumerate(lines[:12]) if "metalarm.tmd.go.th" in line), None)
+        kept.append("\n".join(lines[end + 1:] if end is not None else lines))
+    return "\n".join(kept)
+
+
+def bulletin_body(text: str) -> str | None:
+    """The statements of a TMD bulletin from its PDF text, or None when it is not laid out as one.
 
     The API's HeadlineThai is the first paragraph only: issue 288/2569 said "ส่วนในช่วงวันที่ 7–9 … ภาคใต้" only in the
     PDF. The statements sit between the "-----" rule under the title and "ประกาศ ณ วันที่"; text from "ทั้งนี้" on is
     the cause ("ทั้งนี้เนื่องจาก … ประเทศไทยตอนบน") and general advice, which name areas without warning them.
     Lines are joined without a space, as Thai breaks lines inside sentences ("ประเทศไทย" / "ตอนบน").
     """
-    lines = page_text.splitlines()
+    lines = text.splitlines()
     start = next((i for i, line in enumerate(lines) if line.strip().startswith("---")), None)
     end = next((i for i, line in enumerate(lines) if line.strip().startswith("ประกาศ ณ")), None)
     if start is None or end is None or end <= start:
@@ -115,13 +129,43 @@ def bulletin_body(page_text: str) -> str | None:
     return body or None
 
 
-def read_bulletin(pdf: bytes) -> str | None:
+# "วันที่ จังหวัดที่คาดว่าจะได้รับผลกระทบจากฝนตกหนัก" / "…ฝนตกหนักมาก": TMD's heavy (35.1-90 mm) and very heavy (> 90 mm)
+# rain, the same thresholds as rules.yaml RAIN_FORECAST_HEAVY and RAIN_FORECAST_VERY_HEAVY.
+RAIN_TABLE = re.compile(r"จังหวัดที่คาดว่าจะได้รับผลกระทบจากฝนตกหนัก(มาก)?")
+TABLE_ROW = re.compile(r"^\s*(\d{1,2}\s+[ก-๙]+\s+\d{4})\s*(.*)$")
+# The day label printed on each page's map ("8 พ.ย. 69").
+MAP_LABEL = re.compile(r"^\s*\d{1,2}\s*[ก-๙]+\.\s*[ก-๙]+\.\s*\d{2}\s*$")
+
+
+def rain_days(text: str, announced: date) -> list[RainDay]:
+    """The rows of a bulletin's daily heavy-rain tables: day, heavy or very heavy, and the province text."""
+    headers = list(RAIN_TABLE.finditer(text))
+    found = []
+    for i, header in enumerate(headers):
+        section = text[header.end():headers[i + 1].start() if i + 1 < len(headers) else len(text)]
+        rows: list[list[str]] = []
+        for line in section.splitlines():
+            if MAP_LABEL.match(line) or line.strip().startswith("วันที่"):
+                continue
+            if m := TABLE_ROW.match(line):
+                rows.append([m.group(1), m.group(2)])
+            elif rows and line.strip():
+                rows[-1].append(line.strip())  # a province list runs onto the next line
+        for day_text, *parts in rows:
+            days = read_days(day_text, announced)
+            if days:
+                found.append(RainDay(day=days[0], very_heavy=bool(header.group(1)), areas=" ".join(p.strip() for p in parts if p.strip())))
+    return found
+
+
+def read_bulletin(pdf: bytes, announced: date) -> tuple[str | None, list[RainDay]]:
+    """(statements, daily tables) from every page of a bulletin PDF."""
     from io import BytesIO
 
     from pypdf import PdfReader
 
-    reader = PdfReader(BytesIO(pdf))
-    return bulletin_body(reader.pages[0].extract_text()) if reader.pages else None
+    text = bulletin_text([page.extract_text() for page in PdfReader(BytesIO(pdf)).pages])
+    return bulletin_body(text), rain_days(text, announced)
 
 
 def latest_issues(warnings: list[OfficialWarning]) -> list[OfficialWarning]:
@@ -190,25 +234,27 @@ class TmdWarnings(Adapter):
         warnings = self.parse_warnings(await self.fetch(client), fetched_at)
         # Only the newest issue of each warning is used; older issues in the feed keep the headline alone.
         latest = {id(w) for w in latest_issues(warnings)}
-        bodies = await asyncio.gather(*(self.bulletin(client, w.url if id(w) in latest else None) for w in warnings))
-        return [w.model_copy(update={"body": body}) for w, body in zip(warnings, bodies)]
+        read = await asyncio.gather(*(self.bulletin(client, w.url if id(w) in latest else None, w.announced_at.astimezone(BANGKOK).date())
+                                      for w in warnings))
+        return [w.model_copy(update={"body": body, "rain_days": days}) for w, (body, days) in zip(warnings, read)]
 
-    # PDF url -> statements. An issue's PDF never changes; a new issue has a new url.
-    _bodies: dict[str, str | None] = {}
+    # PDF url -> (statements, daily tables). An issue's PDF never changes; a new issue has a new url.
+    _bulletins: dict[str, tuple[str | None, list[RainDay]]] = {}
 
-    async def bulletin(self, client: httpx.AsyncClient, url: str | None) -> str | None:
-        """The bulletin's statements from its PDF; None (use the headline) when there is no PDF or it cannot be read."""
+    async def bulletin(self, client: httpx.AsyncClient, url: str | None, announced: date) -> tuple[str | None, list[RainDay]]:
+        """The bulletin's statements and daily tables from its PDF; (None, []) (use the headline) when there is no PDF
+        or it cannot be read."""
         if not url:
-            return None
-        if url not in self._bodies:
+            return None, []
+        if url not in self._bulletins:
             try:
                 response = await client.get(url, timeout=self.timeout_seconds)
                 response.raise_for_status()
-                TmdWarnings._bodies[url] = await asyncio.to_thread(read_bulletin, response.content)
+                TmdWarnings._bulletins[url] = await asyncio.to_thread(read_bulletin, response.content, announced)
             except Exception as exc:  # a PDF that fails now is tried again on the next refresh
                 log.warning("TMD bulletin %s unreadable: %s", url, exc)
-                return None
-        return self._bodies[url]
+                return None, []
+        return self._bulletins[url]
 
 
 class TmdWeather3Hours(Adapter):

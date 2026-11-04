@@ -85,7 +85,10 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   // Issue 288/2569: the overview lists the TMD bulletin by region, with the level its wording gives each one.
   lib.api.warnings = async () => ({ warnings: [{ title: 'อากาศแปรปรวนบริเวณประเทศไทยตอนบน ฉบับที่ 5', url: 'https://tmd.go.th/x.pdf', hazards: ['rain_storm', 'flood'], by_region: [
     { from: '2026-11-05', to: '2026-11-07', level: 'WATCH', hazards: ['rain_storm'], areas: ['ประเทศไทยตอนบน'] },
-    { from: '2026-11-07', to: '2026-11-09', level: 'WARNING', hazards: ['rain_storm', 'flood'], areas: ['ภาคใต้'] },
+    { from: '2026-11-07', to: '2026-11-09', level: 'WATCH', hazards: ['rain_storm', 'flood'], areas: ['ภาคใต้'] },
+  ], rain_days: [
+    { day: '2026-11-05', very_heavy: false, provinces: Array.from({ length: 45 }, (_, i) => 'จังหวัด' + i) },
+    { day: '2026-11-08', very_heavy: true, provinces: ['นครศรีธรรมราช', 'สงขลา'] },
   ] }] });
   const bulletinEffects = [];
   const bulletinApp = instance(Dashboard, bulletinEffects);
@@ -95,7 +98,11 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   await tick();
   const regionLines = nodes(bulletinApp.render(bulletinProps)).filter(n => n.type === 'li' && /ประเทศไทยตอนบน|ภาคใต้/.test(content(n)));
   assert.deepEqual(regionLines.map(n => [content(n).includes('ภาคใต้'), nodes(n).find(c => String(c.props.className || '').includes('risk-badge')).props.className]),
-    [[false, 'risk-badge level-WATCH'], [true, 'risk-badge level-WARNING']], 'Overview lists the TMD bulletin by region with its level');
+    [[false, 'risk-badge level-WATCH'], [true, 'risk-badge level-WATCH']], 'Overview lists the TMD bulletin by region with its level');
+  // Daily tables: long lists as a count, short ones by name; very heavy rain is a Warning.
+  const dayLines = nodes(bulletinApp.render(bulletinProps)).filter(n => n.type === 'li' && /ฝนตกหนัก/.test(content(n)));
+  assert.deepEqual(dayLines.map(n => [content(n).includes('45 จังหวัด'), content(n).includes('นครศรีธรรมราช, สงขลา'), nodes(n).find(c => String(c.props.className || '').includes('risk-badge')).props.className]),
+    [[true, false, 'risk-badge level-WATCH'], [false, true, 'risk-badge level-WARNING']], 'Overview lists the daily heavy-rain tables');
   cleanupBulletin?.();
   let opened = 0;
   const app = instance(Dashboard);
