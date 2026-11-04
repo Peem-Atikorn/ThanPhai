@@ -265,8 +265,25 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [locationError, setLocationError] = useState<string | null>(null);
     const searchInput = useRef<HTMLInputElement>(null);
     const [question, setQuestion] = useState("");
-    const [answer, setAnswer] = useState<AskAnswer | null>(null);
-    const [asking, setAsking] = useState(false);
+    // The conversation so far (newest last). `sent` is what went to the API: a short reply to a clarifying
+    // question ("ธัญบุรี") is sent together with the question it answers.
+    // The chat panel is a client-only portal (FloatingMascot), so reading sessionStorage here cannot cause a
+    // hydration mismatch; the server simply starts with an empty log.
+    const [chat, setChat] = useState<{ asked: string; sent: string; answer: AskAnswer | null }[]>(() => {
+        if (typeof window === "undefined") return [];
+        try {
+            const saved = JSON.parse(sessionStorage.getItem("thanphai-chat") ?? "[]");
+            return Array.isArray(saved) ? saved : [];
+        } catch { return []; }
+    });
+    const answer = chat.at(-1)?.answer ?? null;
+    const asking = chat.length > 0 && chat.at(-1)!.answer === null;
+    const chatEnd = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        // Keep the last 20 answered turns for this browser tab only.
+        try { sessionStorage.setItem("thanphai-chat", JSON.stringify(chat.filter(t => t.answer).slice(-20))); } catch { /* storage blocked */ }
+        chatEnd.current?.scrollIntoView({ block: "nearest" });
+    }, [chat]);
     const questionInput = useRef<HTMLInputElement>(null);
     const [dams, setDams] = useState<{
         list: Dam[];
@@ -671,22 +688,33 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     }
     async function onAsk(event: FormEvent) {
         event.preventDefault();
-        if (!question.trim() || asking)
+        const asked = question.trim();
+        if (!asked || asking)
             return;
-        setAsking(true);
-        setAnswer(null);
+        // Answering "which district?": send the earlier question with the reply, like a chat assistant would.
+        const last = chat.at(-1);
+        const sent = last?.answer?.intent === "clarify" ? `${last.sent} ${asked}` : asked;
+        setQuestion("");
+        setChat(old => [...old, { asked, sent, answer: null }]);
+        const settle = (answer: AskAnswer) => setChat(old => old.map((turn, i) => i === old.length - 1 ? { ...turn, answer } : turn));
         try {
-            const response = await api.ask(question.trim());
-            setAnswer(response);
+            const response = await api.ask(sent);
+            settle(response);
             if (response.area)
                 chooseArea(response.area);
         }
         catch {
-            setAnswer({ text: "ยังตอบคำถามไม่ได้ในขณะนี้ กรุณาลองถามอีกครั้ง", intent: "error", area: null, sources: [] });
+            settle({ text: "ยังตอบคำถามไม่ได้ในขณะนี้ กรุณาลองถามอีกครั้ง", intent: "error", area: null, sources: [] });
         }
-        finally {
-            setAsking(false);
-        }
+        questionInput.current?.focus();
+    }
+    function answerView(a: AskAnswer) {
+        // The answer text already ends with its "ที่มา:" line; only add the list when it does not.
+        const showSources = a.sources.length > 0 && !a.text.includes("ที่มา:");
+        return <div className={"answer-text " + (a.intent === "error" ? "data-notice" : "")}><p>{tr(a.text)}</p>
+            {showSources && <p className="source-note">{tr("ที่มา: ")}{tr(a.sources.join(", "))}</p>}
+            {a.llm_used && <p className="source-note">{tr("เรียบเรียงโดย AI")}{a.llm_model ? ` (${a.llm_model})` : ""}{" · "}{tr(a.intent === "greeting" || a.intent === "out_of_scope" ? "คำตอบทั่วไป ไม่ใช่ข้อมูลภัย" : "ตัวเลขและระดับเตือนภัยมาจากข้อมูลและกฎของระบบ ไม่ได้ให้ AI ตัดสิน")}</p>}
+        </div>;
     }
     const counts = LEVELS.map((level) => ({ ...level, n: displayedLayer?.features.filter((f) => (f.properties?.level ?? "NONE") === level.id).length ?? 0 }));
     const summaryCounts = LEVELS.map(level => ({ ...level, n: summaryLayer?.features.filter(f => (f.properties?.level ?? "NONE") === level.id).length ?? 0 }));
@@ -898,9 +926,16 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
           </section>)}
 
           <FloatingMascot topic={view === "hazard" ? hazard : view} status={asking ? "waiting" : answer?.intent === "error" ? "error" : answer ? "answered" : "idle"}>
-            <form onSubmit={onAsk}><label htmlFor="ask">{tr("อยากรู้สถานการณ์เรื่องไหน?")}</label><div className="ask-input"><input id="ask" ref={questionInput} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={tr("เช่น น้ำจะท่วมอำเภอเสนาไหม")} maxLength={500}/><button className="primary-button" disabled={asking || !question.trim()} aria-label={tr("ส่งคำถาม")}>{tr(asking ? <span className="spinner"/> : <Icon name="arrow"/>)}</button></div></form>
-            {tr(!answer && !asking && <div className="question-suggestions">{tr(["อำเภอเสนาเสี่ยงน้ำท่วมไหม", "เขื่อนภูมิพลมีน้ำเท่าไหร่", "เขื่อนเจ้าพระยาระบายน้ำเท่าไหร่"].map((example) => <button key={example} onClick={() => { setQuestion(example); questionInput.current?.focus(); }}>{tr(example)}</button>))}</div>)}
-            <div aria-live="polite">{tr(asking && <p className="answer-text">{tr("กำลังตรวจสอบข้อมูลและเรียบเรียงคำตอบ\u2026")}</p>)}{tr(answer && <div className={"answer-text " + (answer.intent === "error" ? "data-notice" : "")}><p>{tr(answer.text)}</p>{tr(answer.sources.length > 0 && <p className="source-note">{tr("ที่มา: ")}{tr(answer.sources.join(", "))}</p>)}{tr(answer.llm_used && <p className="source-note">{tr("เรียบเรียงโดย AI")}{answer.llm_model ? ` (${answer.llm_model})` : ""}{" \u00B7 "}{tr(answer.intent === "greeting" || answer.intent === "out_of_scope" ? "คำตอบทั่วไป ไม่ใช่ข้อมูลภัย" : "ตัวเลขและระดับเตือนภัยมาจากข้อมูลและกฎของระบบ ไม่ได้ให้ AI ตัดสิน")}</p>)}</div>)}</div>
+            {chat.length > 0 && <div className="chat-log" aria-live="polite">
+              {chat.map((turn, i) => <div key={i} className="chat-turn">
+                <p className="chat-question">{turn.asked}</p>
+                {turn.answer ? answerView(turn.answer) : <p className="answer-text">{tr("กำลังตรวจสอบข้อมูลและเรียบเรียงคำตอบ…")}</p>}
+              </div>)}
+              <div ref={chatEnd}/>
+            </div>}
+            <form onSubmit={onAsk}><label htmlFor="ask">{tr(answer?.intent === "clarify" ? "ตอบน้องทันภัยได้เลย" : "อยากรู้สถานการณ์เรื่องไหน?")}</label><div className="ask-input"><input id="ask" ref={questionInput} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={tr(answer?.intent === "clarify" ? "พิมพ์ชื่ออำเภอหรือจังหวัด เช่น ธัญบุรี" : "เช่น น้ำจะท่วมอำเภอเสนาไหม")} maxLength={500}/><button className="primary-button" disabled={asking || !question.trim()} aria-label={tr("ส่งคำถาม")}>{tr(asking ? <span className="spinner"/> : <Icon name="arrow"/>)}</button></div></form>
+            {chat.length > 0 && !asking && <button type="button" className="text-button chat-clear" onClick={() => setChat([])}>{tr("เริ่มแชทใหม่")}</button>}
+            {tr(chat.length === 0 && <div className="question-suggestions">{tr(["อำเภอเสนาเสี่ยงน้ำท่วมไหม", "เขื่อนภูมิพลมีน้ำเท่าไหร่", "เขื่อนเจ้าพระยาระบายน้ำเท่าไหร่"].map((example) => <button key={example} onClick={() => { setQuestion(example); questionInput.current?.focus(); }}>{tr(example)}</button>))}</div>)}
           </FloatingMascot>
         </aside>
       </div>

@@ -64,6 +64,12 @@
 .thanphai-mascot .question-suggestions button:hover { background: #a8b77822; }
 .thanphai-mascot .answer-text { padding-top: 14px; margin-top: 16px; border-top: 1px solid var(--mascot-line); color: var(--mascot-text); font-size: 14px; line-height: 1.9; white-space: pre-line; overflow-wrap: anywhere; }
 .thanphai-mascot .source-note { color: var(--mascot-muted); font-size: 12px; }
+/* Conversation: the log scrolls on its own so the input box stays in view below it. */
+.thanphai-mascot .chat-log { max-height: min(46vh, 420px); margin-bottom: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.thanphai-mascot .chat-turn + .chat-turn { margin-top: 12px; }
+.thanphai-mascot .chat-question { width: fit-content; max-width: 88%; margin: 0 0 0 auto; padding: 7px 11px; border-radius: 12px 12px 4px 12px; background: #a8b77833; color: var(--mascot-text); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.thanphai-mascot .chat-turn .answer-text { margin-top: 6px; padding-top: 6px; border-top: 0; }
+.thanphai-mascot .chat-clear { margin-top: 8px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--mascot-muted); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .thanphai-mascot .data-notice { color: #ffe6c6; }
 .thanphai-mascot button:focus-visible { outline: 2px solid #d2e687; outline-offset: 3px; }
 .thanphai-mascot .mascot-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
