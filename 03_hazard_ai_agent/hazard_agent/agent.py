@@ -47,6 +47,13 @@ SOURCE_TH = {
 REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history", "river", "storms",
                    "waves", "water_quality", "pm25_stations", "fire_hotspots"}
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
+
+
+def _plain(line: str) -> str:
+    """A line without warning marks, bullets or spacing differences, to spot a copied tail line."""
+    return re.sub(r"\s+", "", line.replace("⚠", "")).lstrip("•-*").rstrip(".")
+
+
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
 PREPARE_TH = {
     "flood": ["ยกของมีค่าและปลั๊กไฟขึ้นที่สูง", "เตรียมยา น้ำดื่ม อาหารแห้ง ไฟฉาย และเอกสารสำคัญใส่ถุงกันน้ำ", "ติดตามประกาศของ ปภ. และเตรียมเส้นทางอพยพ"],
@@ -358,7 +365,10 @@ class HazardAgent:
                 # word, so a rewrite can never drop or change them.
                 tail = [line for line in answer.text.splitlines() if line.startswith(VERBATIM_PREFIXES)]
                 # The model sometimes copies a tail line ("ที่มา: …") into its own text; keep only the verbatim copy.
-                body = [line for line in rewritten.strip().splitlines() if not line.strip().startswith(VERBATIM_PREFIXES)]
+                # It also copies a warning without its "⚠" or with other spacing, so compare those too.
+                copied = {_plain(line) for line in tail}
+                body = [line for line in rewritten.strip().splitlines()
+                        if not line.strip().lstrip("•-* ").startswith(VERBATIM_PREFIXES) and _plain(line) not in copied]
                 answer.text, answer.llm_used = "\n".join([*body, *tail]), True
                 answer.llm_model = self._model_name()
         return answer
