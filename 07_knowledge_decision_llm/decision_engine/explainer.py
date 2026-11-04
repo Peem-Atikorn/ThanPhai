@@ -286,6 +286,62 @@ class QwenConfig:
         )
 
 
+def call_qwen_api(
+    endpoint: str,
+    model: str,
+    system_instruction: str,
+    user_prompt: str,
+    temperature: float = 0.1,
+    max_tokens: int = 512,
+    timeout_ms: int = 15000,
+) -> str:
+    """Send chat request to Ollama (/api/chat) or OpenAI-compatible (/v1/chat/completions) endpoint."""
+    if endpoint.endswith("/v1") or "/v1/" in endpoint:
+        url = f"{endpoint}/chat/completions" if endpoint.endswith("/v1") else endpoint
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+    else:
+        url = f"{endpoint.rstrip('/')}/api/chat"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt},
+            ],
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }
+
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    timeout_sec = max(0.5, timeout_ms / 1000.0)
+    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+
+    if "message" in data and isinstance(data["message"], dict):
+        return data["message"].get("content", "").strip()
+    if "choices" in data and data["choices"]:
+        return data["choices"][0].get("message", {}).get("content", "").strip()
+    if "response" in data:
+        return data["response"].strip()
+    return ""
+
+
 class QwenExplainer(BaseExplainer):
     """Local Qwen explainer (via Ollama or OpenAI-compatible server).
 
@@ -309,52 +365,15 @@ class QwenExplainer(BaseExplainer):
 
     def _http_request(self, question: str, facts: str) -> str:
         prompt = f"คำถามผู้ใช้: {question}\n\nข้อเท็จจริง (ห้ามเปลี่ยน):\n{facts}"
-        endpoint = self.config.endpoint
-
-        if endpoint.endswith("/v1") or "/v1/" in endpoint:
-            url = f"{endpoint}/chat/completions" if endpoint.endswith("/v1") else endpoint
-            payload = {
-                "model": self.config.model,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_INSTRUCTION},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": self.config.temperature,
-                "max_tokens": self.config.max_output_tokens,
-            }
-        else:
-            url = f"{endpoint}/api/chat"
-            payload = {
-                "model": self.config.model,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_INSTRUCTION},
-                    {"role": "user", "content": prompt},
-                ],
-                "stream": False,
-                "options": {
-                    "temperature": self.config.temperature,
-                    "num_predict": self.config.max_output_tokens,
-                },
-            }
-
-        body = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=body,
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
-            method="POST",
+        return call_qwen_api(
+            endpoint=self.config.endpoint,
+            model=self.config.model,
+            system_instruction=SYSTEM_INSTRUCTION,
+            user_prompt=prompt,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_output_tokens,
+            timeout_ms=self.config.timeout_ms,
         )
-        timeout_sec = max(0.5, self.config.timeout_ms / 1000.0)
-        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-
-        if "message" in data and isinstance(data["message"], dict):
-            return data["message"].get("content", "").strip()
-        if "choices" in data and data["choices"]:
-            return data["choices"][0].get("message", {}).get("content", "").strip()
-        if "response" in data:
-            return data["response"].strip()
-        return ""
 
 
 
