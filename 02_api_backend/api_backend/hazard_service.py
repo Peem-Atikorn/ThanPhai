@@ -717,13 +717,16 @@ class HazardService:
             best = None
             for r in recent:
                 value, km = shaking_at(area.lat, area.lon, r.lat, r.lon, r.value, r.extra.get("depth_km"))
+                # Far-away small quakes would clutter answers, but one centred in or next to the district is news
+                # there even when the estimate at the district centre is below MMI 2 (Pong, Phayao, M2.3 on 4 Nov
+                # 2026: felt by villagers, MMI 1.4 at the centroid 13 km away). The level still comes from the MMI
+                # rules. Skip the unfelt far ones before choosing, so a weak far quake cannot push out a near one.
+                if value < 2 and km > NEAR_QUAKE_KM:
+                    continue
                 # Strongest shaking first; on a tie (small quakes all floor at MMI 1) the closest epicentre.
                 if best is None or (value, -km) > (best[0], -best[1]):
                     best = (value, km, r)
-            # Far-away small quakes would clutter answers, but one centred in or next to the district is news there
-            # even when the estimate at the district centre is below MMI 2 (Pong, Phayao, M2.3 on 4 Nov 2026: felt
-            # by villagers, MMI 1.4 at the centroid 13 km away). The level still comes from the MMI rules.
-            if best is None or (best[0] < 2 and best[1] > NEAR_QUAKE_KM):
+            if best is None:
                 continue
             value, km, r = best
             out[code] = {"quake_mmi_24h": round(value, 1), "quake_magnitude": r.value, "quake_distance_km": round(km),
