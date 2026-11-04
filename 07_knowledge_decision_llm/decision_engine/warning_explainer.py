@@ -400,6 +400,13 @@ def validate_warning_summary(
         if rain_days and matched_provinces:
             if day_candidates:
                 for prov in matched_provinces:
+                    # Collect all days this province appears in the rain_days table
+                    # for the candidate day numbers mentioned in the clause.
+                    # A province is acceptable when it appears in the table for
+                    # *at least one* of the mentioned days (not necessarily every day),
+                    # because a bulletin may cover a date-range for the whole region
+                    # while the table lists individual provinces per day.
+                    prov_found_any_day = False
                     for cand_day in day_candidates:
                         matching_rows = [
                             r for r in rain_days
@@ -407,10 +414,22 @@ def validate_warning_summary(
                         ]
                         if matching_rows:
                             listed_provs = {p for r in matching_rows for p in r.get("provinces", [])}
-                            if prov not in listed_provs:
-                                problems.append(
-                                    f"Province '{prov}' not expected for date '{cand_day}' in rain_days table"
-                                )
+                            if prov in listed_provs:
+                                prov_found_any_day = True
+                                break
+                    if not prov_found_any_day:
+                        # Province not in the rain_days table for ANY of the mentioned days
+                        all_matching_rows = [
+                            r for r in rain_days
+                            if any(
+                                str(int(str(r["day"]).split("-")[-1])) == d
+                                for d in day_candidates
+                            )
+                        ]
+                        if all_matching_rows:  # table has data for those days → flag
+                            problems.append(
+                                f"Province '{prov}' not in rain_days table for any of days {sorted(day_candidates)}"
+                            )
 
             # Review Case 5: Check very_heavy in rain_days table
             if "หนักมาก" in s_clause:
@@ -709,7 +728,11 @@ class WarningExplainer:
         prompt = f"ประกาศ: {title}\n\nเนื้อหาทางการ:\n{body}\n\nจงเรียบเรียงสรุป 2-3 บรรทัด:"
         try:
             raw_summary = self._call_qwen(prompt).strip()
-            full_context = f"{title} {body}"
+            # Separate title from body with a newline so word-boundary checks in
+            # _region_original_has_word() do not bleed title tokens into the first
+            # body clause (e.g. "หนักมาก" in the title should not count as being
+            # present in ประเทศไทยตอนบน's section).
+            full_context = f"{title}\n{body}"
             problems = validate_warning_summary(
                 summary=raw_summary,
                 original_text=full_context,

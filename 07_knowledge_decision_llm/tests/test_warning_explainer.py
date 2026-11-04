@@ -476,3 +476,106 @@ def test_warning_explainer_disabled_by_default_without_qwen(bulletin_5_data, mon
         by_region=bulletin_5_data["by_region"],
     )
     assert res is None
+
+
+# ---------------------------------------------------------------------------
+# Review round 3 — new test cases
+# ---------------------------------------------------------------------------
+
+def test_title_hanaknak_does_not_leak_into_first_region(bulletin_5_data):
+    """Review Round 3, Item 1: Title "ฝนตกหนักถึงหนักมาก" must NOT bleed into the
+    first region (ประเทศไทยตอนบน).  The body says ตอนบน has only "ฝนตกหนักบางแห่ง"
+    so a summary claiming "ฝนตกหนักถึงหนักมากบางแห่ง" for ตอนบน must be rejected.
+    When title and body are separated by \\n the validator must still reject the
+    inflated summary (title tokens are NOT part of ตอนบน's section in the body).
+    """
+    # The real bulletin 5 title already contains "ฝนตกหนักถึงหนักมาก" for ภาคใต้ while
+    # the body for ตอนบน says only "ฝนตกหนักบางแห่ง".  A summary that claims
+    # ตอนบน has "หนักมาก" must be rejected.
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักถึงหนักมากบางแห่งวันที่ 5-7 พ.ย. "
+        "ส่วนภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง "
+        "ระวังน้ำท่วมฉับพลันและน้ำป่าไหลหลาก"
+    )
+    # Use title + "\n" + body as full_context (matches how summarize() now builds it)
+    full_context = bulletin_5_data["title"] + "\n" + bulletin_5_data["body"]
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=full_context,
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("หนักมาก" in p or "ความแรง" in p for p in problems), (
+        f"Expected rejection for 'หนักมาก' leaked from title to ตอนบน, got: {problems}"
+    )
+
+
+def test_explainer_summarize_title_hanaknak_rejected_for_first_region(bulletin_5_data):
+    """Review Round 3, Item 1 (integration): WarningExplainer.summarize() must reject a
+    summary that escalates ตอนบน to 'หนักมาก' because the title has the word but the
+    body for ตอนบน does not.
+    """
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักถึงหนักมากบางแห่งวันที่ 5-7 พ.ย. "
+        "ส่วนภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง "
+        "ระวังน้ำท่วมฉับพลันและน้ำป่าไหลหลาก"
+    )
+    explainer = WarningExplainer(requester=lambda prompt: bad_summary)
+    res = explainer.summarize(
+        title=bulletin_5_data["title"],
+        body=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert res is None, "Explainer should reject summary with 'หนักมาก' leaked from title into ตอนบน"
+    assert explainer.validation_failed is True
+
+
+def test_validate_province_in_range_passes_at_least_one_day(bulletin_5_data):
+    """Review Round 3, Item 2: A summary that names a province with a *date range*
+    must pass validation when the province appears in the rain_days table for at
+    least one day within that range — even if it is absent on other days.
+
+    Scenario (mirrors reviewer's example):
+      bulletin says: ภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักถึงหนักมากบางแห่ง
+      rain_days: นครศรีธรรมราช is listed on days 5, 6, 7 (but NOT day 8 or 9)
+      summary names: จ.นครศรีธรรมราช สงขลา ช่วงวันที่ 7-9 พ.ย.
+      Expected: PASS (province is in table for day 7, which is inside the range)
+    """
+    # Summary stays within original wording — "บางแห่ง" kept, no "หนักมาก" per province
+    # (the original bulletin body says "หนักมากบางแห่ง" for ภาคใต้, not per-province)
+    good_summary = (
+        "ภาคใต้ช่วงวันที่ 7-9 พ.ย. มีฝนตกหนักบางแห่ง "
+        "และอาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก "
+        "โดยเฉพาะจังหวัดนครศรีธรรมราช สงขลา"
+    )
+    problems = validate_warning_summary(
+        summary=good_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    prov_errors = [p for p in problems if "นครศรีธรรมราช" in p or "rain_days" in p]
+    assert prov_errors == [], (
+        f"Province present in table for at least one day in range must pass, got: {prov_errors}"
+    )
+
+
+def test_validate_province_absent_all_days_in_range_fails(bulletin_5_data):
+    """Review Round 3, Item 2 (inverse): A province not in the rain_days table for ANY
+    of the mentioned days must still be rejected.
+    """
+    # ระนอง อยู่ใน rain_days เฉพาะวันที่ 9 แต่สรุประบุวันที่ 5-7 ซึ่งไม่มีระนองในตาราง
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง 5-7 พ.ย. "
+        "ส่วนจังหวัดระนองมีฝนตกหนักวันที่ 5-7 พ.ย."
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("ระนอง" in p or "rain_days" in p for p in problems), (
+        f"Province absent from rain_days for all mentioned days should be rejected, got: {problems}"
+    )
