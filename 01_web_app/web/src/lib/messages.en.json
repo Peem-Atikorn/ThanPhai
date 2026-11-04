@@ -517,7 +517,7 @@
   "แผ่นดินไหวและเหตุการณ์ในภูมิภาค": "Regional earthquakes and events",
   "โหลดรายการไม่สำเร็จ ลองใหม่ภายหลัง": "Unable to load events. Please try again later.",
   "แผ่นดินไหว 7 วันล่าสุด": "Earthquakes in the past 7 days",
-  "ไม่มีแผ่นดินไหวขนาด 2.5 ขึ้นไปในภูมิภาค": "No regional earthquakes of magnitude 2.5 or above",
+  "ไม่มีแผ่นดินไหวในประเทศไทย หรือขนาด 2.5 ขึ้นไปในภูมิภาค": "No earthquakes in Thailand, and none of magnitude 2.5 or above in the region",
   "น. · ลึก": "· Depth",
   "กม. ·": "km ·",
   "· มีการประเมินสึนามิ": "· Tsunami assessment available",
