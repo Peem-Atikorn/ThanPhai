@@ -43,8 +43,9 @@ EMERGENCY_WORDS = ("ช่วยด้วย", "ติดอยู่", "บา�
 SOURCE_WORDS = ("แหล่งข้อมูล", "ข้อมูลจากไหน", "ข้อมูลมาจากไหน", "ที่มาของข้อมูล", "ใช้ข้อมูลจาก", "data source")
 GREETING = re.compile(r"(?:(?:สวัสดี|หวัดดี)(?:\s*(?:ครับ|ค่ะ|คะ))?|hello|hi|hey)[!?.\s]*")
 # A past period or a count turns an earthquake question about a place into the list of events there.
-QUAKE_LIST_WORDS = ("เดือนนี้", "เดือนที่แล้ว", "สัปดาห์", "อาทิตย์", "ย้อนหลัง", "ที่ผ่านมา", "กี่ครั้ง", "กี่รอบ", "บ่อย",
-                    "ที่ไหนบ้าง", "รายการ", "วันก่อน", "เมื่อวาน", "this month", "this week", "past", "how many", "list")
+QUAKE_LIST_WORDS = ("เดือนนี้", "เดือนที่แล้ว", "เดือนก่อน", "สัปดาห์", "อาทิตย์", "ย้อนหลัง", "ที่ผ่านมา", "กี่ครั้ง", "กี่รอบ",
+                    "บ่อย", "ที่ไหนบ้าง", "รายการ", "วันก่อน", "เมื่อวาน", "this month", "last month", "this week", "last week",
+                    "yesterday", "past", "how many", "list")
 # Relative Thai/English time words -> (start offset days, end offset days).
 TIME_WORDS = {
     "วันนี้": (0, 1), "today": (0, 1), "คืนนี้": (0, 1), "tonight": (0, 1),

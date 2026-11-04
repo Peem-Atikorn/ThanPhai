@@ -358,6 +358,21 @@ def test_quakes_last_month_uses_previous_calendar_month():
     assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ 10:10 น. วันที่ 20/10/2569" in answer.text
 
 
+@pytest.mark.parametrize("question", [
+    "พะเยาแผ่นดินไหวเดือนก่อนไหม",
+    "Did Phayao have earthquakes last month?",
+    "Phayao earthquakes last week",
+    "Did Phayao have an earthquake yesterday?",
+])
+def test_every_period_the_answer_knows_turns_a_place_question_into_the_list(question):
+    assert understand(question, PHAYAO, NOW).intent == "earthquake"
+
+
+def test_quakes_month_before_uses_previous_calendar_month():
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("พะเยาแผ่นดินไหวเดือนก่อนไหม", NOW)
+    assert answer.intent == "earthquake" and "อย่างน้อย 1 ครั้ง" in answer.text and "20/10/2569" in answer.text
+
+
 def test_quake_count_is_exact_when_the_kept_history_covers_the_period():
     answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("พะเยาแผ่นดินไหวเดือนนี้กี่ครั้ง", NOW)
     assert "ตั้งแต่ต้นเดือนนี้: 2 ครั้ง" in answer.text
