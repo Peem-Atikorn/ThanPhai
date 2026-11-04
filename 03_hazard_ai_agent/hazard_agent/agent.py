@@ -491,7 +491,7 @@ class HazardAgent:
                         if kept_from is not None else "ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้")
             gap = (f"{QUAKE_PARTIAL_TH}: {tmd_part} ช่วงก่อนหน้านั้นมีเฉพาะแผ่นดินไหวขนาด 3.5 ขึ้นไปจาก USGS "
                    "จำนวนที่แสดงจึงอาจน้อยกว่าจริง"
-                   if kept_from is None or kept_from - since > timedelta(hours=12) else None)
+                   if kept_from is None or kept_from > since else None)
             if not quakes:
                 message = ("แหล่งข้อมูลแผ่นดินไหวขัดข้อง จึงยังตรวจสอบรายการล่าสุดไม่ได้"
                            if sources_down("tmd_earthquakes", "usgs_earthquakes")
