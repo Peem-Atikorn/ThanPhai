@@ -497,7 +497,9 @@ def generate_explainer_dataset(gazetteer: Gazetteer, areas: list[Area], target_c
             # generator does not fake. Those paths never call the LLM, so there is nothing to learn from them.
             stats["skip:agent_left_district_path"] += 1
             continue
-        if "facts" not in captured:
+        # Only district answers: the agent also sends data answers (waves, storms, dams, ...) to the explainer,
+        # but their facts have no hazard lines, so the answers built here would be empty or wrong.
+        if "facts" not in captured or result.intent not in ("risk", "explain"):
             stats[f"skip:agent_intent_{result.intent}"] += 1
             continue
         facts_text = captured["facts"]
