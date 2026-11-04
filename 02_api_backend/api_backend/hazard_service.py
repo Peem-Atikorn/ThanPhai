@@ -60,6 +60,9 @@ CROSS_BORDER_KM = 100
 QUAKE_WINDOW = timedelta(hours=24)
 QUAKE_LIST_WINDOW = timedelta(days=7)
 NEAR_QUAKE_KM = 30  # an epicentre this close to a district centre is reported there, however weak the shaking
+# Observation that decides which district speaks for a province when several share its worst level.
+PROVINCE_TIEBREAK = {"earthquake": "quake_mmi_24h", "rain_storm": "rain_24h", "flood": "above_bank_m",
+                     "air_quality": "pm25_24h", "heat": "heat_index_max_24h", "marine": "wave_height_max_24h", "fire": "hotspots_24h"}
 # A cyclone this close (current position or forecast track) is mentioned on the district card even when its
 # wind areas do not reach the district.
 CYCLONE_NOTICE_KM = 800
@@ -1089,11 +1092,18 @@ class HazardService:
         if len(codes) == 1:
             return self.decisions.get(codes[0], [])
         order = {None: -1, "NORMAL": 0, "WATCH": 1, "WARNING": 2, "CRITICAL": 3}
+
+        def rank(item: dict) -> tuple:
+            # Same level in several districts: the one with the strongest measured value speaks for the province,
+            # so an M2.3 next to อ.ปง is not hidden behind the first district of จ.พะเยา.
+            value = item.get("observations", {}).get(PROVINCE_TIEBREAK.get(item["hazard"], ""))
+            return order[item["level"]], value if isinstance(value, (int, float)) else float("-inf")
+
         worst: dict[str, dict] = {}
         for code in codes:
             for item in self.decisions.get(code, []):
                 current = worst.get(item["hazard"])
-                if current is None or order[item["level"]] > order[current["level"]]:
+                if current is None or rank(item) > rank(current):
                     worst[item["hazard"]] = {**item, "worst_area": code}
         return list(worst.values())
 

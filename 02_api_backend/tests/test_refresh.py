@@ -408,6 +408,10 @@ def test_small_quake_centred_next_to_a_district_is_reported_there_at_normal_leve
     assert "ต.ปง อ.ปง จ.พะเยา" in near["notices"][-1] and "ใกล้จุดศูนย์กลาง" in near["notices"][-1]
     far = next(i for i in decisions[hat_yai] if i["hazard"] == "earthquake")
     assert "quake_magnitude" not in far["observations"]
+    # The province answer must come from อ.ปง, not from the first district at the same NORMAL level.
+    svc.decisions = decisions
+    phayao = next(i for i in svc.get_assessments(pong[:4]) if i["hazard"] == "earthquake")
+    assert phayao["worst_area"] == pong and phayao["observations"]["quake_magnitude"] == 2.3
 
 
 def test_earthquake_is_no_data_when_both_feeds_fail(base_service):
