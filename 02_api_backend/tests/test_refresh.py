@@ -390,6 +390,30 @@ def test_earthquake_shaking_per_district(base_service):
     assert [q["magnitude"] for q in svc._last_quakes] == [6.0, 7.0]  # the week list keeps both
 
 
+def test_small_quake_centred_next_to_a_district_is_reported_there_at_normal_level(base_service):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    pong = next(a.code for a in svc.gazetteer.resolve("อำเภอปง"))
+    hat_yai = next(a.code for a in svc.gazetteer.resolve("อำเภอหาดใหญ่"))
+    now = datetime.now(timezone.utc)
+    # TMD, 4 Nov 2026 14:52: M 2.3, 2 km deep at ต.ปง, felt by villagers; MMI ~1.4 at the district centre 13 km away.
+    quake = SourceRecord(source="tmd_earthquakes", variable="earthquake", value=2.3, unit="magnitude", lat=19.127, lon=100.293,
+                         observed_at=now - timedelta(hours=1), fetched_at=now, attribution="t",
+                         extra={"depth_km": 2.0, "place_th": "ต.ปง อ.ปง จ.พะเยา"})
+    decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": [],
+                                    "tmd_earthquakes": [quake], "usgs_earthquakes": []}, [])
+    near = next(i for i in decisions[pong] if i["hazard"] == "earthquake")
+    assert near["level"] == "NORMAL" and near["observations"]["quake_magnitude"] == 2.3
+    assert "ต.ปง อ.ปง จ.พะเยา" in near["notices"][-1] and "ใกล้จุดศูนย์กลาง" in near["notices"][-1]
+    far = next(i for i in decisions[hat_yai] if i["hazard"] == "earthquake")
+    assert "quake_magnitude" not in far["observations"]
+    # The province answer must come from อ.ปง, not from the first district at the same NORMAL level.
+    svc.decisions = decisions
+    phayao = next(i for i in svc.get_assessments(pong[:4]) if i["hazard"] == "earthquake")
+    assert phayao["worst_area"] == pong and phayao["observations"]["quake_magnitude"] == 2.3
+
+
 def test_earthquake_is_no_data_when_both_feeds_fail(base_service):
     svc = stale_copy(base_service)
     decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": [],

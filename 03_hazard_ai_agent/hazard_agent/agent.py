@@ -243,7 +243,8 @@ def _reason(item: dict) -> str:
             parts.append(f"แผ่นดินไหวขนาด {obs['quake_magnitude']:.1f} ห่างราว {obs['quake_distance_km']:.0f} กม. "
                          f"ประเมินแรงสั่นที่นี่ระดับ {obs['quake_mmi_24h']:.0f} (มาตราเมอร์คัลลี)")
         else:
-            parts.append("ไม่มีแผ่นดินไหวใน 24 ชม. ที่ผ่านมา")
+            # Not "no earthquake": small quakes far away are left out, so say what was checked.
+            parts.append("ไม่มีแผ่นดินไหวใกล้พื้นที่นี้หรือที่ส่งแรงสั่นถึงที่นี่ใน 24 ชม. ที่ผ่านมา")
     if obs.get("wave_height_max_24h") is not None:
         parts.append(f"คลื่นสูงสุดใน 24 ชม. ข้างหน้าราว {obs['wave_height_max_24h']:.1f} เมตร")
     if obs.get("cyclone_wind_kmh"):

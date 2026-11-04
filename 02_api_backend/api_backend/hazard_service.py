@@ -59,6 +59,10 @@ CROSS_BORDER_KM = 100
 # Earthquakes count for district levels for a day; the list endpoint shows a week.
 QUAKE_WINDOW = timedelta(hours=24)
 QUAKE_LIST_WINDOW = timedelta(days=7)
+NEAR_QUAKE_KM = 30  # an epicentre this close to a district centre is reported there, however weak the shaking
+# Observation that decides which district speaks for a province when several share its worst level.
+PROVINCE_TIEBREAK = {"earthquake": "quake_mmi_24h", "rain_storm": "rain_24h", "flood": "above_bank_m",
+                     "air_quality": "pm25_24h", "heat": "heat_index_max_24h", "marine": "wave_height_max_24h", "fire": "hotspots_24h"}
 # A cyclone this close (current position or forecast track) is mentioned on the district card even when its
 # wind areas do not reach the district.
 CYCLONE_NOTICE_KM = 800
@@ -713,14 +717,19 @@ class HazardService:
             best = None
             for r in recent:
                 value, km = shaking_at(area.lat, area.lon, r.lat, r.lon, r.value, r.extra.get("depth_km"))
-                if best is None or value > best[0]:
+                # Strongest shaking first; on a tie (small quakes all floor at MMI 1) the closest epicentre.
+                if best is None or (value, -km) > (best[0], -best[1]):
                     best = (value, km, r)
-            if best is None or best[0] < 2:
-                continue  # nothing felt here (MMI 1): no quake details, so far-away small quakes do not clutter answers
+            # Far-away small quakes would clutter answers, but one centred in or next to the district is news there
+            # even when the estimate at the district centre is below MMI 2 (Pong, Phayao, M2.3 on 4 Nov 2026: felt
+            # by villagers, MMI 1.4 at the centroid 13 km away). The level still comes from the MMI rules.
+            if best is None or (best[0] < 2 and best[1] > NEAR_QUAKE_KM):
+                continue
             value, km, r = best
             out[code] = {"quake_mmi_24h": round(value, 1), "quake_magnitude": r.value, "quake_distance_km": round(km),
                          "_label": mmi_label_th(value), "_place": r.extra.get("place_th") or r.extra.get("place") or "",
-                         "_time": r.observed_at}
+                         "_time": r.observed_at,
+                         "_epicentre_mmi": shaking_at(r.lat, r.lon, r.lat, r.lon, r.value, r.extra.get("depth_km"))[0]}
         return out
 
     def _load_landslide_traces(self) -> dict[str, int] | None:
@@ -788,8 +797,15 @@ class HazardService:
     @staticmethod
     def _quake_notice(q: dict) -> str:
         when = q["_time"].astimezone(BANGKOK).strftime("%d/%m %H:%M")
-        return (f"แผ่นดินไหวขนาด {q['quake_magnitude']:.1f} {q['_place']} ห่างราว {q['quake_distance_km']} กม. "
+        text = (f"แผ่นดินไหวขนาด {q['quake_magnitude']:.1f} {q['_place']} ห่างราว {q['quake_distance_km']} กม. "
                 f"เมื่อ {when} น. ประเมินแรงสั่นที่นี่ระดับ {q['quake_mmi_24h']:.0f} ({q['_label']})")
+        from risk_models.earthquake import mmi_label_th
+
+        epicentre = q.get("_epicentre_mmi")
+        if epicentre is not None and round(epicentre) > round(q["quake_mmi_24h"]):
+            # A small quake nearby: weak at the district centre, but people close to the epicentre may feel it.
+            text += f" · ใกล้จุดศูนย์กลางประเมินระดับ {epicentre:.0f} ({mmi_label_th(epicentre)})"
+        return text
 
     @staticmethod
     def _regional_rows(records) -> list[dict]:
@@ -1076,11 +1092,18 @@ class HazardService:
         if len(codes) == 1:
             return self.decisions.get(codes[0], [])
         order = {None: -1, "NORMAL": 0, "WATCH": 1, "WARNING": 2, "CRITICAL": 3}
+
+        def rank(item: dict) -> tuple:
+            # Same level in several districts: the one with the strongest measured value speaks for the province,
+            # so an M2.3 next to อ.ปง is not hidden behind the first district of จ.พะเยา.
+            value = item.get("observations", {}).get(PROVINCE_TIEBREAK.get(item["hazard"], ""))
+            return order[item["level"]], value if isinstance(value, (int, float)) else float("-inf")
+
         worst: dict[str, dict] = {}
         for code in codes:
             for item in self.decisions.get(code, []):
                 current = worst.get(item["hazard"])
-                if current is None or order[item["level"]] > order[current["level"]]:
+                if current is None or rank(item) > rank(current):
                     worst[item["hazard"]] = {**item, "worst_area": code}
         return list(worst.values())
 

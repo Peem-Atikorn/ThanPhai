@@ -27,12 +27,15 @@ export default function EventsPanel({ revision, quakes: showQuakes = true }: {
             .catch(() => !cancelled && setError(true));
         return () => { cancelled = true; };
     }, [revision]);
-    const felt = quakes?.filter((q) => q.magnitude >= 2.5).slice(0, 12) ?? [];
+    // Quakes in Thailand are listed at any size (an M2.3 under Phayao is felt there and makes the news);
+    // abroad, only M2.5 and up. TMD names a country for quakes abroad; USGS writes "…, Thailand".
+    const inThailand = (q: Earthquake) => q.place_th ? !/ประเทศ|มณฑล/.test(q.place_th) : /thailand/i.test(q.place ?? "");
+    const felt = quakes?.filter((q) => q.magnitude >= 2.5 || inThailand(q)).slice(0, 12) ?? [];
     return (<section className="media-panel events-panel" aria-label={tr("แผ่นดินไหวและเหตุการณ์ในภูมิภาค")}>
       {tr(error && <p className="data-notice">{tr("โหลดรายการไม่สำเร็จ ลองใหม่ภายหลัง")}</p>)}
       {tr(showQuakes && <>
       <h3><Icon name="earthquake"/>{tr("แผ่นดินไหว 7 วันล่าสุด")}</h3>
-      {tr(quakes && felt.length === 0 && <p className="source-note">{tr("ไม่มีแผ่นดินไหวขนาด 2.5 ขึ้นไปในภูมิภาค")}</p>)}
+      {tr(quakes && felt.length === 0 && <p className="source-note">{tr("ไม่มีแผ่นดินไหวในประเทศไทย หรือขนาด 2.5 ขึ้นไปในภูมิภาค")}</p>)}
       <ul className="event-list">
         {tr(felt.map((q) => (<li key={q.id ?? q.time}>
             <span className={"event-mag " + (q.magnitude >= 6 ? "level-CRITICAL" : q.magnitude >= 5 ? "level-WARNING" : q.magnitude >= 4 ? "level-WATCH" : "level-NORMAL")}>{tr(q.magnitude.toFixed(1))}</span>
