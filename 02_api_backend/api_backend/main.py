@@ -295,7 +295,7 @@ async def air_stations() -> dict:
 async def earthquakes() -> dict:
     """Earthquakes of the last 7 days around Thailand (TMD, plus USGS for events TMD does not list), newest first."""
     svc = await fresh_service()
-    return {"earthquakes": svc.quakes, **meta(svc)}
+    return {"earthquakes": svc.get_earthquakes(days=7), **meta(svc)}
 
 
 @app.get("/v1/regional-events")

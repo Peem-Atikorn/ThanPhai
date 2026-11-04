@@ -25,6 +25,7 @@ def stale_copy(svc: HazardService) -> HazardService:
     svc.decisions = {code: OLD for code in svc.amphoe_codes}
     svc.updated_at = datetime.now(timezone.utc) - timedelta(hours=1)
     svc._background = None
+    svc._tmd_quakes, svc._tmd_last_ok, svc._tmd_gaps = {}, None, []  # earthquakes kept by earlier tests
     svc._lock = asyncio.Lock()
     # Fresh forecasts, so fresh_service() does not start real Open-Meteo jobs in the background.
     svc.grid_updated_at = {name: datetime.now(timezone.utc) for name in svc.grid_updated_at}
@@ -852,3 +853,24 @@ def test_tmd_warning_over_the_new_year_without_years_stays_in_force(base_service
     code = next(a.code for a in svc.gazetteer.resolve("อำเภอหาดใหญ่"))
     rain = next(i for i in decisions[code] if i["hazard"] == "rain_storm")
     assert ("OFFICIAL_WARNING_REGIONAL" in rain["rule_ids"]) is active
+
+
+def test_tmd_quakes_are_kept_after_they_leave_the_feed_and_saved_for_a_restart(base_service, tmp_path):
+    from thanphai_shared import SourceRecord
+
+    svc = stale_copy(base_service)
+    svc._quake_file = tmp_path / "tmd.json"
+    now = datetime.now(timezone.utc)
+
+    def quake(id_: str, days_ago: float) -> SourceRecord:
+        return SourceRecord(source="tmd_earthquakes", variable="earthquake", value=2.3, unit="magnitude", lat=19.1, lon=100.3,
+                            station_id=f"tmd:{id_}", observed_at=now - timedelta(days=days_ago), fetched_at=now, attribution="t",
+                            extra={"depth_km": 2.0, "place_th": "ต.ปง อ.ปง จ.พะเยา"})
+
+    svc._quake_shaking([quake("1", 4), quake("old", 70)], [])
+    # TMD's feed has moved on (only its last 10 events): the event from 4 days ago must stay.
+    svc._quake_shaking([quake("2", 0.1)], [])
+    assert [q["id"] for q in svc._last_quakes] == ["tmd:2", "tmd:1"]  # the 70-day-old one is past the 62 days kept
+    svc.quakes = svc._last_quakes
+    assert [q["id"] for q in svc.get_earthquakes(days=2)] == ["tmd:2"]
+    assert {r.station_id for r in svc._load_quake_history().values()} == {"tmd:1", "tmd:2"}

@@ -52,9 +52,12 @@ services:
     environment:
       DATA_DIR: /data/processed
       CORS_ORIGINS: http://localhost:3000
+      QUAKE_HISTORY_FILE: /data/state/tmd_earthquakes.json
     volumes:
       # Built by scripts/build_admin_areas.py from the HDX download.
       - ./data/processed:/data/processed:ro
+      # TMD's feed lists only its last 10 earthquakes; the API keeps a month of them here across restarts.
+      - api-state:/data/state
     ports:
       - "127.0.0.1:8002:8002"
 
@@ -79,3 +82,4 @@ services:
 
 volumes:
   pgdata:
+  api-state:

@@ -313,3 +313,90 @@ def test_unavailable_source_is_reported_instead_of_claiming_no_observations():
 
     answer = HazardAgent(GAZ, UnavailableTools()).ask("สถานีไหนมีความเค็มสูงสุด", NOW)
     assert "ขัดข้อง" in answer.text and "ยังตรวจสอบค่าความเค็มล่าสุดไม่ได้" in answer.text
+
+
+class MonthOfQuakes(DataTools):
+    def get_earthquakes(self):
+        return [
+            {"magnitude": 2.3, "place_th": "ต.ปง อ.ปง จ.พะเยา", "time": "2026-11-04T01:52:26+00:00", "lat": 19.13, "lon": 100.29,
+             "source": "กรมอุตุนิยมวิทยา"},
+            {"magnitude": 3.1, "place_th": "ประเทศเวียดนาม", "time": "2026-11-04T06:41:17+00:00", "lat": 15.0, "lon": 108.1,
+             "source": "กรมอุตุนิยมวิทยา"},
+            {"magnitude": 2.6, "place_th": "ต.ผาช้างน้อย อ.ปง จ.พะเยา", "time": "2026-11-01T03:10:00+00:00", "lat": 19.2, "lon": 100.4,
+             "source": "กรมอุตุนิยมวิทยา"},
+            {"magnitude": 2.0, "place_th": "อ.ปง จ.พะเยา", "time": "2026-10-20T03:10:00+00:00", "lat": 19.2, "lon": 100.4,
+             "source": "กรมอุตุนิยมวิทยา"},
+        ]
+
+
+PHAYAO = Gazetteer([*GAZ.areas, Area("TH56", "province", "พะเยา", "Phayao", None, 19.2, 100.2, 6300)])
+
+
+def test_quakes_this_month_in_a_province_lists_every_nearby_event_since_the_first():
+    question = "พะเยาแผ่นดินไหวที่ผ่านมาในเดือนนี้"
+    assert understand(question, PHAYAO, NOW).intent == "earthquake"
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask(question, NOW)
+    assert "ตั้งแต่ต้นเดือนนี้: 2 ครั้ง" in answer.text
+    assert "1/11/2569" in answer.text and "4/11/2569" in answer.text
+    assert "เวียดนาม" not in answer.text and "20/10/2569" not in answer.text  # far away / last month
+
+
+def test_quake_count_question_with_mai_still_gets_the_list():
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("สัปดาห์นี้พะเยามีแผ่นดินไหวกี่ครั้ง", NOW)
+    assert answer.intent == "earthquake" and "1 ครั้ง" in answer.text
+    assert "4/11/2569" in answer.text and "1/11/2569" not in answer.text
+
+
+def test_quakes_last_month_uses_previous_calendar_month():
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("พะเยาแผ่นดินไหวเดือนที่แล้วกี่ครั้ง", NOW)
+
+    assert "1 ครั้ง" in answer.text
+    assert "20/10/2569" in answer.text
+    assert "1/11/2569" not in answer.text and "4/11/2569" not in answer.text
+    # The kept TMD history starts on 20 Oct, after the month began: the count is partial, and the answer says so.
+    assert "อย่างน้อย 1 ครั้ง" in answer.text
+    assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ 10:10 น. วันที่ 20/10/2569" in answer.text
+
+
+@pytest.mark.parametrize("question", [
+    "พะเยาแผ่นดินไหวเดือนก่อนไหม",
+    "Did Phayao have earthquakes last month?",
+    "Phayao earthquakes last week",
+    "Did Phayao have an earthquake yesterday?",
+])
+def test_every_period_the_answer_knows_turns_a_place_question_into_the_list(question):
+    assert understand(question, PHAYAO, NOW).intent == "earthquake"
+
+
+def test_quakes_month_before_uses_previous_calendar_month():
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("พะเยาแผ่นดินไหวเดือนก่อนไหม", NOW)
+    assert answer.intent == "earthquake" and "อย่างน้อย 1 ครั้ง" in answer.text and "20/10/2569" in answer.text
+
+
+def test_quake_count_is_exact_when_the_kept_history_covers_the_period():
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("พะเยาแผ่นดินไหวเดือนนี้กี่ครั้ง", NOW)
+    assert "ตั้งแต่ต้นเดือนนี้: 2 ครั้ง" in answer.text
+    assert "อย่างน้อย" not in answer.text and "ข้อมูลยังไม่ครบ" not in answer.text
+
+
+def test_quake_count_is_partial_when_no_tmd_history_is_kept():
+    class UsgsOnly(DataTools):
+        def get_earthquakes(self):
+            return [{"magnitude": 4.1, "place": "Myanmar", "time": "2026-11-03T03:10:00+00:00", "lat": 19.5, "lon": 100.0,
+                     "source": "USGS"}]
+
+    answer = HazardAgent(PHAYAO, UsgsOnly()).ask("พะเยาแผ่นดินไหวสัปดาห์นี้กี่ครั้ง", NOW)
+    assert "อย่างน้อย 1 ครั้ง" in answer.text
+    assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้" in answer.text
+
+
+def test_quake_count_is_partial_when_the_period_overlaps_a_tmd_gap():
+    class MonthWithGap(MonthOfQuakes):
+        def get_quake_gaps(self):
+            return [{"start": "2026-11-02T00:00:00+00:00", "end": "2026-11-03T00:00:00+00:00"}]
+
+    answer = HazardAgent(PHAYAO, MonthWithGap()).ask("พะเยาแผ่นดินไหวเดือนนี้กี่ครั้ง", NOW)
+    assert "อย่างน้อย 2 ครั้ง" in answer.text
+    assert "ข้อมูลยังไม่ครบช่วงที่ถาม: ข้อมูลกรมอุตุฯ อาจขาดช่วง 07:00 น. วันที่ 2/11/2569" in answer.text
+    # Last month does not overlap the gap: no gap note from it.
+    assert "อาจขาดช่วง" not in HazardAgent(PHAYAO, MonthWithGap()).ask("พะเยาแผ่นดินไหวเดือนที่แล้วกี่ครั้ง", NOW).text

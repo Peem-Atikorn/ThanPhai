@@ -43,7 +43,8 @@ SOURCE_TH = {
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
 # Answers built from real records that the LLM may reword (validate() keeps every number and level).
 # Not media (links must stay exact), prepare (official guidance), emergency, clarify or sources.
-REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history", "river", "earthquake", "storms",
+# Earthquake lists are not reworded: a rewrite dropped the period and the note on how far the kept TMD history goes.
+REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history", "river", "storms",
                    "waves", "water_quality", "pm25_stations", "fire_hotspots"}
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
@@ -86,6 +87,7 @@ class HazardTools(Protocol):
     def get_official_warnings(self) -> list[dict]: ...
     def get_sources(self) -> dict[str, dict]: ...
     def get_earthquakes(self) -> list[dict]: ...
+    def get_quake_gaps(self) -> list[dict]: ...  # optional: spans the kept TMD history may miss
     def get_storms(self) -> list[dict]: ...
     def get_cyclones(self) -> list[dict]: ...
     def get_waves(self) -> list[dict]: ...
@@ -128,6 +130,55 @@ def _window_th(u: Understanding) -> str:
     if e - s <= timedelta(days=1):
         return f"วันที่ {s.day}/{s.month}"
     return f"ช่วง {s.day}/{s.month}–{e.day}/{e.month}"
+
+
+QUAKE_NEAR_KM = 100
+QUAKE_LIST_MAX = 10
+QUAKE_PARTIAL_TH = "ข้อมูลยังไม่ครบช่วงที่ถาม"
+
+
+def _parse_time(value: str | None) -> datetime | None:
+    try:
+        when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return when.replace(tzinfo=BANGKOK) if when.tzinfo is None else when
+
+
+def _km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+
+    a = sin(radians(lat2 - lat1) / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371 * asin(sqrt(a))
+
+
+def _quake_period(question: str, now: datetime) -> tuple[datetime, datetime, str]:
+    """Bounds of the earthquake period asked about, and its Thai label (default: past 7 days)."""
+    lowered = question.lower()
+    local = now.astimezone(BANGKOK)
+    today = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    match = re.search(r"(\d+)\s*(วัน|days?)", lowered)
+    if match:
+        days = min(int(match.group(1)), 62)  # the backend keeps 62 days
+        return local - timedelta(days=days), local, f" ย้อนหลัง {days} วัน"
+    if "เดือนนี้" in lowered or "this month" in lowered:
+        return today.replace(day=1), local, " ตั้งแต่ต้นเดือนนี้"
+    if any(w in lowered for w in ("เดือนที่แล้ว", "เดือนก่อน", "last month")):
+        first_of_month = today.replace(day=1)
+        previous_month = first_of_month - timedelta(days=1)
+        return previous_month.replace(day=1), first_of_month, " เดือนที่แล้ว"
+    if any(w in lowered for w in ("สัปดาห์นี้", "อาทิตย์นี้", "this week")):
+        return today - timedelta(days=today.weekday()), local, " ตั้งแต่ต้นสัปดาห์นี้"
+    if any(w in lowered for w in ("สัปดาห์ที่แล้ว", "สัปดาห์ก่อน", "อาทิตย์ที่แล้ว", "อาทิตย์ก่อน", "last week")):
+        this_week = today - timedelta(days=today.weekday())
+        return this_week - timedelta(days=7), this_week, " สัปดาห์ที่แล้ว"
+    if any(w in lowered for w in ("เดือน", "month")):
+        return local - timedelta(days=30), local, " ย้อนหลัง 30 วัน"
+    if any(w in lowered for w in ("วันนี้", "today")):
+        return today, local, " วันนี้"
+    if any(w in lowered for w in ("เมื่อวาน", "yesterday")):
+        return today - timedelta(days=1), today, " เมื่อวาน"
+    return local - timedelta(days=7), local, " ย้อนหลัง 7 วัน"
 
 
 def _time_th(value: str | None) -> str | None:
@@ -415,13 +466,48 @@ class HazardAgent:
             return [station for station in stations if province(station) in wanted], label
 
         if intent == "earthquake":
-            quakes = rows("get_earthquakes")[:5]
+            since, until, period = _quake_period(question, now)
+            all_quakes = rows("get_earthquakes")
+            quakes = [q for q in all_quakes if since <= (_parse_time(q.get("time")) or since) < until]
+            where = ""
+            if u.areas:
+                # Province or district centre: events within QUAKE_NEAR_KM of it (a province is up to ~150 km across).
+                area = u.areas[0]
+                near = []
+                for q in quakes:
+                    if q.get("lat") is None or q.get("lon") is None:
+                        continue
+                    km = _km(area.lat, area.lon, q["lat"], q["lon"])
+                    if km <= QUAKE_NEAR_KM:
+                        near.append({**q, "distance_km": round(km)})
+                quakes, where = near, f"ใกล้{_area_label(area, self.gazetteer)} (ภายใน {QUAKE_NEAR_KM} กม.)"
+            total = len(quakes)
+            quakes = quakes[:QUAKE_LIST_MAX if u.areas else 5]
+            # TMD lists only its last 10 events, so ThanPhai keeps what it has seen (the backend keeps 62 days and
+            # fetches USGS for the same span, so USGS covers every period asked about). The count is partial when
+            # the kept TMD history starts after the period begins, or when the period overlaps a span the backend
+            # may have missed (TMD or ThanPhai down): say so and give the dates.
+            tmd_times = [t for q in all_quakes if q.get("source") == "กรมอุตุนิยมวิทยา" and (t := _parse_time(q.get("time")))]
+            kept_from = min(tmd_times) if tmd_times else None
+            missed = [(s, e) for g in rows("get_quake_gaps")
+                      if (s := _parse_time(g.get("start"))) and (e := _parse_time(g.get("end"))) and s < until and e > since]
+            usgs_only = "ช่วงนั้นมีเฉพาะแผ่นดินไหวขนาด 3.5 ขึ้นไปจาก USGS จำนวนที่แสดงจึงอาจน้อยกว่าจริง"
+            gap = None
+            if kept_from is None or kept_from > since:
+                tmd_part = (f"ข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้เริ่มตั้งแต่ {_time_th(kept_from.isoformat())}"
+                            if kept_from is not None else "ยังไม่มีข้อมูลกรมอุตุฯ ที่ทันภัยเก็บไว้")
+                gap = f"{QUAKE_PARTIAL_TH}: {tmd_part} {usgs_only.replace('ช่วงนั้น', 'ช่วงก่อนหน้านั้น')}"
+            elif missed:
+                spans = ", ".join(f"{_time_th(s.isoformat())} ถึง {_time_th(e.isoformat())}" for s, e in missed)
+                gap = f"{QUAKE_PARTIAL_TH}: ข้อมูลกรมอุตุฯ อาจขาดช่วง {spans} {usgs_only}"
             if not quakes:
                 message = ("แหล่งข้อมูลแผ่นดินไหวขัดข้อง จึงยังตรวจสอบรายการล่าสุดไม่ได้"
                            if sources_down("tmd_earthquakes", "usgs_earthquakes")
-                           else "ไม่พบรายการแผ่นดินไหวในข้อมูลย้อนหลัง 7 วันจาก TMD/USGS")
-                return finish([message], [], ["กรมอุตุนิยมวิทยา (TMD)", "USGS"])
-            lines = ["แผ่นดินไหวล่าสุดในข้อมูลย้อนหลัง 7 วัน:"]
+                           else f"ไม่พบแผ่นดินไหว{where or 'ในข้อมูล'}{period}จาก TMD/USGS")
+                return finish([message] + ([gap] if gap else []), [], ["กรมอุตุนิยมวิทยา (TMD)", "USGS"])
+            lines = [f"แผ่นดินไหว{where}{period}: {'อย่างน้อย ' if gap else ''}{total} ครั้ง"
+                     + (f" (แสดง {len(quakes)} ครั้งล่าสุด)" if total > len(quakes) else "")
+                     if u.areas else f"แผ่นดินไหวล่าสุด{period}:"]
             if sources_down("tmd_earthquakes", "usgs_earthquakes"):
                 lines.append("แหล่งข้อมูลแผ่นดินไหวบางแห่งขัดข้อง รายการอาจไม่ครบ")
             sources = []
@@ -433,6 +519,10 @@ class HazardAgent:
                 sources.append(source)
                 lines.append(f"• ขนาด {magnitude:g}" if isinstance(magnitude, (int, float)) else "• ไม่ระบุขนาด")
                 lines[-1] += f" · {place} · {time or 'เวลาไม่ระบุ'}"
+                if q.get("distance_km") is not None:
+                    lines[-1] += f" · ห่างราว {q['distance_km']} กม."
+            if gap:
+                lines.append(gap)
             return finish(lines, quakes, sources)
 
         if intent == "storms":
