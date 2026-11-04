@@ -68,7 +68,7 @@
 /* Conversation: only the log scrolls (it shrinks to fit the panel), so the wheel always moves the messages
    and the heading and input box stay in view. Two nested scrollers sent the wheel to the panel instead. */
 .thanphai-mascot .mascot-chat > * { flex-shrink: 0; }
-.thanphai-mascot .chat-log { flex: 0 1 auto; min-height: 96px; max-height: min(46vh, 420px); margin-bottom: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.thanphai-mascot .chat-log { flex: 0 1 auto; min-height: 96px; margin-bottom: 12px; overflow-y: auto; overscroll-behavior: contain; }
 .thanphai-mascot .chat-turn + .chat-turn { margin-top: 12px; }
 .thanphai-mascot .chat-question { width: fit-content; max-width: 88%; margin: 0 0 0 auto; padding: 7px 11px; border-radius: 12px 12px 4px 12px; background: #a8b77833; color: var(--mascot-text); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .thanphai-mascot .chat-turn .answer-text { margin-top: 6px; padding-top: 6px; border-top: 0; }
