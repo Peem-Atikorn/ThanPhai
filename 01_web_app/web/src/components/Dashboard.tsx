@@ -12,6 +12,8 @@ import RainCloudSkeleton from "@/components/RainCloudSkeleton";
 import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
 import EventsPanel from "@/components/EventsPanel";
+import StormsPanel from "@/components/StormsPanel";
+import AreaWarnings from "@/components/AreaWarnings";
 import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
@@ -689,7 +691,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const counts = LEVELS.map((level) => ({ ...level, n: displayedLayer?.features.filter((f) => (f.properties?.level ?? "NONE") === level.id).length ?? 0 }));
     const summaryCounts = LEVELS.map(level => ({ ...level, n: summaryLayer?.features.filter(f => (f.properties?.level ?? "NONE") === level.id).length ?? 0 }));
     const warningCount = counts.filter((l) => l.id === "CRITICAL" || l.id === "WARNING").reduce((sum, l) => sum + l.n, 0);
-    const warnings = (area?.official_warnings ?? []).filter(w => hazard === "overview" || w.hazards.includes(hazard));
     const assessments = (area?.assessments ?? []).filter(a => hazard === "overview" || a.hazard === hazard)
         .sort((a, b) => LEVELS.findIndex(l => l.id === (a.level ?? "NONE")) - LEVELS.findIndex(l => l.id === (b.level ?? "NONE")));
     const locationScope = place && <div className="location-scope"><Icon name="pin"/><div><strong>{tr(prefix(place.level))}{tr(place.name_th)}</strong><small>{tr("ข้อมูล")}{tr(itemTh(currentItem))}{tr("ระดับจังหวัด \u00B7 จ.")}{tr(areaProvince?.name)}</small></div><button type="button" onClick={clearArea}>{tr("ดูทั่วประเทศ")}</button></div>;
@@ -824,6 +825,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(!!layer?.meta.degraded_services.length && <p className="data-notice">{tr("ข้อมูลบางแหล่งไม่พร้อมใช้งาน: ")}{tr(layer.meta.degraded_services.join(", "))}</p>)}
           </div>)}
           {tr(view === "hazard" && hazard === "rain_storm" && <div id="weather-images" className="media-anchor"><MediaPanel revision={revision}/></div>)}
+          {view === "hazard" && hazard === "tropical_cyclone" && <StormsPanel revision={revision}/>}
           {tr(view === "hazard" && (hazard === "earthquake" || hazard === "tropical_cyclone") && <EventsPanel revision={revision} quakes={hazard === "earthquake"}/>)}
           </div></details>
         </section>
@@ -836,7 +838,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(areaStatus === "loading" ? <div className="empty-area" role="status"><span className="spinner"/><h3>{tr("กำลังดูข้อมูลพื้นที่\u2026")}</h3><p>{tr("รวบรวมระดับความเสี่ยงและข้อมูลล่าสุด")}</p></div> : areaStatus === "error" ? <div className="empty-area" role="alert"><Icon name="info"/><h3>{tr("ยังเปิดข้อมูลพื้นที่ไม่ได้")}</h3><p>{tr("กรุณาลองใหม่ หรือเลือกพื้นที่อื่น")}</p><button className="secondary-button" onClick={() => selectedCode.current && select(selectedCode.current, selected)}>{tr("ลองใหม่")}</button></div> : area ? <>
               <div className="area-title"><span className="area-icon"><Icon name="pin"/></span><div><h2>{tr(prefix(area.area.level))}{tr(area.area.name_th)}</h2><p>{tr(area.area.parents.join(" · ") || "ประเทศไทย")}</p></div><button type="button" className="text-button area-reset" onClick={clearArea}>{tr("ดูทั่วประเทศ")}</button></div>
               {tr(area.area.level === "province" && <p className="data-notice">{tr("ระดับจังหวัดแสดงความเสี่ยงสูงสุดของอำเภอในจังหวัด")}</p>)}
-              {tr(warnings.length > 0 && <div className="official-warning"><strong><Icon name="info"/>{tr("ประกาศทางการ \u00B7 กรมอุตุนิยมวิทยา")}</strong><ul>{tr(warnings.map((w) => <li key={w.title}>{tr(w.url ? <a href={w.url} target="_blank" rel="noreferrer">{tr(w.title)}</a> : w.title)}</li>))}</ul><small>{tr("ประกาศระดับประเทศ โปรดตรวจสอบพื้นที่ที่ระบุในประกาศ")}</small></div>)}
+              <AreaWarnings warnings={area.official_warnings} code={area.area.code} hazard={hazard} assessments={assessments}/>
               <ul className="assessment-list">{tr(assessments.map((assessment) => {
                 const info = levelInfo(assessment.level);
                 const reasons = Object.entries(assessment.observations).map(([key, value]) => describeObservation(key, value)).filter(Boolean);

@@ -50,10 +50,76 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
 
 (async () => {
   const lib = load('@/lib/api');
+  const { areaWarnings } = load('@/lib/area-warnings');
+  const notice = { title: 'ต้นฉบับประกาศ', hazards: ['rain_storm', 'flood'], provinces: ['TH50', 'TH90'],
+    provinces_by_hazard: { rain_storm: ['TH50'], flood: ['TH90'] },
+    impact_from: '2026-11-05', impact_to: '2026-11-09',
+    impact_by_hazard: { rain_storm: { TH50: ['2026-11-05', '2026-11-07'] } } };
+  const notices = (w, code = 'TH5001', hazard = 'overview', today = '2026-11-04') => areaWarnings([w], code, hazard, today);
+  assert.equal(notices(notice, 'TH1301').length, 0, 'Warnings from other provinces are hidden');
+  assert.equal(notices(notice, 'TH5001', 'flood').length, 0, 'Hazard-specific areas take precedence over all provinces');
+  assert.deepEqual(notices(notice)[0].impacts, [{ hazard: 'rain_storm', from: '2026-11-05', to: '2026-11-07' }]);
+  assert.equal(notices(notice, 'TH50', 'rain_storm').length, 1, 'Province selection uses its own code');
+  assert.equal(notices(notice, 'TH5001', 'overview', '2026-11-08').length, 0, 'Expired provincial periods are hidden');
+  assert.equal(notices({ ...notice, provinces_by_hazard: { rain_storm: [] } }).length, 0, 'Empty areas never fall back to all provinces');
+  assert.equal(notices({ ...notice, provinces_by_hazard: undefined, impact_by_hazard: undefined })[0].impacts[0].to, '2026-11-09', 'Legacy warnings use whole impact dates');
+  const periods = { ...notice, periods_by_hazard: { rain_storm: { TH50: [['2026-11-05', '2026-11-06', false], ['2026-11-08', '2026-11-09', 'heavy_rain']] } } };
+  assert.deepEqual(notices(periods, 'TH5001', 'rain_storm', '2026-11-07')[0].impacts, [{ hazard: 'rain_storm', from: '2026-11-08', to: '2026-11-09' }], 'New period dates override merged legacy dates');
+  const undated = { title: 'ไม่ระบุวัน', hazards: ['flood'], provinces: ['TH50'] };
+  assert.deepEqual(notices(undated)[0].impacts, [{ hazard: 'flood', from: null, to: null }]);
+  const StormsPanel = load('@/components/StormsPanel').default;
+  let stormResponse = { storms: [{ name: 'CHAMPI', time: '2026-10-22T12:00:00+00:00', lat: 21.2, lon: 124.9, wind_kmh: 185, category: { category: 'Cat 3' } }], source: 'สสน.', degraded_services: [] };
+  lib.api.storms = async () => stormResponse;
+  const stormEffects = [], stormApp = instance(StormsPanel, stormEffects);
+  assert(content(stormApp.render({ revision: 0 })).includes('กำลังโหลด'), 'Storm panel has a loading state');
+  let cleanupStorm = stormEffects[0](); await tick();
+  let stormTree = stormApp.render({ revision: 0 });
+  assert(content(stormTree).includes('CHAMPI') && content(stormTree).includes('185') && content(stormTree).includes('Cat 3'));
+  assert(content(stormTree).includes('19:00') || content(stormTree).includes('19.00'), 'UTC storm times show Bangkok time');
+  assert(content(stormTree).includes('21.2') && content(stormTree).includes('124.9'), 'Storm coordinates are visible');
+  cleanupStorm?.();
+  stormResponse = { storms: [], source: 'สสน.', degraded_services: [], inputs_pending: ['thaiwater_storms'] };
+  stormApp.render({ revision: 1 }); cleanupStorm = stormEffects.at(-1)(); await tick();
+  assert(!content(stormApp.render({ revision: 1 })).includes('ไม่มีพายุ'), 'Pending data must not claim no storms'); cleanupStorm?.();
+  stormResponse = { storms: [], source: 'สสน.', degraded_services: [] };
+  stormApp.render({ revision: 2 }); cleanupStorm = stormEffects.at(-1)(); await tick();
+  assert(content(stormApp.render({ revision: 2 })).includes('ไม่มีพายุ')); cleanupStorm?.();
+  for (const metadata of [
+    { inputs_pending: ['air_model', 'heat_model', 'marine_model'], degraded_services: [] },
+    { inputs_pending: [], degraded_services: ['nasa_firms'] },
+  ]) {
+    stormResponse = { storms: [], source: 'สสน.', ...metadata };
+    const effects = [], panel = instance(StormsPanel, effects);
+    panel.render({ revision: 0 }); const cleanup = effects[0](); await tick();
+    const tree = panel.render({ revision: 0 });
+    assert(content(tree).includes('ไม่มีพายุ'), 'Unrelated sources do not hide a successful empty storm list');
+    assert(!content(tree).includes('กำลังรอข้อมูลพายุ') && !content(tree).includes('ข้อมูลพายุบางแหล่งไม่พร้อมใช้งาน'));
+    assert.equal(tree.props['aria-busy'], false, 'Unrelated pending inputs do not mark storms busy'); cleanup?.();
+  }
+  stormResponse = { storms: [], source: 'สสน.', degraded_services: ['thaiwater_storms'] };
+  stormApp.render({ revision: 5 }); cleanupStorm = stormEffects.at(-1)(); await tick();
+  stormTree = stormApp.render({ revision: 5 });
+  assert(content(stormTree).includes('ข้อมูลพายุบางแหล่งไม่พร้อมใช้งาน') && !content(stormTree).includes('ไม่มีพายุ'), 'Storm source failures still show degraded data'); cleanupStorm?.();
+  lib.api.storms = async () => { throw new Error('offline'); };
+  stormApp.render({ revision: 3 }); cleanupStorm = stormEffects.at(-1)(); await tick();
+  assert(content(stormApp.render({ revision: 3 })).includes('โหลดรายชื่อพายุไม่สำเร็จ')); cleanupStorm?.();
+  lib.api.storms = async () => ({ storms: [{ name: 'EMPTY', time: '2026-11-04T00:00:00Z', wind_kmh: null, lat: null, lon: null, category: null }], source: 'สสน.' });
+  stormApp.render({ revision: 4 }); cleanupStorm = stormEffects.at(-1)(); await tick();
+  assert(content(stormApp.render({ revision: 4 })).includes('ความเร็วลม: —'), 'Missing wind is not rendered as zero'); cleanupStorm?.();
+  const AreaWarnings = load('@/components/AreaWarnings').default;
+  const warningTree = AreaWarnings({ warnings: [{ ...notice, impact_from: '2999-11-05', impact_to: '2999-11-09', impact_by_hazard: undefined }], code: 'TH5001', hazard: 'overview', assessments: [{ hazard: 'rain_storm', level: 'CRITICAL', rule_ids: ['OFFICIAL_WARNING_UPCOMING'] }] });
+  assert(content(warningTree).includes(notice.title), 'The original bulletin title is preserved');
+  assert(!content(warningTree).includes('น้ำท่วม'), 'Overview only shows hazards applicable to the chosen province');
+  assert(nodes(warningTree).some(n => n.props.className === 'risk-badge level-CRITICAL'), 'Area warning badge uses the API assessment level');
+  assert(!content(warningTree).includes('ประกาศระดับประเทศ'), 'Selected-area warning no longer claims a nationwide notice');
   lib.api.search = async () => { observed.search++; return [{ code: '13', level: 'province', name_th: 'ปทุมธานี', parents: [], lat: 14, lon: 100 }]; };
   lib.api.area = async () => ({ area: { code: '13', level: 'province', name_th: 'ปทุมธานี', parents: [] }, assessments: [], forecast: [], rivers: [{ status: 'NORMAL' }], river_province: { code: '13', name_th: 'ปทุมธานี' }, official_warnings: [], degraded_services: [] });
   lib.api.boundary = async () => null;
   const Dashboard = load('@/components/Dashboard').default;
+  for (const activeHazard of ['overview', 'earthquake', 'tropical_cyclone']) {
+    const tree = instance(Dashboard).render({ activeView: 'hazard', activeHazard });
+    assert.equal(nodes(tree).filter(n => n.type === StormsPanel).length, activeHazard === 'tropical_cyclone' ? 1 : 0, 'HII storms mount only on the cyclone tab');
+  }
   let radarRequests = 0;
   let radarEnabled = true;
   lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frame: null }; };
