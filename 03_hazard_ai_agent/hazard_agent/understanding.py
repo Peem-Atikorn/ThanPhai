@@ -35,6 +35,9 @@ FLOW_WORDS = ("อัตราการไหล", "ปริมาณน้ำ�
 RIVER_WORDS = ("แม่น้ำ", "เจ้าพระยา", "ล้นตลิ่ง", "river")
 STATION_CODE = re.compile(r"(?<![A-Za-z])[A-Z]{1,3}\.\d{1,3}[A-Z]?(?![A-Za-z0-9])")
 EXPLAIN_WORDS = ("ทำไม", "เพราะอะไร", "สาเหตุ", "why")
+# Everyday plans that depend on rain where the user is; answered from that area's rain assessment and forecast.
+DAILY_RAIN_WORDS = ("ตากผ้า", "ซักผ้า", "พกร่ม", "เอาร่ม", "ออกไปข้างนอก", "ไปเที่ยว", "ปั่นจักรยาน", "วิ่งออกกำลัง",
+                    "ล้างรถ", "umbrella", "laundry")
 PREPARE_WORDS = ("เตรียม", "ต้องทำ", "ทำยังไง", "ทำอย่างไร", "ควรทำ", "อพยพ", "prepare", "what should")
 EMERGENCY_WORDS = ("ช่วยด้วย", "ติดอยู่", "บาดเจ็บ", "จมน้ำ", "ฉุกเฉิน", "help", "trapped", "injured")
 SOURCE_WORDS = ("แหล่งข้อมูล", "ข้อมูลจากไหน", "ข้อมูลมาจากไหน", "ที่มาของข้อมูล", "ใช้ข้อมูลจาก", "data source")
@@ -166,6 +169,8 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     if data_intent:
         return Understanding(data_intent, [], areas, start, end, language, regions=regions)
     hazards = detect_hazards(text)
+    if not hazards and any(w in lowered for w in DAILY_RAIN_WORDS):
+        hazards = [HazardType.RAIN_STORM]  # "ตากผ้าได้ไหม" is a rain question about one place
     ranking = any(w in lowered for w in ("จังหวัดไหน", "ที่ไหน", "เสี่ยงสุด", "มากที่สุด", "highest", "most at risk"))
     overview = any(w in lowered for w in ("ทั้งประเทศ", "ทั่วประเทศ", "ภาพรวม", "สรุป", "overview", "nationwide"))
     if MUEANG_QUERY.search(text) and not any(a.level == "amphoe" and a.name_th.startswith("เมือง") for a in areas):
@@ -179,7 +184,8 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         intent = "explain"
     elif ranking and (not areas or regions) and not future:
         intent = "ranking"
-    elif (overview or regions or (hazards and not areas)) and (not areas or regions) and not future:
+    elif (overview or regions) and (not areas or regions) and not future:
+        # Only when asked for the whole country or a region; "วันนี้ฝนตกไหม" means "here", so ask where.
         intent = "overview"
     elif hazards or areas or regions:
         intent = "risk"
