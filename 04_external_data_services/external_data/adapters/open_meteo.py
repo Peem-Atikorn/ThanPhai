@@ -196,8 +196,10 @@ class OpenMeteoHeatIndex(OpenMeteoGrid):
             return None
         peak = max(rows, key=lambda h: heat_index_c(h["temperature_2m"], h["relative_humidity_2m"]))
         value = heat_index_c(peak["temperature_2m"], peak["relative_humidity_2m"])
+        # Every hour's value, so the card can show the hour it is now between 3-hourly fetches.
+        hourly = {h["time"].isoformat(): round(heat_index_c(h["temperature_2m"], h["relative_humidity_2m"]), 1) for h in rows}
         return round(value, 1), {"peak_time": peak["time"].isoformat(), "temperature_c": peak["temperature_2m"],
-                                 "humidity_pct": peak["relative_humidity_2m"]}
+                                 "humidity_pct": peak["relative_humidity_2m"], "hourly": hourly}
 
 
 class OpenMeteoMarine(OpenMeteoGrid):

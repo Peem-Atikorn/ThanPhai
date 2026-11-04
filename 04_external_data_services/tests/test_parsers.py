@@ -306,6 +306,9 @@ def test_open_meteo_heat_takes_peak_of_next_24_hours():
     expected = max(heat_index_c(t, rh) for t, rh in zip(h["temperature_2m"][:24], h["relative_humidity_2m"][:24]))
     assert records[0].variable == "heat_index_max_24h" and records[0].value == round(expected, 1)
     assert records[0].extra["peak_time"].startswith("2026-10-22T") and records[0].extra["area_code"] == "TH1001"
+    hourly = records[0].extra["hourly"]
+    assert len(hourly) == 24 and max(hourly.values()) == records[0].value
+    assert hourly["2026-10-22T00:00:00+07:00"] == round(heat_index_c(h["temperature_2m"][0], h["relative_humidity_2m"][0]), 1)
 
 
 def test_tmd_earthquakes_rss():
