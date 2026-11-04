@@ -216,6 +216,12 @@ def validate_chat(answer: str, model: str = "") -> list[str]:
         problems.append("repeats its instructions")
     if FOREIGN_SCRIPT.search(answer):
         problems.append("not Thai or English")
+    # Small talk must not imply any alert state, including "ระดับปกติ" or English NORMAL.
+    stated_level = STATED_LEVEL.search(answer)
+    english_level = [level for level in LEVELS_EN.values()
+                     if re.search(rf"\b{level}\b", answer)]
+    if stated_level or english_level:
+        problems.append("hazard level in chat")
     found = [w for w in CHAT_FORBIDDEN if w in answer]
     if found:
         problems.append(f"hazard wording in chat: {found}")
