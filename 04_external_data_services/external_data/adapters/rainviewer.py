@@ -16,6 +16,13 @@ _LOCK: asyncio.Lock | None = None
 _LOCK_LOOP: asyncio.AbstractEventLoop | None = None
 
 
+class RetryWait(httpx.HTTPError):
+    """RainViewer failed recently; no new request until RETRY_SECONDS have passed.
+
+    An httpx.HTTPError, so callers handle it like the failure it repeats.
+    """
+
+
 def build_tile_url(
     host: str,
     path: str,
@@ -54,7 +61,7 @@ def _cached() -> list[dict[str, Any]] | None:
     if _CACHE_FRAMES is not None and (now - _CACHE_TIME) < CACHE_TTL_SECONDS:
         return _CACHE_FRAMES
     if _FAIL_ERROR is not None and (now - _FAIL_TIME) < RETRY_SECONDS:
-        raise RuntimeError(f"RainViewer unavailable, retrying after {RETRY_SECONDS:.0f} s") from _FAIL_ERROR
+        raise RetryWait(f"RainViewer unavailable, retrying after {RETRY_SECONDS:.0f} s") from _FAIL_ERROR
     return None
 
 

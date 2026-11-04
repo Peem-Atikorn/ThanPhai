@@ -125,7 +125,7 @@ def test_concurrent_failure_shares_one_request_then_retries(fresh_adapter, monke
     assert all(isinstance(r, Exception) for r in results)
 
     # Within the retry wait: no new request.
-    with pytest.raises(RuntimeError):
+    with pytest.raises(httpx.HTTPError):
         asyncio.run(fetch_radar_maps(client=client))
     assert client.calls == 1
 

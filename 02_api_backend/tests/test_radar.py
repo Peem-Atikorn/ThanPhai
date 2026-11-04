@@ -174,3 +174,28 @@ async def test_radar_cached_response_does_not_wait_for_refresh(radar_state, monk
         assert refreshed.status_code == 200 and refreshed.json()["frame"]["time"] == 1800000000
         assert (await client.get("/v1/radar")).json() == refreshed.json()
         assert calls == [1]
+
+
+@pytest.mark.parametrize("has_frame", [False, True])
+async def test_radar_handles_adapter_retry_wait(radar_state, monkeypatch, has_frame):
+    # The nowcast hit a RainViewer failure just before: the real adapter now refuses new requests
+    # for its retry wait, and /v1/radar must answer as for any failed refresh.
+    import time as real_time
+
+    import external_data.adapters.rainviewer as rv
+
+    monkeypatch.setattr(main, "fetch_radar_maps", rv.fetch_radar_maps)
+    monkeypatch.setattr(rv, "_CACHE_FRAMES", None)
+    monkeypatch.setattr(rv, "_FAIL_ERROR", httpx.ConnectError("offline"))
+    monkeypatch.setattr(rv, "_FAIL_TIME", real_time.time())
+    frame = {"tiles": "last-good", "time": 1799999400}
+    if has_frame:
+        monkeypatch.setattr(main, "_radar_cache", (9600.0, frame))  # due for a refresh
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
+        r = await client.get("/v1/radar")
+    if has_frame:
+        assert r.status_code == 200 and r.json() == {"frame": frame}
+    else:
+        assert r.status_code == 502
+    assert main._radar_retry_at == 10000.0 + main.RADAR_RETRY_S
