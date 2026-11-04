@@ -142,13 +142,13 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     # These requests need numeric source records, rather than a model-generated risk summary.
     # Keep ordinary area risk questions (e.g. "เชียงใหม่แผ่นดินไหวไหม") on the existing assessment path.
     data_intent = None
-    if any(w in lowered for w in ("ความเค็ม", "น้ำเค็มรุก", "salinity", "เค็ม")):
+    if any(w in lowered for w in ("ความเค็ม", "น้ำเค็ม", "salinity")):
         data_intent = "water_quality"
     elif ("pm2.5" in lowered or "pm 2.5" in lowered or "pm25" in lowered) and any(w in lowered for w in ("สถานี", "ตัวเลข", "ค่าเท่า", "สูงสุด")):
         data_intent = "pm25_stations"
-    elif any(w in lowered for w in ("จุดความร้อน", "hotspot")) and any(w in lowered for w in ("กี่", "จำนวน", "จุด")):
+    elif any(w in lowered for w in ("จุดความร้อน", "hotspot")) and any(w in lowered for w in ("กี่", "จำนวน")):
         data_intent = "fire_hotspots"
-    elif any(w in lowered for w in ("เรดาร์", "ภาพพยากรณ์", "ภาพฝน", "media", "ลิงก์ภาพ")):
+    elif any(w in lowered for w in ("เรดาร์", "ภาพพยากรณ์", "ภาพฝน", "ภาพพายุ", "ภาพคลื่น", "media", "ลิงก์ภาพ")):
         data_intent = "media"
     elif any(w in lowered for w in ("คลื่น", "wave")) and any(w in lowered for w in ("สูงสุด", "ความสูง", "เท่าไหร่", "กี่", "ตัวเลข", "ข้อมูลคลื่น", "wave")):
         data_intent = "waves"
@@ -160,6 +160,9 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     elif any(w in lowered for w in ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "earthquake", "aftershock", "quake")) and (
             not areas or any(w in lowered for w in ("ล่าสุด", "ที่ไหน", "เกิดเมื่อ", "ขนาด", "magnitude"))):
         data_intent = "earthquake"
+    explicit_media = data_intent == "media" and any(w in lowered for w in ("ขอ", "ลิงก์", "ดูภาพ"))
+    if data_intent and areas and "ไหม" in lowered and detect_hazards(text) and not explicit_media:
+        data_intent = None
     if data_intent:
         return Understanding(data_intent, [], areas, start, end, language, regions=regions)
     hazards = detect_hazards(text)

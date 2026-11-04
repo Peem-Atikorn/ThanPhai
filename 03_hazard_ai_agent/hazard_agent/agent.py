@@ -486,6 +486,11 @@ class HazardAgent:
             if get_history is None:
                 return finish(["ยังดึงประวัติเขื่อนจาก ThaiWater ไม่ได้ในขณะนี้"], [], ["ThaiWater (สสน.)"])
             series = "storage"
+            if any(w in lowered for w in ("ปล่อย", "ระบาย", "released", "release")):
+                series = "released"
+            elif any(w in lowered for w in ("ไหลเข้า", "น้ำเข้า", "inflow")):
+                series = "inflow"
+            metric = {"storage": "ปริมาณน้ำกักเก็บ", "released": "ปริมาณน้ำระบาย", "inflow": "ปริมาณน้ำไหลเข้า"}[series]
             calls.append(f"get_dam_history({dam['id']}, {series})")
             try:
                 history = get_history(dam["id"], series)
@@ -495,6 +500,12 @@ class HazardAgent:
             parsed = sorted(((date.fromisoformat(day), value) for day, value in values if day and value is not None), key=lambda item: item[0])
             if not parsed:
                 return finish([f"ยังไม่มีข้อมูลย้อนหลังของเขื่อน{dam['name_th']} ให้เปรียบเทียบ"], [], ["ThaiWater (สสน.)"])
+            if "เมื่อวาน" in question and not any(w in question for w in ("เทียบ", "เปรียบเทียบ")):
+                day = now.date() - timedelta(days=1)
+                value = next((value for record_day, value in parsed if record_day == day), None)
+                text = (f"เขื่อน{dam['name_th']} {metric}: {value:,.0f} ล้าน ลบ.ม. ณ {day.day}/{day.month}/{day.year + 543}"
+                        if value is not None else f"ไม่มีข้อมูล{metric}ของเขื่อน{dam['name_th']} วันที่ {day.day}/{day.month}/{day.year + 543}")
+                return finish([text], history.get("series", []), ["ThaiWater (สสน.)"])
             current = next((item for item in reversed(parsed) if item[0] <= now.date()), None)
             comparison_day = now.date() - timedelta(days=7 if any(w in question for w in ("สัปดาห์", "อาทิตย์")) else 1)
             previous = (min((item for item in parsed if item[0] < current[0] and abs((item[0] - comparison_day).days) <= 1),
@@ -505,9 +516,7 @@ class HazardAgent:
                               history.get("series", []) if history else [], ["ThaiWater (สสน.)"])
             delta = current[1] - previous[1]
             trend = "เพิ่มขึ้น" if delta > 0 else "ลดลง" if delta < 0 else "เท่าเดิม"
-            updated = _time_th((history or {}).get("data_updated_at"))
-            lines = [f"เขื่อน{dam['name_th']} ปริมาณน้ำกักเก็บ: {current[1]:,.0f} ล้าน ลบ.ม. ณ {current[0].day}/{current[0].month}/{current[0].year + 543}"
-                     + (f" (ข้อมูลปรับปรุง {updated})" if updated else ""),
+            lines = [f"เขื่อน{dam['name_th']} {metric}: {current[1]:,.0f} ล้าน ลบ.ม. ณ {current[0].day}/{current[0].month}/{current[0].year + 543}",
                      f"เทียบกับ {previous[0].day}/{previous[0].month}/{previous[0].year + 543}: {previous[1]:,.0f} ล้าน ลบ.ม. · {trend} {abs(delta):,.0f} ล้าน ลบ.ม."]
             return finish(lines, history.get("series", []) if history else [], ["ThaiWater (สสน.)"])
 
@@ -518,6 +527,12 @@ class HazardAgent:
                 calls.append("get_media()")
             groups = [("เรดาร์ฝน", media.get("radar", [])), ("ภาพพยากรณ์ฝน", media.get("rain_forecast", {})),
                       ("ภาพพายุ", media.get("storm", [])), ("ภาพคลื่น", media.get("wave", []))]
+            requested = [label for label, words in (("เรดาร์ฝน", ("เรดาร์", "radar")),
+                         ("ภาพพยากรณ์ฝน", ("พยากรณ์", "ภาพฝน", "forecast")),
+                         ("ภาพพายุ", ("พายุ", "storm")), ("ภาพคลื่น", ("คลื่น", "wave")))
+                         if any(word in question.lower() for word in words)]
+            if requested:
+                groups = [(label, group) for label, group in groups if label in requested]
             links = []
             for label, group in groups:
                 if isinstance(group, list):
@@ -539,6 +554,7 @@ class HazardAgent:
             return finish(lines, [item for _, item in links[:5]], [media.get("source") or "คลังข้อมูลน้ำแห่งชาติ (สสน.)"])
 
         return AgentAnswer("ยังไม่มีข้อมูลสำหรับคำถามนี้", intent, None, [])
+
     def _national(self, question: str, u: Understanding) -> AgentAnswer:
         records = self.tools.get_all_assessments()
         hazards = {h.value for h in u.hazards}

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import threading
 
 from api_backend.hazard_service import BANGKOK, HazardService
 
@@ -32,6 +33,7 @@ def test_agent_data_tools_expose_current_records_and_hotspot_counts():
 
 def test_sync_dam_history_tool_returns_cached_history():
     service = HazardService.__new__(HazardService)
+    service._agent_history_lock = threading.Lock()
     service.dams = [{"id": "123"}]
     value = {"series": [{"year": 2026, "values": [["2026-11-03", 50]]}]}
     service._graph_cache = {

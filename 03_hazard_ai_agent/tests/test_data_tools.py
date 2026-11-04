@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import pytest
 
 from geo_integration import Area, Gazetteer
 from hazard_agent import HazardAgent, understand
@@ -42,7 +43,7 @@ class DataTools:
 
     def get_dam_history(self, dam_id, series="storage"):
         return {"series": [{"year": 2026, "values": [["2026-10-28", 40], ["2026-11-03", 50]]}],
-                "data_updated_at": "2026-11-04T08:00:00+07:00", "source": "ThaiWater"}
+                "source": "ThaiWater"}
 
     def get_media(self):
         return {"radar": [{"image": "https://example.test/radar.jpg", "time": "2026-11-04T08:00:00+07:00"}],
@@ -63,6 +64,45 @@ class DataTools:
 
 
 agent = HazardAgent(GAZ, DataTools())
+
+
+@pytest.mark.parametrize("question,intent", [
+    ("อาหารเค็มทำให้ความดันสูงไหม", "out_of_scope"),
+    ("เชียงใหม่มีจุดความร้อนเสี่ยงไฟป่าไหม", "risk"),
+    ("เรดาร์ฝนเมืองเชียงใหม่ฝนจะตกไหม", "risk"),
+    ("น้ำเค็มตอนนี้เท่าไหร่", "water_quality"),
+    ("ขอลิงก์ภาพเรดาร์ฝนเชียงใหม่ได้ไหม", "media"),
+])
+def test_data_intents_do_not_swallow_unrelated_or_area_risk_questions(question, intent):
+    assert understand(question, GAZ, NOW).intent == intent
+
+
+@pytest.mark.parametrize("question,key,url", [
+    ("ขอลิงก์ภาพพยากรณ์ฝนล่าสุด", "rain_forecast", "forecast.jpg"),
+    ("ขอลิงก์ภาพพายุล่าสุด", "storm", "storm.jpg"),
+    ("ขอลิงก์ภาพคลื่นล่าสุด", "wave", "wave.jpg"),
+])
+def test_requested_media_group_is_not_displaced_by_many_radars(question, key, url):
+    class ManyMediaTools(DataTools):
+        def get_media(self):
+            return {"radar": [{"image": f"https://example.test/radar{i}.jpg"} for i in range(12)],
+                    key: [{"image": f"https://example.test/{url}"}]}
+
+    answer = HazardAgent(GAZ, ManyMediaTools()).ask(question, NOW)
+    assert url in answer.text
+    assert "radar0.jpg" not in answer.text
+
+
+@pytest.mark.parametrize("word,series,label", [("ปล่อยน้ำ", "released", "ระบาย"), ("น้ำไหลเข้า", "inflow", "ไหลเข้า")])
+def test_yesterday_dam_question_uses_requested_metric_and_date(word, series, label):
+    class HistoryTools(DataTools):
+        def get_dam_history(self, dam_id, requested_series="storage"):
+            assert requested_series == series
+            return {"series": [{"year": 2026, "values": [["2026-11-03", 12], ["2026-11-04", 99]]}]}
+
+    answer = HazardAgent(GAZ, HistoryTools()).ask(f"เขื่อนภูมิพลเมื่อวาน{word}เท่าไหร่", NOW)
+    assert label in answer.text and "12" in answer.text and "3/11/2569" in answer.text
+    assert "99" not in answer.text
 
 
 def test_latest_earthquake_question_returns_number_time_and_source():
@@ -123,7 +163,7 @@ def test_dam_history_compares_requested_week_and_never_calls_explainer():
     answer = HazardAgent(GAZ, DataTools(), explainer=must_not_run).ask("เขื่อนภูมิพลเทียบกับสัปดาห์ก่อนเป็นอย่างไร", NOW)
     assert answer.intent == "dam_history"
     assert "ภูมิพล" in answer.text and "50" in answer.text and "40" in answer.text
-    assert "ThaiWater" in answer.text and "4/11/2569" in answer.text
+    assert "ThaiWater" in answer.text and "3/11/2569" in answer.text
 
 
 def test_dam_history_with_no_record_through_today_reports_insufficient_data():

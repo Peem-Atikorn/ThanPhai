@@ -26,7 +26,7 @@ from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsCyclones, 
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
-from external_data.adapters.thaiwater_graphs import DAM_SERIES, ROOT as THAIWATER_ROOT, fetch_dam_year, fetch_station_graph, parse_dam_year
+from external_data.adapters.thaiwater_graphs import DAM_SERIES, fetch_dam_year, fetch_dam_year_sync, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
 from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues, read_days
 from geo_integration import Gazetteer, hazard_areas, warning_provinces, warning_statements
@@ -1189,7 +1189,7 @@ class HazardService:
                                   lambda c: fetch_dam_year(c, int(dam_id), series, [year - 1, year]))
 
     def get_dam_history(self, dam_id: str, series: str = "storage") -> dict | None:
-        """Synchronous tool for HazardAgent; keeps a separate cache from the async graph endpoint."""
+        """Synchronous tool for HazardAgent, sharing the graph endpoint's cache."""
         if not dam_id.isdigit() or not any(d["id"] == dam_id for d in self.dams):
             return None
         if series not in DAM_SERIES:
@@ -1197,21 +1197,15 @@ class HazardService:
         year = datetime.now(BANGKOK).year
         key = ("dam", dam_id, series, year)
         now = datetime.now(timezone.utc)
-        lock = getattr(self, "_agent_history_lock", None)
-        if lock is None:
-            lock = self._agent_history_lock = threading.Lock()
-        with lock:
+        with self._agent_history_lock:
             cached = self._graph_cache.get(key)
             if cached and now - cached[0] < (FAILURE_TTL if isinstance(cached[1], Exception) else DAM_HISTORY_TTL):
                 if isinstance(cached[1], Exception):
                     raise cached[1]
                 return cached[1]
-            params = {"data_type": DAM_SERIES[series], "dam_id": dam_id, "year": f"{year - 1},{year}"}
             try:
                 with httpx.Client(headers=USER_AGENT, follow_redirects=True) as client:
-                    response = client.get(f"{THAIWATER_ROOT}/analyst/dam_yearly_graph", params=params, timeout=30)
-                    response.raise_for_status()
-                    history = parse_dam_year(response.json())
+                    history = fetch_dam_year_sync(client, int(dam_id), series, [year - 1, year])
             except httpx.HTTPError as exc:
                 self._graph_cache[key] = (now, exc)
                 raise
