@@ -21,6 +21,7 @@
   --cc-panel-raised: #c8cfcb17;
   --cc-panel-deep: #182127a6;
   --cc-glass: #bac5c21c;
+  --cc-solid: #273034eb; /* large panels: close to the blurred glass over the dark scene, without the blur cost */
   --cc-accent: #d5ed86;
   --cc-on-accent: #262e20;
   --cc-focus: #e0f6a4;
