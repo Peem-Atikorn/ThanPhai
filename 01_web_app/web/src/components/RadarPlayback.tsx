@@ -15,9 +15,11 @@ export default function RadarPlayback({ frames, index, onChange, onPlaybackChang
 }) {
   const [playing, setPlaying] = useState(false);
   const playback = useRef({ index, length: frames.length, onChange });
-  playback.current = { index, length: frames.length, onChange };
   const frame = frames[index];
 
+  useEffect(() => {
+    playback.current = { index, length: frames.length, onChange };
+  }, [frames.length, index, onChange]);
   useEffect(() => {
     if (!playing || frames.length < 2) return;
     const timer = window.setInterval(() => {
