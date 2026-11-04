@@ -25,13 +25,16 @@ def track_cells_to_districts(
     impact_radius_km: float = 20.0,
 ) -> list[dict[str, Any]]:
     """Project rain cells along velocity vector and find intersecting districts."""
-    if not cells or speed_kmh < 2.0:
+    if not cells:
         return []
+
+    is_moving = speed_kmh >= 2.0
+    effective_horizon = max_horizon_min if is_moving else 0
 
     rad = math.radians(direction_deg)
     # Velocity components in km/min
-    v_north = (speed_kmh / 60.0) * math.cos(rad)
-    v_east = (speed_kmh / 60.0) * math.sin(rad)
+    v_north = (speed_kmh / 60.0) * math.cos(rad) if is_moving else 0.0
+    v_east = (speed_kmh / 60.0) * math.sin(rad) if is_moving else 0.0
 
     hits: list[dict[str, Any]] = []
     seen_cell_districts: set[tuple[int, str]] = set()
@@ -41,8 +44,8 @@ def track_cells_to_districts(
         lon0 = cell.centroid_lon
         cos_lat = max(0.1, math.cos(math.radians(lat0)))
 
-        # Step through 5-minute increments up to max_horizon_min
-        for t in range(5, max_horizon_min + 1, 5):
+        # Step through 5-minute increments starting at t=0 (current impact) up to horizon
+        for t in range(0, effective_horizon + 1, 5):
             dist_north_km = v_north * t
             dist_east_km = v_east * t
 

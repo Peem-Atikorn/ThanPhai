@@ -27,12 +27,16 @@ def detect_rain_cells(
     z: int | None = None,
     tx: int | None = None,
     ty: int | None = None,
+    valid_mask: np.ndarray | None = None,
 ) -> list[RainCell]:
     """Segment frame into rain cells using connected components.
 
     threshold: dBZ or mm/h threshold to consider as rain cell
     min_pixels: minimum cell area
     z, tx, ty: Web Mercator tile zoom and coordinates for exact inverse Mercator projection.
+    valid_mask: optional 2D boolean mask (e.g. Thailand territory). If provided, cells completely
+                outside the mask are ignored, and centroids/areas are computed for the region
+                overlapping the mask.
     """
     binary_mask = frame >= threshold
     labeled, num_features = ndimage.label(binary_mask)
@@ -46,13 +50,21 @@ def detect_rain_cells(
 
     for label_idx in range(1, num_features + 1):
         mask = labeled == label_idx
-        area = int(np.sum(mask))
-        if area < min_pixels:
-            continue
-
-        cy, cx = centroids[label_idx - 1]
-        peak = float(np.max(frame[mask]))
-        mean = float(np.mean(frame[mask]))
+        if valid_mask is not None:
+            active_mask = mask & valid_mask
+            area = int(np.sum(active_mask))
+            if area < min_pixels:
+                continue
+            cy, cx = ndimage.center_of_mass(frame, active_mask)
+            peak = float(np.max(frame[active_mask]))
+            mean = float(np.mean(frame[active_mask]))
+        else:
+            area = int(np.sum(mask))
+            if area < min_pixels:
+                continue
+            cy, cx = centroids[label_idx - 1]
+            peak = float(np.max(frame[mask]))
+            mean = float(np.mean(frame[mask]))
 
         if z is not None and tx is not None and ty is not None:
             cell_lat, cell_lon = pixel_to_latlon_mercator(cy, cx, z=z, tx=tx, ty=ty, tile_size=frame.shape[0])

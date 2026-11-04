@@ -12,6 +12,8 @@ import os
 import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+import time
+import numpy as np
 
 import geopandas as gpd
 import httpx
@@ -134,7 +136,8 @@ class HazardService:
         self.updated_at: datetime | None = None
         self._lock = asyncio.Lock()
         self._radar_nowcast_lock = asyncio.Lock()
-        self._radar_nowcast_cache: tuple[int, dict] | None = None
+        self._radar_nowcast_cache: tuple[int, dict, float] | None = None
+        self._thai_radar_mask: np.ndarray | None = None
         self._background: asyncio.Task | None = None
         # Set when slower inputs (satellite, fire model) change, so decisions are rebuilt without
         # pretending the live data is missing (clearing updated_at showed "data time: —" in the UI).
@@ -1320,50 +1323,95 @@ class HazardService:
             })
         return {"type": "FeatureCollection", "features": features}
 
+    def _get_thai_radar_mask(self) -> np.ndarray:
+        """Return 256x256 boolean mask of Thailand territory on tile 4/12/7.
+
+        A pixel is True if it lies within 35 km of at least one Thai amphoe centroid.
+        """
+        if self._thai_radar_mask is not None:
+            return self._thai_radar_mask
+
+        amphoes = [a for a in self.gazetteer.areas if a.level == "amphoe"]
+        if not amphoes:
+            mask = np.ones((256, 256), dtype=bool)
+            self._thai_radar_mask = mask
+            return mask
+
+        from scipy.spatial import cKDTree
+
+        r_earth = 6371.0
+        def to_xyz(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
+            lat_r, lon_r = np.radians(lats), np.radians(lons)
+            return np.column_stack([
+                r_earth * np.cos(lat_r) * np.cos(lon_r),
+                r_earth * np.cos(lat_r) * np.sin(lon_r),
+                r_earth * np.sin(lat_r),
+            ])
+
+        n = 16.0  # 2 ** 4
+        y_idx, x_idx = np.indices((256, 256))
+        lons = (12.0 + x_idx / 256.0) / n * 360.0 - 180.0
+        y_tot = (7.0 + y_idx / 256.0) / n
+        lats = np.degrees(np.arctan(np.sinh(np.pi * (1.0 - 2.0 * y_tot))))
+
+        grid_xyz = to_xyz(lats.ravel(), lons.ravel())
+        amp_lats = np.array([a.lat for a in amphoes])
+        amp_lons = np.array([a.lon for a in amphoes])
+        amp_xyz = to_xyz(amp_lats, amp_lons)
+
+        tree = cKDTree(amp_xyz)
+        dists, _ = tree.query(grid_xyz, distance_upper_bound=35.0)
+        mask = (dists <= 35.0).reshape((256, 256))
+        self._thai_radar_mask = mask
+        return mask
+
     async def get_radar_nowcast(self) -> dict:
         """Return 1-hour radar nowcast calculated from real radar frames with Qwen explanation."""
         from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes
         from risk_models.nowcast import decode_png_radar, detect_rain_cells, estimate_motion, track_cells_to_districts
         from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget
 
-        if not hasattr(self, "_radar_nowcast_lock") or self._radar_nowcast_lock is None:
-            self._radar_nowcast_lock = asyncio.Lock()
-
+        now = time.monotonic()
         try:
             frames = await fetch_radar_maps()
         except Exception as exc:
             log.warning("Failed to fetch radar maps from RainViewer: %s", exc)
             frames = []
 
-        host = "https://tilecache.rainviewer.com"
         past_frames = frames[-6:] if frames else []
-
-        if len(past_frames) < 2:
-            return {
-                "status": "unavailable",
-                "past_frames": past_frames,
-                "forecast_frames": [],
-                "motion": None,
-                "rain_cells": [],
-                "explanation": "ไม่สามารถดึงข้อมูลเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
-                "source": "RainViewer · ข้อมูลเรดาร์ฝนยังไม่พร้อมใช้งาน",
-            }
-
-        prev_frame_meta = past_frames[-2]
-        curr_frame_meta = past_frames[-1]
-        curr_time = curr_frame_meta["time"]
+        curr_time = past_frames[-1]["time"] if past_frames else 0
 
         # Fast path check outside lock
-        cached = getattr(self, "_radar_nowcast_cache", None)
-        if cached and cached[0] == curr_time:
-            return cached[1]
+        if self._radar_nowcast_cache is not None:
+            cached_time, cached_result, expire_at = self._radar_nowcast_cache
+            if cached_time == curr_time and now < expire_at:
+                return cached_result
 
         # Acquire lock to serialize calculation and prevent duplicate work when a new frame arrives
         async with self._radar_nowcast_lock:
             # Double check inside lock
-            cached = getattr(self, "_radar_nowcast_cache", None)
-            if cached and cached[0] == curr_time:
-                return cached[1]
+            now = time.monotonic()
+            if self._radar_nowcast_cache is not None:
+                cached_time, cached_result, expire_at = self._radar_nowcast_cache
+                if cached_time == curr_time and now < expire_at:
+                    return cached_result
+
+            if len(past_frames) < 2:
+                unavailable_res = {
+                    "status": "unavailable",
+                    "past_frames": past_frames,
+                    "forecast_frames": [],
+                    "motion": None,
+                    "rain_cells": [],
+                    "explanation": "ไม่สามารถดึงข้อมูลเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "source": "RainViewer · ข้อมูลเรดาร์ฝนยังไม่พร้อมใช้งาน",
+                }
+                self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
+                return unavailable_res
+
+            prev_frame_meta = past_frames[-2]
+            curr_frame_meta = past_frames[-1]
+            host = curr_frame_meta.get("host") or prev_frame_meta.get("host") or "https://tilecache.rainviewer.com"
 
             tile_url_prev = f"{host}{prev_frame_meta['path']}/256/4/12/7/2/1_1.png"
             tile_url_curr = f"{host}{curr_frame_meta['path']}/256/4/12/7/2/1_1.png"
@@ -1375,7 +1423,7 @@ class HazardService:
                 )
             except Exception as exc:
                 log.warning("Failed to fetch radar tile bytes: %s", exc)
-                return {
+                unavailable_res = {
                     "status": "unavailable",
                     "past_frames": past_frames,
                     "forecast_frames": [],
@@ -1384,6 +1432,8 @@ class HazardService:
                     "explanation": "ไม่สามารถดึงภาพเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
                     "source": "RainViewer · เกิดข้อผิดพลาดในการโหลดภาพเรดาร์",
                 }
+                self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
+                return unavailable_res
 
             interval_min = max(5.0, (curr_frame_meta["time"] - prev_frame_meta["time"]) / 60.0)
 
@@ -1393,41 +1443,25 @@ class HazardService:
                 for a in self.gazetteer.areas
                 if a.level == "amphoe"
             ]
+            thai_mask = self._get_thai_radar_mask()
 
             def _compute_nowcast_sync() -> tuple[dict | None, list[dict], NowcastSummary, list[dict]]:
-                from risk_models.earthquake import distance_km
-
                 arr_prev = decode_png_radar(bytes_prev)
                 arr_curr = decode_png_radar(bytes_curr)
 
                 # Estimate bulk motion using spatial cross-correlation with sub-pixel refinement
                 motion = estimate_motion(arr_prev, arr_curr, pixel_size_km=9.5, interval_min=interval_min)
 
-                # Detect rain cells with exact inverse Web Mercator projection
-                raw_cells = detect_rain_cells(
+                # Detect rain cells with exact inverse Web Mercator projection and raster mask of Thailand
+                cells = detect_rain_cells(
                     arr_curr,
                     threshold=15.0,
                     min_pixels=4,
                     z=4,
                     tx=12,
                     ty=7,
+                    valid_mask=thai_mask,
                 )
-
-                # Filter cells to Thailand territory: must be within 35 km of at least one Thai amphoe centroid
-                # This rejects storm cells in Cambodia (Phnom Penh), Laos, Myanmar, or far out in the Andaman Sea.
-                cells_with_amphoe: list[tuple[Any, dict, float]] = []
-                for c in raw_cells:
-                    if not amphoe_list:
-                        continue
-                    closest_a = min(
-                        amphoe_list,
-                        key=lambda a: (a["lat"] - c.centroid_lat) ** 2 + (a["lon"] - c.centroid_lon) ** 2,
-                    )
-                    dist = distance_km(c.centroid_lat, c.centroid_lon, closest_a["lat"], closest_a["lon"])
-                    if dist <= 35.0:
-                        cells_with_amphoe.append((c, closest_a, dist))
-
-                cells = [item[0] for item in cells_with_amphoe]
 
                 # Generate extrapolated forecast frames metadata (+10 to +60 minutes)
                 # If motion is undetermined (direction_th == "ทิศทางไม่แน่นอน"), dx/dy are 0
@@ -1452,8 +1486,13 @@ class HazardService:
                     )
                     return None, [], summary, forecast_frames
 
-                lead_cell, lead_amphoe, _ = cells_with_amphoe[0]
-                prov_parent = self.gazetteer.by_code.get(lead_amphoe.get("parent_code")) if lead_amphoe else None
+                lead_cell = cells[0]
+                closest_amphoe = min(
+                    amphoe_list,
+                    key=lambda a: (a["lat"] - lead_cell.centroid_lat) ** 2 + (a["lon"] - lead_cell.centroid_lon) ** 2,
+                    default=None,
+                ) if amphoe_list else None
+                prov_parent = self.gazetteer.by_code.get(closest_amphoe.get("parent_code")) if closest_amphoe else None
                 loc_desc = (
                     f"บริเวณจังหวัด{prov_parent.name_th}"
                     if prov_parent
@@ -1494,33 +1533,19 @@ class HazardService:
                     "direction_deg": round(motion.direction_deg, 1),
                 }
 
-                if is_moving:
-                    target_hits = track_cells_to_districts(
-                        cells=cells[:5],
-                        speed_kmh=motion.speed_kmh,
-                        direction_deg=motion.direction_deg,
-                        districts=amphoe_list,
-                        max_horizon_min=60,
-                    )
-                else:
-                    target_hits = []
+                target_hits = track_cells_to_districts(
+                    cells=cells[:5],
+                    speed_kmh=motion.speed_kmh,
+                    direction_deg=motion.direction_deg,
+                    districts=amphoe_list,
+                    max_horizon_min=60,
+                )
 
-                # Deduplicate targets by district code, keeping earliest ETA
-                earliest_by_amphoe: dict[str, dict] = {}
-                for hit in target_hits:
-                    code_key = hit.get("code") or hit.get("amphoe_th")
-                    if code_key not in earliest_by_amphoe or hit["eta_min"] < earliest_by_amphoe[code_key]["eta_min"]:
-                        earliest_by_amphoe[code_key] = hit
-
-                unique_targets = sorted(earliest_by_amphoe.values(), key=lambda h: h["eta_min"])
-                targets_summary = [
-                    RainCellTarget(amphoe_th=h["amphoe_th"], eta_min=h["eta_min"])
-                    for h in unique_targets[:3]
-                ]
-
+                # Target districts for each cell
                 rain_cells_data = []
                 for c in cells[:5]:
                     c_targets = [h for h in target_hits if h["cell_id"] == c.id]
+                    c_targets.sort(key=lambda h: h["eta_min"])
                     rain_cells_data.append({
                         "id": c.id,
                         "centroid_lat": round(c.centroid_lat, 3),
@@ -1531,6 +1556,14 @@ class HazardService:
                             for h in c_targets[:3]
                         ],
                     })
+
+                # Summary targets must ONLY include targets from the lead cell (cell_id == lead_cell.id)
+                lead_hits = [h for h in target_hits if h["cell_id"] == lead_cell.id]
+                lead_hits.sort(key=lambda h: h["eta_min"])
+                targets_summary = [
+                    RainCellTarget(amphoe_th=h["amphoe_th"], eta_min=h["eta_min"])
+                    for h in lead_hits[:3]
+                ]
 
                 summary = NowcastSummary(
                     location_desc=loc_desc,
@@ -1556,5 +1589,5 @@ class HazardService:
                 "explanation": explanation,
                 "source": "RainViewer · คำนวณ Nowcast 1 ชม. จากภาพเรดาร์จริง",
             }
-            self._radar_nowcast_cache = (curr_time, result)
+            self._radar_nowcast_cache = (curr_time, result, now + 600.0)
             return result

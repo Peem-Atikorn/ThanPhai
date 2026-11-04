@@ -130,3 +130,22 @@ def test_nowcast_explainer_undetermined_direction():
     problems = validate_nowcast_explanation(result, undetermined_summary)
     assert problems == []
 
+
+def test_nowcast_explainer_current_rainfall_eta_zero():
+    summary = NowcastSummary(
+        location_desc="บริเวณจังหวัดนครราชสีมา",
+        direction_th="ตะวันตก",
+        speed_kmh=15.0,
+        intensity_desc="หนัก",
+        targets=[
+            RainCellTarget(amphoe_th="ลำสนธิ", eta_min=0),
+            RainCellTarget(amphoe_th="เทพารักษ์", eta_min=20),
+        ],
+    )
+    template = build_template_answer(summary)
+    assert "ขณะนี้ฝนตกที่ลำสนธิ" in template
+    assert "คาดว่าจะถึงเทพารักษ์ ใน 20 นาที" in template
+    problems = validate_nowcast_explanation(template, summary)
+    assert problems == []
+
+

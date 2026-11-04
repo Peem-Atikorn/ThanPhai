@@ -35,6 +35,7 @@ def parse_radar_frames(data: dict[str, Any]) -> list[dict[str, Any]]:
                 {
                     "time": t,
                     "path": p,
+                    "host": host,
                     "tile_url": build_tile_url(host, p),
                 }
             )

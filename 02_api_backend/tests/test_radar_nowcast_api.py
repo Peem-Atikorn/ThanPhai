@@ -1,12 +1,15 @@
 import asyncio
 from datetime import datetime, timezone
 import io
+import os
 from pathlib import Path
 import numpy as np
 from PIL import Image
 import pytest
+from fastapi.testclient import TestClient
 
 from api_backend.hazard_service import HazardService
+from api_backend.main import app
 
 DATA = Path(__file__).resolve().parents[2] / "data" / "processed"
 
@@ -45,11 +48,59 @@ class FakeGazetteer:
         self.by_code = {a.code: a for a in self.areas}
 
 
+def test_radar_nowcast_endpoint_disabled_by_default(monkeypatch):
+    """GET /v1/radar/nowcast must return 404 when RADAR_LAYER is not 'internal' without fetching maps."""
+    monkeypatch.delenv("RADAR_LAYER", raising=False)
+    client = TestClient(app)
+
+    import external_data.adapters.rainviewer as rv
+    fetch_called = False
+
+    async def fake_fetch_maps(client=None):
+        nonlocal fetch_called
+        fetch_called = True
+        return []
+
+    monkeypatch.setattr(rv, "fetch_radar_maps", fake_fetch_maps)
+
+    resp = client.get("/v1/radar/nowcast")
+    assert resp.status_code == 404
+    assert not fetch_called
+
+
+def test_radar_nowcast_endpoint_allowed_with_internal_env(monkeypatch):
+    """GET /v1/radar/nowcast answers when RADAR_LAYER=internal."""
+    monkeypatch.setenv("RADAR_LAYER", "internal")
+    import api_backend.main as main_mod
+
+    svc = HazardService.__new__(HazardService)
+    svc.updated_at = datetime.now(timezone.utc)
+    svc.source_status = {}
+    monkeypatch.setattr(HazardService, "inputs_pending", property(lambda self: []))
+
+    async def fake_fresh():
+        return svc
+
+    async def fake_get_nowcast():
+        return {"status": "ok", "rain_cells": []}
+
+    svc.get_radar_nowcast = fake_get_nowcast
+    monkeypatch.setattr(main_mod, "fresh_service", fake_fresh)
+
+    client = TestClient(app)
+    resp = client.get("/v1/radar/nowcast")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
 def test_get_radar_nowcast_with_real_moving_rain(monkeypatch):
     svc = HazardService.__new__(HazardService)
     svc.decisions = {}
     svc.amphoe_codes = ["TH1001", "TH1047"]
     svc.gazetteer = FakeGazetteer()
+    svc._radar_nowcast_lock = asyncio.Lock()
+    svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
 
     fake_frames = [
         {"time": 1793722800, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
@@ -90,8 +141,9 @@ def test_get_radar_nowcast_with_real_moving_rain(monkeypatch):
     assert len(result["rain_cells"]) >= 1
     assert result["rain_cells"][0]["peak_intensity_dbz"] > 0.0
 
-    # Explanation text is safe and contains computed direction
+    # Explanation text is safe and contains computed direction and current rainfall notice
     assert "ตะวันออกเฉียงใต้" in result["explanation"]
+    assert "ขณะนี้ฝนตกที่" in result["explanation"] or "พระนคร" in result["explanation"]
     assert "RainViewer" in result["source"]
 
 
@@ -100,6 +152,9 @@ def test_get_radar_nowcast_with_no_rain(monkeypatch):
     svc.decisions = {}
     svc.amphoe_codes = []
     svc.gazetteer = FakeGazetteer()
+    svc._radar_nowcast_lock = asyncio.Lock()
+    svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
 
     fake_frames = [
         {"time": 1793722800, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
@@ -132,6 +187,9 @@ def test_get_radar_nowcast_with_stationary_rain(monkeypatch):
     svc.decisions = {}
     svc.amphoe_codes = ["TH1001", "TH1047"]
     svc.gazetteer = FakeGazetteer()
+    svc._radar_nowcast_lock = asyncio.Lock()
+    svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
 
     fake_frames = [
         {"time": 1793722800, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
@@ -166,14 +224,15 @@ def test_get_radar_nowcast_with_undetermined_motion(monkeypatch):
     svc.decisions = {}
     svc.amphoe_codes = ["TH1001", "TH1047"]
     svc.gazetteer = FakeGazetteer()
+    svc._radar_nowcast_lock = asyncio.Lock()
+    svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
 
     fake_frames = [
         {"time": 1793722800, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
         {"time": 1793723400, "path": "/v2/radar/frame2", "tile_url": "http://tiles/2.png"},
     ]
 
-    # Massive displacement between frame1 and frame2 (> 120 km/h) -> triggers noise cutoff
-    # Frame 2 has rain cell over Bangkok (90, 112); Frame 1 has it shifted by 40 pixels
     tile1 = make_png(50, 72)
     tile2 = make_png(90, 112)
 
@@ -205,14 +264,16 @@ def test_get_radar_nowcast_filters_cells_outside_thailand(monkeypatch):
     svc.decisions = {}
     svc.amphoe_codes = ["TH1001", "TH1047"]
     svc.gazetteer = FakeGazetteer()
+    svc._radar_nowcast_lock = asyncio.Lock()
+    svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
 
     fake_frames = [
         {"time": 1793722800, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
         {"time": 1793723400, "path": "/v2/radar/frame2", "tile_url": "http://tiles/2.png"},
     ]
 
-    # Cell located at bottom-right corner of tile 4/12/7 (approx 104°E, 6°N - Gulf/Malaysia/Cambodia sea)
-    # > 200 km away from Bangkok amphoes
+    # Cell located at bottom-right corner of tile 4/12/7 (> 200 km away from Bangkok amphoes)
     tile = make_png(230, 230)
 
     async def fake_fetch_maps(client=None):
@@ -228,7 +289,7 @@ def test_get_radar_nowcast_filters_cells_outside_thailand(monkeypatch):
     result = asyncio.run(svc.get_radar_nowcast())
 
     assert result["status"] == "ok"
-    # Filtered out: no cells in Thailand territory
+    # Filtered out by raster mask: no cells in Thailand territory
     assert result["rain_cells"] == []
     assert "ไม่พบกลุ่มฝนที่มีนัยสำคัญ" in result["explanation"]
 
@@ -241,6 +302,7 @@ def test_get_radar_nowcast_concurrent_lock(monkeypatch):
     svc.gazetteer = FakeGazetteer()
     svc._radar_nowcast_lock = asyncio.Lock()
     svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
 
     fake_frames = [
         {"time": 1793722800, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
@@ -279,19 +341,42 @@ def test_get_radar_nowcast_concurrent_lock(monkeypatch):
     assert fetch_tile_count == 2
 
 
-def test_get_radar_nowcast_unavailable_when_no_frames(monkeypatch):
+def test_get_radar_nowcast_unavailable_cached_shortly(monkeypatch):
+    """When tile fetch fails, the unavailable result is cached for 30s to prevent thundering herd."""
     svc = HazardService.__new__(HazardService)
     svc.decisions = {}
     svc.amphoe_codes = []
     svc.gazetteer = FakeGazetteer()
+    svc._radar_nowcast_lock = asyncio.Lock()
+    svc._radar_nowcast_cache = None
+    svc._thai_radar_mask = None
+
+    fake_frames = [
+        {"time": 1793722800, "path": "/v2/radar/frame1", "tile_url": "http://tiles/1.png"},
+        {"time": 1793723400, "path": "/v2/radar/frame2", "tile_url": "http://tiles/2.png"},
+    ]
+
+    fetch_tile_attempts = 0
 
     async def fake_fetch_maps(client=None):
-        return []
+        return fake_frames
+
+    async def failing_fetch_tile(url, client=None):
+        nonlocal fetch_tile_attempts
+        fetch_tile_attempts += 1
+        raise RuntimeError("tile network timeout")
 
     import external_data.adapters.rainviewer as rv
     monkeypatch.setattr(rv, "fetch_radar_maps", fake_fetch_maps)
+    monkeypatch.setattr(rv, "fetch_tile_bytes", failing_fetch_tile)
 
-    result = asyncio.run(svc.get_radar_nowcast())
+    res1 = asyncio.run(svc.get_radar_nowcast())
+    assert res1["status"] == "unavailable"
+    # Initial attempt triggered tile download
+    assert fetch_tile_attempts >= 1
 
-    assert result["status"] == "unavailable"
-    assert "ไม่สามารถดึงข้อมูลเรดาร์ฝนได้ในขณะนี้" in result["explanation"]
+    # Second call uses cache within 30s and does not retry network
+    initial_attempts = fetch_tile_attempts
+    res2 = asyncio.run(svc.get_radar_nowcast())
+    assert res2["status"] == "unavailable"
+    assert fetch_tile_attempts == initial_attempts

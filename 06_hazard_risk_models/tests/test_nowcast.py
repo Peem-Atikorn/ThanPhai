@@ -107,7 +107,7 @@ def test_track_cells_to_districts():
     assert len(targets) >= 1
     hit = next((t for t in targets if t["amphoe_th"] == "บางนา"), None)
     assert hit is not None
-    assert 5 <= hit["eta_min"] <= 60
+    assert 0 <= hit["eta_min"] <= 60
 
 
 def test_decode_png_radar():
@@ -196,3 +196,26 @@ def test_detect_rain_cells_with_web_mercator():
     # Lat should be ~13.7 deg N, Lon ~100.5 deg E
     assert 13.0 <= cells[0].centroid_lat <= 14.5
     assert 99.5 <= cells[0].centroid_lon <= 101.5
+
+
+def test_detect_rain_cells_with_valid_mask():
+    from risk_models.nowcast import detect_rain_cells
+
+    frame = np.zeros((256, 256), dtype=float)
+    # Cell 1: entirely outside valid mask (y=10..20, x=10..20)
+    frame[10:20, 10:20] = 35.0
+    # Cell 2: partially inside valid mask (y=50..70, x=50..70)
+    frame[50:70, 50:70] = 45.0
+
+    valid_mask = np.zeros((256, 256), dtype=bool)
+    # Mask covers only region y=50..60, x=50..60
+    valid_mask[50:60, 50:60] = True
+
+    cells = detect_rain_cells(frame, threshold=20.0, min_pixels=4, valid_mask=valid_mask)
+    # Cell 1 is discarded; Cell 2 is kept with centroid computed on active region
+    assert len(cells) == 1
+    assert cells[0].peak_intensity == 45.0
+    # Centroid should be inside mask (y=50..60, x=50..60)
+    assert 50.0 <= cells[0].centroid_y <= 60.0
+    assert 50.0 <= cells[0].centroid_x <= 60.0
+

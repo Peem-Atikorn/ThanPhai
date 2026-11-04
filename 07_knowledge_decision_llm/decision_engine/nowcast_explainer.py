@@ -56,19 +56,25 @@ def build_template_answer(summary: NowcastSummary) -> str:
     if summary.direction_th in ["ยังประเมินทิศทางไม่ได้", "ทิศทางไม่แน่นอน"]:
         return f"ตรวจพบกลุ่มฝน{summary.intensity_desc}{summary.location_desc} ยังประเมินทิศทางไม่ได้"
 
+    current = [t.amphoe_th for t in summary.targets if t.eta_min == 0]
+    approaching = [t for t in summary.targets if t.eta_min > 0]
+
+    current_part = f" ขณะนี้ฝนตกที่{' และ'.join(current[:2])}" if current else ""
+    approaching_items = [f"{t.amphoe_th} ใน {t.eta_min} นาที" for t in approaching[:2]]
+    approaching_part = f" คาดว่าจะถึง{' และ'.join(approaching_items)}" if approaching_items else ""
+
     if summary.speed_kmh < 2.0 or summary.direction_th in ["เกือบอยู่กับที่", "อยู่กับที่"]:
-        return f"กลุ่มฝน{summary.intensity_desc}{summary.location_desc} มีการเคลื่อนตัวช้าหรือเกือบอยู่กับที่ โปรดเฝ้าระวังฝนสะสมและน้ำท่วมฉับพลัน"
+        return (
+            f"กลุ่มฝน{summary.intensity_desc}{summary.location_desc} "
+            f"มีการเคลื่อนตัวช้าหรือเกือบอยู่กับที่{current_part} "
+            f"โปรดเฝ้าระวังฝนสะสมและน้ำท่วมฉับพลัน"
+        )
 
     speed_val = int(round(summary.speed_kmh))
-    targets_part = ""
-    if summary.targets:
-        items = [f"{t.amphoe_th} ใน {t.eta_min} นาที" for t in summary.targets[:3]]
-        targets_part = " คาดว่าจะถึง" + " และ".join(items)
-
     return (
         f"กลุ่มฝน{summary.intensity_desc}{summary.location_desc} "
         f"กำลังเคลื่อนตัวไปทาง{summary.direction_th} "
-        f"ด้วยความเร็วราว {speed_val} กม./ชม.{targets_part}"
+        f"ด้วยความเร็วราว {speed_val} กม./ชม.{current_part}{approaching_part}"
     )
 
 
@@ -96,7 +102,10 @@ def validate_nowcast_explanation(
         allowed_nums.add(f"{summary.speed_kmh:.1f}")
         allowed_nums.add(str(int(summary.speed_kmh)))
     for t in summary.targets:
-        allowed_nums.add(str(t.eta_min))
+        if t.eta_min > 0:
+            allowed_nums.add(str(t.eta_min))
+        else:
+            allowed_nums.add("0")
 
     unknown_nums = found_nums - allowed_nums
     if unknown_nums:
@@ -184,7 +193,14 @@ class NowcastExplainer:
         if provider != "qwen" and self.requester is None:
             return template
 
-        targets_str = ", ".join(f"{t.amphoe_th} ในอีก {t.eta_min} นาที" for t in summary.targets) or "ไม่มีอำเภอเสี่ยงโดยตรง"
+        targets_str_parts = []
+        current = [t.amphoe_th for t in summary.targets if t.eta_min == 0]
+        if current:
+            targets_str_parts.append(f"ขณะนี้ฝนตกที่: {', '.join(current)}")
+        approaching = [f"{t.amphoe_th} ในอีก {t.eta_min} นาที" for t in summary.targets if t.eta_min > 0]
+        if approaching:
+            targets_str_parts.append(f"คาดว่าจะถึง: {', '.join(approaching)}")
+        targets_str = "; ".join(targets_str_parts) or "ไม่มีอำเภอเสี่ยงโดยตรง"
         speed_str = (
             f"ความเร็ว: {int(round(summary.speed_kmh))} กม./ชม.\n"
             if summary.speed_kmh >= 2.0
