@@ -156,6 +156,8 @@ class HazardService:
         # Set when slower inputs (satellite, fire model) change, so decisions are rebuilt without
         # pretending the live data is missing (clearing updated_at showed "data time: —" in the UI).
         self._inputs_changed = False
+        # Slow inputs that had arrived when the current decisions were built (see inputs_pending).
+        self._built_with: set[str] = set()
         self._drought: dict | None = None
         self.dams: list[dict] = []  # 35 large dams, refreshed with the live data
         self.rivers: list[dict] = []  # river stations with a flow gauge or over their bank
@@ -220,13 +222,19 @@ class HazardService:
         return {f["properties"]["code"]: {**f["geometry"], "coordinates": _round_coords(f["geometry"]["coordinates"])}
                 for f in features}
 
+    def _slow_inputs(self) -> dict[str, datetime | None]:
+        return {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at,
+                **self.grid_updated_at}
+
     @property
     def inputs_pending(self) -> list[str]:
-        """Slow inputs still loading for the first time (after a restart), so clients can check back soon."""
-        slow = {"gistda_flood": self.satellite_updated_at, "tmd_nwp_daily": self.forecast_updated_at, "fire_model": self.fire_updated_at,
-                **self.grid_updated_at}
-        return [name for name, updated in slow.items()
-                if updated is None and name in self._jobs and not self._jobs[name].done()]
+        """Slow inputs still loading for the first time (after a restart), so clients can check back soon.
+
+        An input that has arrived stays pending until the decisions are rebuilt with it: otherwise a client
+        polling in between got "not pending" with the old, empty values and stopped polling."""
+        return [name for name, updated in self._slow_inputs().items()
+                if (updated is None and name in self._jobs and not self._jobs[name].done())
+                or (updated is not None and name not in self._built_with)]
 
     @property
     def stale(self) -> bool:
@@ -241,6 +249,7 @@ class HazardService:
                 return
             # Reset before the snapshot: inputs that change while this refresh runs set it again.
             self._inputs_changed = False
+            built_with = {name for name, updated in self._slow_inputs().items() if updated is not None}
             results, warnings_result = await self._fetch()
             media = results.pop("thaiwater_media", None)
             raw = (results, warnings_result)
@@ -278,6 +287,7 @@ class HazardService:
                 self.warnings = warnings  # keep the last good warnings if TMD failed this time
             # Merge, not replace: the forecast refresh writes its own entry on a different schedule.
             self.source_status = {**self.source_status, **status}
+            self._built_with = built_with
             self.updated_at = datetime.now(timezone.utc)
 
     def refresh_in_background(self) -> None:
@@ -443,6 +453,7 @@ class HazardService:
         forecasts = dict(self.forecasts)
         air_model = {code: r.value for code, r in self.grid["air_model"].items()}
         heat = dict(self.grid["heat_model"])
+        this_hour = datetime.now(BANGKOK).replace(minute=0, second=0, microsecond=0).isoformat()
         marine = dict(self.grid["marine_model"])
         drought = self._current_drought()
         decisions: dict[str, list[dict]] = {}
@@ -467,7 +478,10 @@ class HazardService:
                                          # None when FIRMS failed, 0 when it worked and saw nothing nearby.
                                          "cross_border_hotspots_24h": (float(cross_border.get(code, 0))
                                                                        if records["nasa_firms"] is not None else None)},
-                HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
+                # The level stays on the 24-h peak (rules.yaml); "now" is the forecast hour we are in, for display.
+                HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None,
+                                  "heat_index_now": (heat[code].extra.get("hourly", {}).get(this_hour)
+                                                     if code in heat else None)},
                 # Inland districts have no sea: no value, and the card says why.
                 HazardType.MARINE: {"wave_height_max_24h": marine[code].value if code in marine else None},
                 HazardType.LANDSLIDE: self._landslide_observations(code, value(rain, "rain_24h", code), forecasts),

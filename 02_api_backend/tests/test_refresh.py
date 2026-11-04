@@ -300,6 +300,18 @@ async def test_inputs_pending_only_while_first_load_runs(base_service):
         svc._jobs, svc.satellite_updated_at = saved
 
 
+def test_arrived_input_stays_pending_until_decisions_use_it():
+    # Without data files: inputs_pending reads only these attributes.
+    svc = HazardService.__new__(HazardService)
+    svc.satellite_updated_at = svc.forecast_updated_at = svc.fire_updated_at = None
+    svc.grid_updated_at = {"heat_model": datetime.now(timezone.utc), "marine_model": None}
+    svc._jobs, svc._built_with = {}, set()
+    # The heat forecast has arrived, but the decisions on show were built without it: keep clients polling.
+    assert svc.inputs_pending == ["heat_model"]
+    svc._built_with = {"heat_model"}
+    assert svc.inputs_pending == []
+
+
 def test_pm25_station_wins_and_model_fills_districts_without_one(base_service, monkeypatch):
     from thanphai_shared import SourceRecord
 
@@ -357,11 +369,15 @@ def test_heat_level_comes_from_the_forecast_heat_index(base_service, monkeypatch
 
     svc = stale_copy(base_service)
     sena = next(a.code for a in svc.gazetteer.resolve("อำเภอเสนา"))
-    peak = {"peak_time": "2026-04-20T14:00:00+07:00", "temperature_c": 38.0, "humidity_pct": 55.0}
+    this_hour = datetime.now(timezone(timedelta(hours=7))).replace(minute=0, second=0, microsecond=0).isoformat()
+    peak = {"peak_time": "2026-04-20T14:00:00+07:00", "temperature_c": 38.0, "humidity_pct": 55.0,
+            "hourly": {this_hour: 31.2}}
     monkeypatch.setitem(svc.grid, "heat_model", {sena: SimpleNamespace(value=44.6, extra=peak)})
     decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
     heat = next(i for i in decisions[sena] if i["hazard"] == "heat")
+    # The level follows the 24-h peak; "now" is only shown.
     assert heat["level"] == "WARNING" and heat["rule_ids"][0] == "HEAT_INDEX_DANGER"
+    assert heat["observations"]["heat_index_now"] == 31.2
     assert "14:00" in heat["notices"][0]
     other = next(c for c in svc.amphoe_codes if c != sena)
     assert next(i for i in decisions[other] if i["hazard"] == "heat")["level"] is None  # no forecast yet = no data

@@ -393,6 +393,8 @@ export function describeObservation(key: string, value: number | null): string |
       return `แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า ${value.toFixed(1)} มคก./ลบ.ม.`;
     case "heat_index_max_24h":
       return `ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(1)}°C (เกณฑ์กรมอุตุฯ: ${tmdHeatLabel(value)})`;
+    case "heat_index_now":
+      return `ตอนนี้ร้อนเหมือน ${value.toFixed(1)}°C (ค่าคาดการณ์ชั่วโมงนี้)`;
     case "quake_mmi_24h":
       return value <= 1 ? "ไม่มีแผ่นดินไหวที่รู้สึกได้ใน 24 ชม." : `ประเมินแรงสั่นระดับ ${value.toFixed(0)} (มาตราเมอร์คัลลี)`;
     case "quake_magnitude":

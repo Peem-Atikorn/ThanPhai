@@ -7,8 +7,10 @@ import Icon from "@/components/Icon";
 type Metric = "air_quality" | "heat";
 export type EnvironmentLayer = GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } };
 export type EnvironmentState = { key: string; data: EnvironmentLayer | null; error: boolean };
+// The heat card shows the forecast for the hour it is now; its level and the small line use the 24-h peak.
 const fields = { air_quality: "pm25_24h", heat: "heat_index_now" } as const;
 const HEAT_PEAK = "heat_index_max_24h";
+// The backend's name for each card's Open-Meteo forecast while it is still loading after a restart (`inputs_pending`).
 const models = { air_quality: "air_model", heat: "heat_model" } as const;
 
 export function highestEnvironmentValue(layer: GeoJSON.FeatureCollection | null, metric: Metric) {
@@ -19,7 +21,7 @@ export function highestEnvironmentValue(layer: GeoJSON.FeatureCollection | null,
         if (typeof value !== "number" || !Number.isFinite(value)) continue;
         if (!highest || value > highest.value)
             highest = { value, peak: metric === "heat" ? p?.[HEAT_PEAK] ?? null : null,
-                name: p?.name_th ?? "", province: p?.province_th ?? "", level: p?.level ?? null };
+                        name: p?.name_th ?? "", province: p?.province_th ?? "", level: p?.level ?? null };
     }
     return highest;
 }
@@ -45,10 +47,11 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             const value = area ? (model ? assessment?.observations.pm25_model_24h : measured) : maximum?.value;
             const hasValue = typeof value === "number" && Number.isFinite(value);
             const peak = metric === "heat" ? (area ? assessment?.observations[HEAT_PEAK] : maximum?.peak) : null;
+            // Only this card's own forecast counts; another input still loading does not make this card incomplete.
             const pending = !area && !!state?.data?.meta.inputs_pending?.includes(models[metric]);
             const loading = loadingArea || (!area && !areaError && !state?.data && !state?.error) || (pending && !hasValue);
             const error = areaError || (!area && state?.error);
-            const available = !loading && !error && typeof value === "number" && Number.isFinite(value);
+            const available = !loading && !error && hasValue;
             const level = available ? (area ? assessment?.level : maximum?.level) ?? null : null;
             const source = model ? "Open-Meteo / CAMS (แบบจำลอง)" : metric === "air_quality" ? "Air4Thai / กรมควบคุมมลพิษ" : "Open-Meteo";
             const degraded = area ? area.degraded_services.length : state?.data?.meta.degraded_services.length;
@@ -61,7 +64,7 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             return <article key={metric} title={details}>
                 <span className="environment-icon" aria-hidden="true"><Icon name={metric}/></span>
                 <h3>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
-                <p className="environment-value">{metric === "heat" && available && <span>{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
+                <p className="environment-value">{metric === "heat" && available && <span>{tr("ตอนนี้ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
                 <div className="environment-status"><span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span>{available && <small>{tr((model ? "แบบจำลอง · " : "") + period)}{metric === "heat" && typeof peak === "number" && Number.isFinite(peak) ? `${tr(" · สูงสุดใน 24 ชม. ข้างหน้า ")}${peak.toLocaleString(getLocale(), { maximumFractionDigits: 1 })}°C` : ""}</small>}</div>
                 <small className="environment-meta"><span>{tr(area ? scope : place || scope)}</span><span>{tr(source)}</span><span>{tr("อัปเดต ")}{tr(updated)}</span></small>
                 {!!(pending || degraded) && <small className="environment-notice">{tr(pending ? "ข้อมูลยังไม่ครบ" : "ข้อมูลบางแหล่งไม่พร้อมใช้งาน")}</small>}

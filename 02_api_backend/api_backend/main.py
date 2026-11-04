@@ -43,6 +43,8 @@ async def lifespan(app: FastAPI):
     service.refresh_forecast_in_background()
     service.refresh_satellite_in_background()
     service.refresh_fire_in_background()
+    # Open-Meteo district forecasts are paced (~2-3 min for all three); start now, not on the first page view.
+    service.refresh_grids_in_background()
     yield
 
 
