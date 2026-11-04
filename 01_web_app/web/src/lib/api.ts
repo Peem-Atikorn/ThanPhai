@@ -284,6 +284,7 @@ export interface AskAnswer {
   area: { code: string; level: string; label: string; lat: number; lon: number } | null;
   sources: string[];
   llm_used?: boolean;
+  llm_model?: string | null;
 }
 
 async function get<T>(path: string): Promise<T> {

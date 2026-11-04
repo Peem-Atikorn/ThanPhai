@@ -41,6 +41,10 @@ SOURCE_TH = {
     "fire_model": "แบบจำลองไฟป่าของทันภัย",
 }
 # Lines of the rule-based answer that are always shown as written, even when the LLM rewrites the rest.
+# Answers built from real records that the LLM may reword (validate() keeps every number and level).
+# Not media (links must stay exact), prepare (official guidance), emergency, clarify or sources.
+REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history", "river", "earthquake", "storms",
+                   "waves", "water_quality", "pm25_stations", "fire_hotspots"}
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
 PREPARE_TH = {
@@ -106,6 +110,7 @@ class AgentAnswer:
     # True when the LLM wrote `text`; `facts` always holds the rule-based answer it was checked against.
     llm_used: bool = False
     facts: str = ""
+    llm_model: str | None = None  # which model wrote `text` when llm_used
 
 
 # (question, facts) -> rewritten text, or None to keep the rule-based answer.
@@ -278,7 +283,33 @@ class HazardAgent:
         self.tools = tools
         self.explainer = explainer
 
+    def _model_name(self) -> str | None:
+        return getattr(getattr(self.explainer, "config", None), "model", None)
+
+    def _chat(self, question: str, fallback: AgentAnswer) -> AgentAnswer:
+        """Small talk in the assistant's own voice; the fixed text when no LLM answers safely."""
+        chat = getattr(self.explainer, "chat", None)
+        reply = chat(question) if chat else None
+        if not reply:
+            return fallback
+        return AgentAnswer(reply.strip(), fallback.intent, None, [], llm_used=True, facts=fallback.text,
+                           llm_model=self._model_name())
+
     def ask(self, question: str, now: datetime) -> AgentAnswer:
+        answer = self._route(question, now)
+        if self.explainer and answer.intent in REWRITE_INTENTS and answer.text and not answer.llm_used:
+            answer.facts = answer.text
+            rewritten = self.explainer(question, answer.text)
+            if rewritten:
+                # The LLM writes only the summary; validate() has checked every number and level against the facts.
+                # Official warnings, emergency numbers and sources are copied from the rule-based answer word for
+                # word, so a rewrite can never drop or change them.
+                tail = [line for line in answer.text.splitlines() if line.startswith(VERBATIM_PREFIXES)]
+                answer.text, answer.llm_used = "\n".join([rewritten.strip(), *tail]), True
+                answer.llm_model = self._model_name()
+        return answer
+
+    def _route(self, question: str, now: datetime) -> AgentAnswer:
         # "พรุ่งนี้" means tomorrow in Thailand; with a UTC clock it would be wrong between 00:00 and 07:00.
         u = understand(question, self.gazetteer, now.astimezone(BANGKOK))
         if u.intent == "emergency":
@@ -288,7 +319,7 @@ class HazardAgent:
                     "• ตอนนี้อำเภอเสนาน้ำท่วมไหม\n"
                     "• พรุ่งนี้ฝนตกที่จังหวัดขอนแก่นไหม\n"
                     "• ต้องเตรียมตัวอย่างไรเมื่อเกิดไฟป่า")
-            return AgentAnswer(text, u.intent, None, [])
+            return self._chat(question, AgentAnswer(text, u.intent, None, []))
         if "mueang province required" in u.notes:
             text = ("อำเภอเมืองของจังหวัดไหนครับ กรุณาระบุจังหวัด เช่น อำเภอเมืองเชียงใหม่"
                     if not any(a.level == "province" for a in u.areas)
@@ -310,7 +341,7 @@ class HazardAgent:
         if u.intent == "out_of_scope":
             text = (f"ทันภัยตอบได้เฉพาะเรื่อง{' · '.join(HAZARD_TH.values())}ในประเทศไทยครับ "
                     'ลองถามเช่น "น้ำจะท่วมอำเภอบางบัวทองไหม"')
-            return AgentAnswer(text, u.intent, None, [])
+            return self._chat(question, AgentAnswer(text, u.intent, None, []))
         if u.intent in ("overview", "ranking"):
             return self._national(question, u)
         if u.intent == "prepare" and not u.area:
@@ -323,16 +354,7 @@ class HazardAgent:
             options = " / ".join(_area_label(a, self.gazetteer) for a in same_name[:4])
             prompt = f"ยังมีอีก {len(same_name) - 4} แห่ง ช่วยระบุจังหวัดที่ต้องการครับ" if len(same_name) > 4 else "หมายถึงที่ไหนครับ"
             return AgentAnswer(f"พบหลายพื้นที่ชื่อนี้: {options} {prompt}", "clarify", None, [h.value for h in u.hazards], notes=u.notes)
-        answer = self._assess(u, question)
-        if self.explainer and answer.intent in ("risk", "explain"):
-            answer.facts = answer.text
-            rewritten = self.explainer(question, answer.text)
-            if rewritten:
-                # The LLM writes only the summary. Official warnings, emergency numbers and sources are copied
-                # from the rule-based answer word for word, so a rewrite can never drop or change them.
-                tail = [line for line in answer.text.splitlines() if line.startswith(VERBATIM_PREFIXES)]
-                answer.text, answer.llm_used = "\n".join([rewritten.strip(), *tail]), True
-        return answer
+        return self._assess(u, question)
 
     def _data_answer(self, question: str, u: Understanding, now: datetime) -> AgentAnswer:
         """Answer data questions from backend records without asking the LLM to supply facts."""
