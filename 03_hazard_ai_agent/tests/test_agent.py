@@ -661,3 +661,12 @@ def test_daily_weather_question_with_a_place_is_a_rain_risk_question():
 
 def test_national_and_regional_questions_still_get_the_overview():
     assert understand("สรุปฝนตกหนักทั้งประเทศ", GAZ, NOW).intent == "overview"
+
+
+def test_a_source_line_the_llm_copies_is_not_shown_twice():
+    def reword(q, facts):
+        source = next(line for line in facts.splitlines() if line.startswith("ที่มา:"))
+        return f"เขื่อนหนองปลาไหลมีน้ำตามข้อมูลล่าสุดครับ\n{source}"
+
+    answer = HazardAgent(GAZ, DamTools(), explainer=reword).ask("Nong Pla Lai dam level?", NOW)
+    assert answer.llm_used and answer.text.count("ที่มา:") == answer.facts.count("ที่มา:") == 1

@@ -305,7 +305,9 @@ class HazardAgent:
                 # Official warnings, emergency numbers and sources are copied from the rule-based answer word for
                 # word, so a rewrite can never drop or change them.
                 tail = [line for line in answer.text.splitlines() if line.startswith(VERBATIM_PREFIXES)]
-                answer.text, answer.llm_used = "\n".join([rewritten.strip(), *tail]), True
+                # The model sometimes copies a tail line ("ที่มา: …") into its own text; keep only the verbatim copy.
+                body = [line for line in rewritten.strip().splitlines() if not line.strip().startswith(VERBATIM_PREFIXES)]
+                answer.text, answer.llm_used = "\n".join([*body, *tail]), True
                 answer.llm_model = self._model_name()
         return answer
 
