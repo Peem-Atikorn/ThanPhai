@@ -152,7 +152,10 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         data_intent = "media"
     elif any(w in lowered for w in ("คลื่น", "wave")) and any(w in lowered for w in ("สูงสุด", "ความสูง", "เท่าไหร่", "กี่", "ตัวเลข", "ข้อมูลคลื่น", "wave")):
         data_intent = "waves"
-    elif any(w in lowered for w in ("พายุอะไร", "พายุไหน", "ชื่อพายุ", "พายุล่าสุด", "พายุที่กำลัง", "active storm", "cyclone")):
+    elif (any(w in lowered for w in ("พายุอะไร", "พายุไหน", "ชื่อพายุ", "พายุล่าสุด", "พายุที่กำลัง", "active storm", "cyclone"))
+          or (not areas
+              and any(w in lowered for w in ("พายุหมุน", "พายุโซนร้อน", "ไต้ฝุ่น", "ดีเปรสชัน", "ไซโคลน", "tropical storm", "typhoon"))
+              and any(w in lowered for w in ("อะไร", "ไหน", "ชื่อ", "รายชื่อ", "ล่าสุด", "ตอนนี้", "ปัจจุบัน", "active", "current")))):
         data_intent = "storms"
     elif any(w in lowered for w in ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "earthquake", "aftershock", "quake")) and (
             not areas or any(w in lowered for w in ("ล่าสุด", "ที่ไหน", "เกิดเมื่อ", "ขนาด", "magnitude"))):

@@ -24,7 +24,7 @@ class DataTools:
         return [{"name": "พายุสมมติ", "wind_kmh": 90, "time": "2026-11-04T02:00:00+00:00", "source": "GDACS"}]
 
     def get_waves(self):
-        return [{"lat": 9.5, "lon": 101.0, "wave_height_max_24h": 3.2, "peak_time": "2026-11-04T03:00:00+00:00"}]
+        return [{"lat": 9.5, "lon": 101.0, "height_m": 3.2, "peak_time": "2026-11-04T03:00:00+00:00"}]
 
     def get_water_quality(self):
         return [{"name_th": "สถานีปากแม่น้ำ", "province_th": "สมุทรปราการ", "salinity_gl": 0.8,
@@ -78,6 +78,13 @@ def test_storm_question_combines_hii_and_cyclone_records_with_sources():
     assert "สสน." in answer.text and "GDACS" in answer.text and "4/11/2569" in answer.text
 
 
+def test_tropical_cyclone_wording_routes_to_active_storm_list():
+    question = "ตอนนี้มีพายุหมุนอะไรบ้าง"
+    assert understand(question, GAZ, NOW).intent == "storms"
+    answer = agent.ask(question, NOW)
+    assert "CHAMPI" in answer.text and "พายุสมมติ" in answer.text
+
+
 def test_wave_question_returns_measured_forecast_value_time_and_source():
     answer = agent.ask("คลื่นสูงสุดวันนี้เท่าไหร่", NOW)
     assert answer.intent == "waves"
@@ -117,6 +124,15 @@ def test_dam_history_compares_requested_week_and_never_calls_explainer():
     assert answer.intent == "dam_history"
     assert "ภูมิพล" in answer.text and "50" in answer.text and "40" in answer.text
     assert "ThaiWater" in answer.text and "4/11/2569" in answer.text
+
+
+def test_dam_history_with_no_record_through_today_reports_insufficient_data():
+    class FutureOnlyTools(DataTools):
+        def get_dam_history(self, dam_id, series="storage"):
+            return {"series": [{"year": 2026, "values": [["2026-11-05", 50]]}]}
+
+    answer = HazardAgent(GAZ, FutureOnlyTools()).ask("เขื่อนภูมิพลเทียบกับเมื่อวานเป็นอย่างไร", NOW)
+    assert "ยังไม่ครบพอ" in answer.text
 
 
 def test_media_question_returns_clickable_url_time_and_source():

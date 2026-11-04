@@ -397,14 +397,14 @@ class HazardAgent:
 
         if intent == "waves":
             waves = rows("get_waves")
-            waves.sort(key=lambda row: row.get("wave_height_max_24h") or 0, reverse=True)
+            waves.sort(key=lambda row: row.get("height_m") or 0, reverse=True)
             if not waves:
                 message = ("แบบจำลองคลื่นขัดข้อง จึงยังดึงข้อมูลล่าสุดไม่ได้"
                            if sources_down("open_meteo_waves") else "ยังไม่มีข้อมูลคลื่นจากแบบจำลอง Open-Meteo Marine")
                 return finish([message], [], ["Open-Meteo Marine"])
             lines = ["ค่าคลื่นสูงสุดที่มีข้อมูลใน 24 ชั่วโมงข้างหน้า:"]
             for wave in waves[:5]:
-                height = wave.get("wave_height_max_24h")
+                height = wave.get("height_m")
                 time = _time_th(wave.get("peak_time") or wave.get("time"))
                 where = f"พิกัด {wave['lat']:.2f}, {wave['lon']:.2f}" if wave.get("lat") is not None and wave.get("lon") is not None else ""
                 lines.append((f"• {height:g} เมตร" if isinstance(height, (int, float)) else "• ไม่มีค่าคลื่น")
@@ -497,8 +497,9 @@ class HazardAgent:
                 return finish([f"ยังไม่มีข้อมูลย้อนหลังของเขื่อน{dam['name_th']} ให้เปรียบเทียบ"], [], ["ThaiWater (สสน.)"])
             current = next((item for item in reversed(parsed) if item[0] <= now.date()), None)
             comparison_day = now.date() - timedelta(days=7 if any(w in question for w in ("สัปดาห์", "อาทิตย์")) else 1)
-            previous = min((item for item in parsed if item[0] < current[0] and abs((item[0] - comparison_day).days) <= 1),
-                           key=lambda item: abs((item[0] - comparison_day).days), default=None)
+            previous = (min((item for item in parsed if item[0] < current[0] and abs((item[0] - comparison_day).days) <= 1),
+                            key=lambda item: abs((item[0] - comparison_day).days), default=None)
+                        if current else None)
             if not current or not previous:
                 return finish([f"ข้อมูลย้อนหลังของเขื่อน{dam['name_th']} ยังไม่ครบพอสำหรับเทียบกับวันที่ {comparison_day.day}/{comparison_day.month}"],
                               history.get("series", []) if history else [], ["ThaiWater (สสน.)"])
