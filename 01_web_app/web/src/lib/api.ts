@@ -356,6 +356,10 @@ export function describeObservation(key: string, value: number | null): string |
       return value > 0 ? `ดาวเทียมพบน้ำท่วมกระจายในพื้นที่ราว ${Math.round(value * 0.1245)} ตร.กม. (7 วัน)` : "ดาวเทียมไม่พบน้ำท่วมใน 7 วัน";
     case "rain_24h":
       return `ฝน 24 ชม. สูงสุด ${value.toFixed(1)} มม.`;
+    case "rain_chance_now":
+      return `โอกาสฝนตกชั่วโมงนี้ ${value.toFixed(0)}%`;
+    case "rain_chance_max_24h":
+      return `โอกาสฝนตกสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(0)}% (แบบจำลอง)`;
     case "hotspots_24h":
       return `จุดความร้อน 24 ชม. ${value} จุด`;
     case "fire_probability_7d":
