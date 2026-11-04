@@ -12,6 +12,7 @@ import RainCloudSkeleton from "@/components/RainCloudSkeleton";
 import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
 import EventsPanel from "@/components/EventsPanel";
+import EnvironmentSummary, { type EnvironmentState } from "@/components/EnvironmentSummary";
 import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
@@ -217,15 +218,17 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const hazard = activeHazard ?? localHazard;
     const setHazard = onHazardChange ?? setLocalHazard;
     const [revision, setRevision] = useState(0);
+    const [environmentLayers, setEnvironmentLayers] = useState<Record<"air_quality" | "heat", EnvironmentState | null>>({ air_quality: null, heat: null });
     const [layerState, setLayerState] = useState<{
         key: string;
         data: Layer | null;
         error: boolean;
     } | null>(null);
     const layerKey = hazard + ":" + revision;
-    const layer = layerState?.key === layerKey || layerState?.key.startsWith(hazard + ":") ? layerState?.data ?? null : null;
-    const layerError = layerState?.key === layerKey && layerState.error;
-    const layerLoading = layerState?.key !== layerKey;
+    const activeLayerState = hazard === "air_quality" || hazard === "heat" ? environmentLayers[hazard] : layerState;
+    const layer = activeLayerState?.key === layerKey || activeLayerState?.key.startsWith(hazard + ":") ? activeLayerState?.data ?? null : null;
+    const layerError = activeLayerState?.key === layerKey && activeLayerState.error;
+    const layerLoading = activeLayerState?.key !== layerKey;
     useEffect(() => { if (!layerLoading)
         onReady?.(); }, [layerLoading, onReady]);
     const [nationalLayer, setNationalLayer] = useState<Layer | null>(null);
@@ -407,6 +410,18 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         return () => { cancelled = true; };
     }, [revision]);
     useEffect(() => {
+        let cancelled = false;
+        for (const metric of ["air_quality", "heat"] as const) {
+            const key = metric + ":" + revision;
+            api.layer(metric)
+                .then(data => !cancelled && setEnvironmentLayers(old => ({ ...old, [metric]: { key, data, error: false } })))
+                .catch(() => !cancelled && setEnvironmentLayers(old => ({ ...old, [metric]: { key, data: null, error: true } })));
+        }
+        return () => { cancelled = true; };
+    }, [revision]);
+    useEffect(() => {
+        // These two layers also feed the persistent summary; switching tabs reuses that request.
+        if (hazard === "air_quality" || hazard === "heat") return;
         let cancelled = false;
         api.layer(hazard)
             .then((data) => !cancelled && setLayerState({ key: layerKey, data, error: false }))
@@ -770,6 +785,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
       <div className="dashboard-grid">
         {tr(!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search"/>{tr("ค้นหาจังหวัด อำเภอ หรือตำบล")}<Icon name="arrow"/></a>)}
         <section className="map-panel" aria-label={tr("ภาพรวมความเสี่ยง")}>
+          {view === "hazard" && (hazard === "overview" || areaStatus !== "idle") && <EnvironmentSummary layers={environmentLayers} area={area} loadingArea={areaStatus === "loading"} areaError={areaStatus === "error"}/>}
           <div className="map-chrome">{tr(!hideToolbar && mapControls)}<div className="map-heading">
             <div className="map-heading-copy">
               <h2>{tr(selectedRiskLevel ? tr("พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("ทั่วประเทศ") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่ปริมาณน้ำในเขื่อน" : view === "rivers" ? "แผนที่ระดับน้ำในแม่น้ำ" : tr("แผนที่ความเสี่ยง") + tr(itemTh(hazard)) + tr(""))}</h2>

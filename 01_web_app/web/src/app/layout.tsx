@@ -5,6 +5,7 @@ import "./landing.css";
 import "./command-center.css";
 import "./workspace-navigation.css";
 import "./mascot.css";
+import "./environment.css";
 
 const notoThai = Noto_Sans_Thai({
   variable: "--font-noto-thai",

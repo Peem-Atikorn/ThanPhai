@@ -545,5 +545,16 @@
   "ภาคตะวันออก": "Eastern region",
   "ภาคใต้": "Southern region",
   "ภาคใต้ฝั่งตะวันออก": "Southern region, east coast",
-  "ภาคใต้ฝั่งตะวันตก": "Southern region, west coast"
+  "ภาคใต้ฝั่งตะวันตก": "Southern region, west coast",
+  "ฝุ่นและความร้อน": "Air quality and heat",
+  "สูงสุดในประเทศ · อำเภอที่มีข้อมูล": "National maximum · reporting districts",
+  "ร้อนเหมือน": "Feels like",
+  "โหลดข้อมูลไม่ได้": "Could not load data",
+  "เฉลี่ย 24 ชม.": "24-hour average",
+  "สูงสุดใน 24 ชม. ข้างหน้า": "Maximum over the next 24 hours",
+  "ยังไม่มีเวลาข้อมูล": "Update time unavailable",
+  "Air4Thai / กรมควบคุมมลพิษ": "Air4Thai / Pollution Control Department",
+  "Open-Meteo / CAMS (แบบจำลอง)": "Open-Meteo / CAMS (model)",
+  "แบบจำลอง · เฉลี่ย 24 ชม. ข้างหน้า": "Model · next 24-hour average",
+  "ข้อมูลยังไม่ครบ": "Some data is still loading"
 }
