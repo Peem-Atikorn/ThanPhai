@@ -5,9 +5,11 @@ without tampering with deterministic alert levels or distorting statements.
 """
 
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 import json
 import logging
 import os
+from pathlib import Path
 import re
 from typing import Any, Callable
 
@@ -15,12 +17,39 @@ from .explainer import QwenConfig, _numbers, call_qwen_api
 
 log = logging.getLogger("warning_explainer")
 
-DEFAULT_STRONG_WORDS = ["หนักมาก", "หลายพื้นที่", "น้ำท่วมฉับพลัน", "น้ำป่าไหลหลาก"]
 PROHIBITED_INTENSIFIERS = ["รุนแรงมาก", "เป็นบริเวณกว้าง"]
 PROHIBITED_ADVICE_WORDS = ["อพยพ", "หลบภัย", "ศูนย์พักพิง", "กักตุน", "evacuat"]
 
 LEVELS_TH = ("ปกติ", "เฝ้าระวัง", "เตือนภัย", "วิกฤต")
 LEVELS_EN = {"ปกติ": "NORMAL", "เฝ้าระวัง": "WATCH", "เตือนภัย": "WARNING", "วิกฤต": "CRITICAL"}
+
+PROVINCES_BY_REGION = {
+    "ภาคเหนือ": [
+        "เชียงราย", "แม่ฮ่องสอน", "เชียงใหม่", "ลำพูน", "ลำปาง", "พะเยา", "แพร่", "น่าน", "อุตรดิตถ์", "ตาก",
+        "สุโขทัย", "พิษณุโลก", "พิจิตร", "กำแพงเพชร", "เพชรบูรณ์", "นครสวรรค์", "อุทัยธานี"
+    ],
+    "ภาคตะวันออกเฉียงเหนือ": [
+        "เลย", "หนองคาย", "บึงกาฬ", "หนองบัวลำภู", "อุดรธานี", "สกลนคร", "นครพนม", "มุกดาหาร", "ขอนแก่น",
+        "กาฬสินธุ์", "มหาสารคาม", "ร้อยเอ็ด", "ชัยภูมิ", "นครราชสีมา", "บุรีรัมย์", "สุรินทร์", "ศรีสะเกษ",
+        "ยโสธร", "อำนาจเจริญ", "อุบลราชธานี"
+    ],
+    "ภาคกลาง": [
+        "ชัยนาท", "สิงห์บุรี", "อ่างทอง", "ลพบุรี", "สระบุรี", "พระนครศรีอยุธยา", "สุพรรณบุรี", "กาญจนบุรี",
+        "ราชบุรี", "สมุทรสงคราม"
+    ],
+    "กรุงเทพมหานครและปริมณฑล": [
+        "กรุงเทพมหานคร", "กรุงเทพฯ", "กทม", "นนทบุรี", "ปทุมธานี", "สมุทรปราการ", "สมุทรสาคร", "นครปฐม"
+    ],
+    "ภาคตะวันออก": [
+        "นครนายก", "ปราจีนบุรี", "สระแก้ว", "ฉะเชิงเทรา", "ชลบุรี", "ระยอง", "จันทบุรี", "ตราด"
+    ],
+    "ภาคใต้": [
+        "เพชรบุรี", "ประจวบคีรีขันธ์", "ชุมพร", "สุราษฎร์ธานี", "นครศรีธรรมราช", "พัทลุง", "สงขลา",
+        "ปัตตานี", "ยะลา", "นราธิวาส", "ระนอง", "พังงา", "ภูเก็ต", "กระบี่", "ตรัง", "สตูล"
+    ],
+}
+
+PROVINCE_TO_REGION = {p: r for r, plist in PROVINCES_BY_REGION.items() for p in plist}
 
 REGIONS_COVERED = {
     "ประเทศไทยตอนบน": [
@@ -83,6 +112,23 @@ class WarningSummaryResult:
     valid: bool = True
 
 
+def load_strong_words() -> list[str]:
+    """Read strong_words from decision_engine/rules.yaml to prevent divergence."""
+    try:
+        import yaml
+
+        rules_path = Path(__file__).with_name("rules.yaml")
+        if rules_path.exists():
+            with rules_path.open(encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                words = data.get("official_warning", {}).get("strong_words")
+                if words:
+                    return list(words)
+    except Exception:
+        pass
+    return ["หนักมาก", "หลายพื้นที่", "น้ำท่วมฉับพลัน", "น้ำป่าไหลหลาก"]
+
+
 def _normalize_ws(text: str) -> str:
     """Remove all whitespace for exact Thai phrase comparison (e.g. 'น้ำป่าไหลหลา ก' -> 'น้ำป่าไหลหลาก')."""
     return re.sub(r"\s+", "", text)
@@ -93,30 +139,47 @@ def _split_clauses(text: str) -> list[str]:
     return [c.strip() for c in CLAUSE_SPLIT.split(text) if c.strip()]
 
 
-def _find_region_match(text: str) -> list[str]:
-    """Find all regions mentioned in text, longest first."""
-    found = []
+def _find_region_match(text: str) -> tuple[list[str], list[str]]:
+    """Find all regions and provinces mentioned in text.
+
+    Returns (matched_regions, matched_provinces).
+    """
+    found_regions = []
     for r in sorted(REGIONS_COVERED.keys(), key=len, reverse=True):
         if r in text:
-            found.append(r)
-    return found
+            found_regions.append(r)
+
+    found_provinces = []
+    for p, r in sorted(PROVINCE_TO_REGION.items(), key=lambda x: len(x[0]), reverse=True):
+        # Match as whole province or prefixed with จ. / จังหวัด
+        if p in text:
+            found_provinces.append(p)
+            if r not in found_regions:
+                found_regions.append(r)
+            if r in ["ภาคเหนือ", "ภาคตะวันออกเฉียงเหนือ", "ภาคกลาง", "กรุงเทพมหานครและปริมณฑล", "ภาคตะวันออก"]:
+                if "ประเทศไทยตอนบน" not in found_regions:
+                    found_regions.append("ประเทศไทยตอนบน")
+
+    return found_regions, found_provinces
 
 
-def _split_clauses_with_regions(text: str) -> list[tuple[list[str], str]]:
-    """Split text into clauses and associate each with its active regions (carrying forward if advice/continuation)."""
+def _split_clauses_with_regions(text: str) -> list[tuple[list[str], list[str], str]]:
+    """Split text into clauses and associate each with its active regions and provinces."""
     raw_clauses = _split_clauses(text)
     results = []
-    current_regions = []
+    current_regions: list[str] = []
+    current_provinces: list[str] = []
     for c in raw_clauses:
-        regs = _find_region_match(c)
-        if regs:
+        regs, provs = _find_region_match(c)
+        if regs or provs:
             current_regions = regs
-        results.append((list(current_regions), c))
+            current_provinces = provs
+        results.append((list(current_regions), list(current_provinces), c))
     return results
 
 
 def _allowed_days_for_region(reg_name: str, by_region: list[dict]) -> set[str]:
-    """Compute allowed calendar day numbers for a region based on by_region from/to dates."""
+    """Compute allowed calendar day numbers for a region handling cross-month spans."""
     allowed = set()
     for item in by_region:
         areas = item.get("areas", [])
@@ -128,15 +191,19 @@ def _allowed_days_for_region(reg_name: str, by_region: list[dict]) -> set[str]:
             if area == reg_name:
                 covers = True
                 break
+            if area in PROVINCES_BY_REGION and reg_name in PROVINCES_BY_REGION[area]:
+                covers = True
+                break
         if covers:
             from_str = item.get("from")
             to_str = item.get("to")
             if from_str and to_str:
                 try:
-                    f_day = int(from_str.split("-")[-1])
-                    t_day = int(to_str.split("-")[-1])
-                    for d in range(f_day, t_day + 1):
-                        allowed.add(str(d))
+                    d_cur = date.fromisoformat(from_str)
+                    d_end = date.fromisoformat(to_str)
+                    while d_cur <= d_end:
+                        allowed.add(str(d_cur.day))
+                        d_cur += timedelta(days=1)
                 except (ValueError, IndexError):
                     pass
     return allowed
@@ -155,16 +222,19 @@ def _allowed_hazards_for_region(reg_name: str, by_region: list[dict]) -> set[str
             if area == reg_name:
                 covers = True
                 break
+            if area in PROVINCES_BY_REGION and reg_name in PROVINCES_BY_REGION[area]:
+                covers = True
+                break
         if covers:
             for h in item.get("hazards", []):
                 allowed.add(h)
     return allowed
 
 
-def _region_original_has_word(reg_name: str, word: str, original_regional_clauses: list[tuple[list[str], str]]) -> bool:
+def _region_original_has_word(reg_name: str, word: str, original_regional_clauses: list[tuple[list[str], list[str], str]]) -> bool:
     """Check if the original announcement text clause for a region contains the specific word (whitespace-insensitive)."""
     norm_word = _normalize_ws(word)
-    for regs, clause in original_regional_clauses:
+    for regs, _, clause in original_regional_clauses:
         matches = reg_name in regs or any(
             parent for parent, children in REGIONS_COVERED.items() if reg_name in children and parent in regs
         )
@@ -179,10 +249,11 @@ def validate_warning_summary(
     original_text: str,
     by_region: list[dict],
     strong_words: list[str] | None = None,
+    rain_days: list[dict] | None = None,
 ) -> list[str]:
     """Strict zero-trust validator for AI TMD warning summary against ground-truth facts."""
     problems: list[str] = []
-    strong_words = strong_words or DEFAULT_STRONG_WORDS
+    strong_words = strong_words or load_strong_words()
 
     # 1. Rule 7: Do not wrap entire summary in quotation marks
     stripped = summary.strip()
@@ -219,18 +290,59 @@ def validate_warning_summary(
     original_regional_clauses = _split_clauses_with_regions(original_text)
 
     for s_clause in summary_clauses:
-        matched_regions = _find_region_match(s_clause)
+        matched_regions, matched_provinces = _find_region_match(s_clause)
+
+        # Extract days mentioned in this clause
+        clause_days = set(re.findall(r"\b\d{1,2}\b", s_clause))
+        day_candidates = {d for d in clause_days if 1 <= int(d) <= 31 and d not in ["2569", "2568"]}
+        if "2 เมตร" in s_clause or "2เมตร" in s_clause:
+            day_candidates.discard("2")
+
+        # Item 4: Orphan clause without explicit region name
         if not matched_regions:
+            # If dates are mentioned, verify that any hazards in clause are allowed on those dates
+            if day_candidates:
+                for cand_day in day_candidates:
+                    # Find which items in by_region cover this day
+                    allowed_h_for_day = set()
+                    for item in by_region:
+                        f_str, t_str = item.get("from"), item.get("to")
+                        if f_str and t_str:
+                            try:
+                                d_cur, d_end = date.fromisoformat(f_str), date.fromisoformat(t_str)
+                                while d_cur <= d_end:
+                                    if str(d_cur.day) == cand_day:
+                                        allowed_h_for_day.update(item.get("hazards", []))
+                                    d_cur += timedelta(days=1)
+                            except (ValueError, IndexError):
+                                pass
+                    for h_type, kws in HAZARD_KEYWORDS.items():
+                        if any(kw in s_clause for kw in kws):
+                            if h_type not in allowed_h_for_day:
+                                problems.append(
+                                    f"Hazard '{h_type}' not allowed for date '{cand_day}' in by_region"
+                                )
             continue
 
+        # Check province against rain_days table if present
+        if rain_days and matched_provinces and day_candidates:
+            for prov in matched_provinces:
+                for cand_day in day_candidates:
+                    matching_rows = [
+                        r for r in rain_days
+                        if str(int(str(r["day"]).split("-")[-1])) == cand_day
+                    ]
+                    if matching_rows:
+                        listed_provs = {p for r in matching_rows for p in r.get("provinces", [])}
+                        if prov not in listed_provs:
+                            problems.append(
+                                f"Province '{prov}' not expected for date '{cand_day}' in rain_days table"
+                            )
+
         for reg in matched_regions:
-            # Check dates in this clause for reg
+            # Check dates in this clause for reg (Item 5: cross-month handled)
             allowed_days = _allowed_days_for_region(reg, by_region)
             if allowed_days:
-                clause_days = set(re.findall(r"\b\d{1,2}\b", s_clause))
-                day_candidates = {d for d in clause_days if 1 <= int(d) <= 31 and d not in ["2569", "2568"]}
-                if "2 เมตร" in s_clause or "2เมตร" in s_clause:
-                    day_candidates.discard("2")
                 invalid_days = day_candidates - allowed_days
                 if invalid_days:
                     problems.append(
@@ -246,13 +358,43 @@ def validate_warning_summary(
                             f"Hazard '{h_type}' not allowed for region '{reg}' in by_region"
                         )
 
-            # Check word strength (Rule 3)
+            # Item 1: Check dropping "บางแห่ง" from rain statement
+            if "ฝนตกหนัก" in s_clause and "บางแห่ง" not in s_clause and "หนักมาก" not in s_clause:
+                if _region_original_has_word(reg, "บางแห่ง", original_regional_clauses):
+                    problems.append(
+                        f"Word strength escalated for '{reg}': dropped 'บางแห่ง' from rain statement (ความแรง)"
+                    )
+
+            # Check word strength escalation
             for sw in strong_words:
                 if sw in s_clause:
                     if not _region_original_has_word(reg, sw, original_regional_clauses):
                         problems.append(
                             f"Word strength escalated for '{reg}': '{sw}' not present in original announcement (ความแรง)"
                         )
+
+    # Item 3: Check completeness (all regions in by_region must be represented in summary)
+    for item in by_region:
+        areas = item.get("areas", [])
+        covered = False
+        for area in areas:
+            if area in summary:
+                covered = True
+                break
+            child_regs = REGIONS_COVERED.get(area, [])
+            if any(cr in summary for cr in child_regs):
+                covered = True
+                break
+            if area in PROVINCES_BY_REGION and any(p in summary for p in PROVINCES_BY_REGION[area]):
+                covered = True
+                break
+            if area == "ประเทศไทยตอนบน":
+                upper_regs = ["ภาคเหนือ", "ภาคตะวันออกเฉียงเหนือ", "ภาคกลาง", "กรุงเทพมหานครและปริมณฑล", "ภาคตะวันออก"]
+                if any(p in summary for ur in upper_regs for p in PROVINCES_BY_REGION.get(ur, [])):
+                    covered = True
+                    break
+        if not covered:
+            problems.append(f"Missing required region from summary: {areas}")
 
     return problems
 
@@ -305,13 +447,18 @@ class WarningAuditor:
         title: str,
         body: str,
         by_region: list[dict],
+        rain_days: list[dict] | None = None,
     ) -> WarningAuditResult:
         """Cross-examine Qwen extraction with by_region without ever altering warning levels."""
         provider = os.getenv("LLM_PROVIDER", "").lower()
         if provider != "qwen" and self.requester is None:
             return WarningAuditResult(matched=True, discrepancies=[])
 
-        prompt = f"ประกาศ: {title}\n\nเนื้อหา:\n{body}\n\nจงตอบเป็น JSON:"
+        rain_days_str = ""
+        if rain_days:
+            rain_days_str = f"\n\nตารางฝนรายวัน:\n{json.dumps(rain_days, ensure_ascii=False)}"
+
+        prompt = f"ประกาศ: {title}\n\nเนื้อหา:\n{body}{rain_days_str}\n\nจงตอบเป็น JSON:"
         try:
             raw_resp = self._call_qwen(prompt)
             raw_json = raw_resp.strip()
@@ -400,7 +547,7 @@ class WarningExplainer:
 หน้าที่: เรียบเรียงสรุปประกาศสั้นๆ 2-3 บรรทัด ให้อ่านง่าย
 กฎเหล็ก:
 1. ภาค วันที่ และภัย ต้องตรงกับประกาศทุกประการ ห้ามสลับ ห้ามเพิ่ม ห้ามตัด
-2. ห้ามเปลี่ยนความแรงของถ้อยคำ ถ้ามี "บางแห่ง" ห้ามเขียนเป็น "หลายพื้นที่"
+2. ห้ามเปลี่ยนความแรงของถ้อยคำ ถ้ามี "บางแห่ง" ห้ามเขียนเป็น "หลายพื้นที่" และห้ามตัด "บางแห่ง" ออก
 3. ห้ามเติมคำว่า "รุนแรงมาก" หรือระดับเตือนภัยเองเด็ดขาด
 4. ตัวเลขทุกตัว (วันที่, คลื่น) ต้องมาจากประกาศเท่านั้น
 5. คำแนะนำต้องมาจากประกาศเท่านั้น ห้ามแต่งการอพยพขึ้นมาเอง
@@ -433,6 +580,7 @@ class WarningExplainer:
         title: str,
         body: str,
         by_region: list[dict],
+        rain_days: list[dict] | None = None,
     ) -> WarningSummaryResult | None:
         """Generate verified AI summary for warning card; returns None on validation failure or error."""
         provider = os.getenv("LLM_PROVIDER", "").lower()
@@ -447,6 +595,7 @@ class WarningExplainer:
                 summary=raw_summary,
                 original_text=full_context,
                 by_region=by_region,
+                rain_days=rain_days,
             )
             if problems:
                 log.warning("Warning summary failed validation: %s", problems)

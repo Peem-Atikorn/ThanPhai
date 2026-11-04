@@ -8,6 +8,7 @@ from decision_engine.warning_explainer import (
     WarningExplainer,
     WarningAuditResult,
     WarningSummaryResult,
+    load_strong_words,
     validate_warning_summary,
 )
 
@@ -39,11 +40,34 @@ def bulletin_5_data():
             "areas": ["ภาคใต้"],
         },
     ]
+    rain_days = [
+        {
+            "day": "2026-11-05",
+            "very_heavy": False,
+            "provinces": ["ชุมพร", "สุราษฎร์ธานี", "นครศรีธรรมราช", "สงขลา", "ปัตตานี", "นราธิวาส"],
+        },
+        {
+            "day": "2026-11-06",
+            "very_heavy": False,
+            "provinces": ["เพชรบุรี", "ประจวบคีรีขันธ์", "สุราษฎร์ธานี", "นครศรีธรรมราช"],
+        },
+        {
+            "day": "2026-11-07",
+            "very_heavy": False,
+            "provinces": ["ชุมพร", "สุราษฎร์ธานี", "นครศรีธรรมราช", "พัทลุง", "สงขลา", "ปัตตานี", "ยะลา", "นราธิวาส"],
+        },
+        {
+            "day": "2026-11-09",
+            "very_heavy": False,
+            "provinces": ["เพชรบุรี", "ประจวบคีรีขันธ์", "ชุมพร", "ยะลา", "ระนอง", "พังงา", "ภูเก็ต", "กระบี่", "ตรัง", "สตูล"],
+        },
+    ]
     return {
         "title": raw["title"],
         "body": raw["body"],
         "issue_no": raw.get("issue_no", "5"),
         "by_region": by_region,
+        "rain_days": rain_days,
     }
 
 
@@ -57,8 +81,97 @@ def test_valid_warning_summary_passes(bulletin_5_data):
         summary=summary,
         original_text=bulletin_5_data["body"],
         by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
     )
     assert problems == []
+
+
+def test_validate_catches_dropped_bang_haeng(bulletin_5_data):
+    # Review Case 1: ตัดคำว่า "บางแห่ง" ทิ้ง ทำให้ความแรงเพิ่มขึ้น
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักวันที่ 5-7 พ.ย. ส่วนภาคใต้มีฝนตกหนักถึงหนักมากวันที่ 7-9 พ.ย."
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("บางแห่ง" in p or "ความแรง" in p for p in problems)
+
+
+def test_validate_catches_invalid_province_and_date(bulletin_5_data):
+    # Review Case 2: ภูเก็ตระบุวันที่ 5 พ.ย. ซึ่งตารางฝนระบุวันที่ 9 พ.ย. และภาคใต้ช่วง 5–7 ไม่มีน้ำท่วม
+    bad_summary = (
+        "ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง 5-7 พ.ย. "
+        "ส่วนจังหวัดภูเก็ตอาจเกิดน้ำท่วมฉับพลันวันที่ 5 พ.ย."
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("ภูเก็ต" in p or "date" in p.lower() or "วัน" in p for p in problems)
+
+
+def test_validate_catches_dropped_region(bulletin_5_data):
+    # Review Case 3: ตัดภาคใต้ทิ้งทั้งหมด
+    bad_summary = (
+        "ช่วงวันที่ 5–7 พ.ย. ประเทศไทยตอนบนมีสภาพอากาศแปรปรวน ฝนฟ้าคะนอง และมีฝนตกหนักบางแห่ง"
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("Missing required region" in p for p in problems)
+
+
+def test_validate_catches_orphan_statement_wrong_hazard(bulletin_5_data):
+    # Review Case 4: ใส่ภัยโดยไม่ระบุภาค (5-7 พ.ย. ตอนบนไม่มีน้ำท่วม)
+    bad_summary = (
+        "ฝนตกหนักบางแห่งช่วง 5-7 พ.ย. อาจเกิดน้ำท่วมฉับพลันและน้ำป่าไหลหลาก "
+        "ส่วนภาคใต้ช่วง 7-9 พ.ย. มีฝนตกหนักบางแห่ง"
+    )
+    problems = validate_warning_summary(
+        summary=bad_summary,
+        original_text=bulletin_5_data["body"],
+        by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
+    )
+    assert any("Hazard" in p or "not allowed" in p or "ภัย" in p for p in problems)
+
+
+def test_validate_cross_month_dates():
+    # Review Case 5: ช่วงที่ข้ามเดือน (30 พ.ย. ถึง 2 ธ.ค.)
+    cross_month_region = [
+        {
+            "from": "2026-11-30",
+            "to": "2026-12-02",
+            "level": "WATCH",
+            "hazards": ["rain_storm"],
+            "areas": ["ภาคเหนือ"],
+        }
+    ]
+    orig_text = "ในช่วงวันที่ 30 พฤศจิกายน ถึง 2 ธันวาคม 2569 ภาคเหนือมีฝนตกหนักบางแห่ง"
+    valid_summary = "ภาคเหนือมีฝนตกหนักบางแห่งช่วง 30 พ.ย. ถึง 2 ธ.ค."
+    assert validate_warning_summary(valid_summary, orig_text, cross_month_region) == []
+
+    # If mentions day 5 (outside range 30, 1, 2)
+    bad_summary = "ภาคเหนือมีฝนตกหนักบางแห่งวันที่ 5 ธ.ค."
+    problems = validate_warning_summary(bad_summary, orig_text, cross_month_region)
+    assert any("Date mismatch" in p or "วัน" in p for p in problems)
+
+
+def test_load_strong_words_matches_rules_yaml():
+    # Review Case 7: strong_words อ่านมาจาก rules.yaml ตรงกัน
+    words = load_strong_words()
+    assert "หนักมาก" in words
+    assert "หลายพื้นที่" in words
+    assert "น้ำท่วมฉับพลัน" in words
+    assert "น้ำป่าไหลหลาก" in words
 
 
 def test_validate_catches_increased_word_strength(bulletin_5_data):
@@ -93,7 +206,7 @@ def test_validate_catches_hazard_swapped_to_wrong_region(bulletin_5_data):
     # Rule 2: น้ำท่วมเกิดเฉพาะภาคใต้ ห้ามเอาไปใส่ภาคเหนือ
     bad_summary = (
         "ในช่วงวันที่ 5–7 พ.ย. น้ำท่วมภาคเหนือ และมีฝนฟ้าคะนอง "
-        "ส่วนภาคใต้ช่วงวันที่ 7–9 พ.ย. มีฝนตกหนัก"
+        "ส่วนภาคใต้ช่วงวันที่ 7–9 พ.ย. มีฝนตกหนักมากบางแห่ง"
     )
     problems = validate_warning_summary(
         summary=bad_summary,
@@ -159,7 +272,6 @@ def test_validate_catches_wrapped_quotation_marks(bulletin_5_data):
 
 
 def test_warning_auditor_matches_correct_extraction(bulletin_5_data):
-    # Mock Qwen returning accurate JSON
     mock_json = json.dumps({
         "items": [
             {
@@ -181,6 +293,7 @@ def test_warning_auditor_matches_correct_extraction(bulletin_5_data):
         title=bulletin_5_data["title"],
         body=bulletin_5_data["body"],
         by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
     )
     assert isinstance(res, WarningAuditResult)
     assert res.matched is True
@@ -188,7 +301,6 @@ def test_warning_auditor_matches_correct_extraction(bulletin_5_data):
 
 
 def test_warning_auditor_detects_and_logs_discrepancy(bulletin_5_data, caplog):
-    # Mock Qwen returning mismatched items (flood in north, dates 5-9 in south)
     mock_json = json.dumps({
         "items": [
             {
@@ -213,7 +325,6 @@ def test_warning_auditor_detects_and_logs_discrepancy(bulletin_5_data, caplog):
     )
     assert res.matched is False
     assert len(res.discrepancies) > 0
-    # Must log discrepancy
     assert any("discrepancy" in record.message.lower() for record in caplog.records)
 
 
@@ -228,6 +339,7 @@ def test_warning_explainer_summarize_success(bulletin_5_data):
         title=bulletin_5_data["title"],
         body=bulletin_5_data["body"],
         by_region=bulletin_5_data["by_region"],
+        rain_days=bulletin_5_data["rain_days"],
     )
     assert res is not None
     assert isinstance(res, WarningSummaryResult)
@@ -237,7 +349,6 @@ def test_warning_explainer_summarize_success(bulletin_5_data):
 
 
 def test_warning_explainer_fallback_on_validation_failure(bulletin_5_data):
-    # When Qwen outputs invalid text (e.g. wrong dates), summarize() must return None (safe fallback)
     bad_text = "ภาคใต้มีฝนตกหนัก 5–9 พ.ย. ระวังน้ำท่วม"
     explainer = WarningExplainer(requester=lambda prompt: bad_text)
     res = explainer.summarize(
@@ -263,7 +374,7 @@ def test_warning_explainer_fallback_on_network_error(bulletin_5_data):
 
 def test_warning_explainer_disabled_by_default_without_qwen(bulletin_5_data, monkeypatch):
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
-    explainer = WarningExplainer()  # no requester injected
+    explainer = WarningExplainer()
     res = explainer.summarize(
         title=bulletin_5_data["title"],
         body=bulletin_5_data["body"],

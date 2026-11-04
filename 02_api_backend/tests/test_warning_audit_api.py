@@ -13,6 +13,7 @@ def fake_svc():
     svc.source_status = {}
     svc._inputs_changed = False
     svc._jobs = {}
+    svc._warning_ai_cache = {}
     return svc
 
 
@@ -59,9 +60,11 @@ def test_hazard_service_audit_and_summarize_warning_with_qwen(fake_svc, monkeypa
     import decision_engine.warning_explainer as we_mod
 
     valid_text = "ช่วงวันที่ 5–7 พ.ย. ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง"
+    passed_args = {}
 
     class FakeExplainer:
-        def summarize(self, title, body, by_region):
+        def summarize(self, title, body, by_region, rain_days=None):
+            passed_args["explainer_rain_days"] = rain_days
             return we_mod.WarningSummaryResult(
                 summary_text=valid_text,
                 attribution="สรุปโดย AI จากประกาศกรมอุตุนิยมวิทยา · ดูประกาศฉบับจริง",
@@ -69,15 +72,20 @@ def test_hazard_service_audit_and_summarize_warning_with_qwen(fake_svc, monkeypa
             )
 
     class FakeAuditor:
-        def audit(self, title, body, by_region):
+        def audit(self, title, body, by_region, rain_days=None):
+            passed_args["auditor_rain_days"] = rain_days
             return we_mod.WarningAuditResult(matched=True, discrepancies=[])
 
     monkeypatch.setattr(we_mod, "WarningExplainer", FakeExplainer)
     monkeypatch.setattr(we_mod, "WarningAuditor", FakeAuditor)
 
+    rain_days_sample = [{"date": "2026-11-05", "provinces": ["เชียงใหม่"]}]
     w_dict = {
+        "issue_no": "288/2569",
+        "announced_at": "2026-11-04T05:00:00",
         "title": "ประกาศเตือนภัย",
         "body": "ช่วงวันที่ 5–7 พ.ย. ประเทศไทยตอนบนมีฝนตกหนักบางแห่ง",
+        "rain_days": rain_days_sample,
         "by_region": [
             {
                 "from": "2026-11-05",
@@ -92,6 +100,60 @@ def test_hazard_service_audit_and_summarize_warning_with_qwen(fake_svc, monkeypa
     ai_summary, ai_attrib = fake_svc._audit_and_summarize_warning(w_dict)
     assert ai_summary == valid_text
     assert "สรุปโดย AI จากประกาศกรมอุตุนิยมวิทยา" in ai_attrib
+    assert passed_args["auditor_rain_days"] == rain_days_sample
+    assert passed_args["explainer_rain_days"] == rain_days_sample
+
+
+def test_hazard_service_audit_and_summarize_warning_caching(fake_svc, monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "qwen")
+
+    import decision_engine.warning_explainer as we_mod
+
+    call_counts = {"auditor": 0, "explainer": 0}
+
+    class FakeExplainer:
+        def summarize(self, title, body, by_region, rain_days=None):
+            call_counts["explainer"] += 1
+            return we_mod.WarningSummaryResult(
+                summary_text="สรุปประกาศ",
+                attribution="สรุปโดย AI",
+                valid=True,
+            )
+
+    class FakeAuditor:
+        def audit(self, title, body, by_region, rain_days=None):
+            call_counts["auditor"] += 1
+            return we_mod.WarningAuditResult(matched=True, discrepancies=[])
+
+    monkeypatch.setattr(we_mod, "WarningExplainer", FakeExplainer)
+    monkeypatch.setattr(we_mod, "WarningAuditor", FakeAuditor)
+
+    w_dict = {
+        "issue_no": "288/2569",
+        "announced_at": "2026-11-04T05:00:00",
+        "title": "ประกาศเตือนภัย",
+        "body": "เนื้อหา",
+        "by_region": [],
+    }
+
+    # First call: executes auditor & explainer
+    res1 = fake_svc._audit_and_summarize_warning(w_dict)
+    assert res1 == ("สรุปประกาศ", "สรุปโดย AI")
+    assert call_counts["auditor"] == 1
+    assert call_counts["explainer"] == 1
+
+    # Second call with same issue_no and announced_at: returned from cache, no re-execution
+    res2 = fake_svc._audit_and_summarize_warning(w_dict)
+    assert res2 == ("สรุปประกาศ", "สรุปโดย AI")
+    assert call_counts["auditor"] == 1
+    assert call_counts["explainer"] == 1
+
+    # Third call with new issue_no: cache miss, executes again
+    w_dict2 = dict(w_dict, issue_no="289/2569")
+    res3 = fake_svc._audit_and_summarize_warning(w_dict2)
+    assert res3 == ("สรุปประกาศ", "สรุปโดย AI")
+    assert call_counts["auditor"] == 2
+    assert call_counts["explainer"] == 2
 
 
 def test_hazard_service_audit_and_summarize_warning_fallback(fake_svc, monkeypatch):
@@ -100,11 +162,11 @@ def test_hazard_service_audit_and_summarize_warning_fallback(fake_svc, monkeypat
     import decision_engine.warning_explainer as we_mod
 
     class FakeExplainer:
-        def summarize(self, title, body, by_region):
+        def summarize(self, title, body, by_region, rain_days=None):
             return None  # Validation failed
 
     class FakeAuditor:
-        def audit(self, title, body, by_region):
+        def audit(self, title, body, by_region, rain_days=None):
             return we_mod.WarningAuditResult(matched=False, discrepancies=[])
 
     monkeypatch.setattr(we_mod, "WarningExplainer", FakeExplainer)

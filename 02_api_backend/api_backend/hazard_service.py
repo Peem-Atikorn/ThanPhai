@@ -138,6 +138,7 @@ class HazardService:
         self._radar_nowcast_lock = asyncio.Lock()
         self._radar_nowcast_cache: tuple[int, dict, float] | None = None
         self._thai_radar_mask: np.ndarray | None = None
+        self._warning_ai_cache: dict[tuple, tuple[str | None, str | None]] = {}
         self._background: asyncio.Task | None = None
         # Set when slower inputs (satellite, fire model) change, so decisions are rebuilt without
         # pretending the live data is missing (clearing updated_at showed "data time: —" in the UI).
@@ -1251,22 +1252,38 @@ class HazardService:
         """Optionally audit TMD warning and generate AI summary with Qwen if LLM_PROVIDER=qwen."""
         if os.getenv("LLM_PROVIDER", "").lower() != "qwen":
             return None, None
+
+        cache_key = (
+            w_dict.get("issue_no") or w_dict.get("title", ""),
+            str(w_dict.get("announced_at", "")),
+        )
+        cache = getattr(self, "_warning_ai_cache", None)
+        if cache is not None and cache_key in cache:
+            return cache[cache_key]
+
         try:
             from decision_engine.warning_explainer import WarningAuditor, WarningExplainer
 
             title = w_dict.get("title", "")
             body = w_dict.get("body") or w_dict.get("headline") or ""
             by_region = w_dict.get("by_region", [])
+            rain_days = w_dict.get("rain_days")
 
             auditor = WarningAuditor()
-            auditor.audit(title=title, body=body, by_region=by_region)
+            auditor.audit(title=title, body=body, by_region=by_region, rain_days=rain_days)
 
             explainer = WarningExplainer()
-            summary_res = explainer.summarize(title=title, body=body, by_region=by_region)
+            summary_res = explainer.summarize(title=title, body=body, by_region=by_region, rain_days=rain_days)
             if summary_res and summary_res.valid:
-                return summary_res.summary_text, summary_res.attribution
+                res = (summary_res.summary_text, summary_res.attribution)
+                if cache is not None:
+                    cache[cache_key] = res
+                return res
         except Exception as exc:
             log.warning("Warning audit/summary failed: %s", exc)
+
+        if cache is not None:
+            cache[cache_key] = (None, None)
         return None, None
 
     def get_official_warnings(self) -> list[dict]:
