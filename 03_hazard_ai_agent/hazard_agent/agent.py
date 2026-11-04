@@ -278,6 +278,10 @@ def _reason(item: dict) -> str:
         parts.append(f"ดาวเทียมพบน้ำท่วมกระจายในพื้นที่ราว {cells * 0.1245:.0f} ตร.กม. ใน 7 วัน")
     if obs.get("rain_24h") is not None:
         parts.append(f"ฝนสะสม 24 ชม. สูงสุด {obs['rain_24h']:.1f} มม.")
+    if obs.get("rain_chance_now") is not None:
+        parts.append(f"โอกาสฝนตกชั่วโมงนี้ {obs['rain_chance_now']:.0f}%")
+    if obs.get("rain_chance_max_24h") is not None:
+        parts.append(f"โอกาสฝนตกสูงสุดใน 24 ชม. ข้างหน้า {obs['rain_chance_max_24h']:.0f}% (แบบจำลอง Open-Meteo)")
     if obs.get("hotspots_24h") is not None:
         parts.append(f"จุดความร้อน 24 ชม. {int(obs['hotspots_24h'])} จุด")
     if obs.get("fire_probability_7d") is not None:
