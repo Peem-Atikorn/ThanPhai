@@ -395,11 +395,13 @@ async def sources() -> dict:
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500)
+    # The area open on the page (map selection or the last answer's area); used when the question names none.
+    area_code: str | None = Field(None, pattern=r"^TH\d{2,8}$")
 
 
 @app.post("/v1/ask")
 async def ask(body: AskRequest) -> dict:
     svc = await fresh_service()
     # ask() may call Gemini (seconds, blocking SDK call); run it in a thread so other requests keep flowing.
-    answer = await asyncio.to_thread(agent.ask, body.question, datetime.now(timezone.utc))
+    answer = await asyncio.to_thread(agent.ask, body.question, datetime.now(timezone.utc), body.area_code)
     return {**answer.__dict__, **meta(svc)}

@@ -347,8 +347,10 @@ class HazardAgent:
         return AgentAnswer(reply.strip(), fallback.intent, None, [], llm_used=True, facts=fallback.text,
                            llm_model=self._model_name())
 
-    def ask(self, question: str, now: datetime) -> AgentAnswer:
-        answer = self._route(question, now)
+    def ask(self, question: str, now: datetime, area_code: str | None = None) -> AgentAnswer:
+        """area_code: the area the user has open (picked on the map or named in an earlier question).
+        It is used only when the question names no place, so "แล้วฝนตกไหม" follows the conversation."""
+        answer = self._route(question, now, area_code)
         if self.explainer and answer.intent in REWRITE_INTENTS and answer.text and not answer.llm_used:
             answer.facts = answer.text
             rewritten = self.explainer(question, answer.text)
@@ -363,9 +365,14 @@ class HazardAgent:
                 answer.llm_model = self._model_name()
         return answer
 
-    def _route(self, question: str, now: datetime) -> AgentAnswer:
+    def _route(self, question: str, now: datetime, area_code: str | None = None) -> AgentAnswer:
         # "พรุ่งนี้" means tomorrow in Thailand; with a UTC clock it would be wrong between 00:00 and 07:00.
         u = understand(question, self.gazetteer, now.astimezone(BANGKOK))
+        context = self.gazetteer.by_code.get(area_code) if area_code else None
+        if context is not None and u.intent in ("risk", "explain") and not u.areas and not u.regions:
+            # A question about "here" with an area already open: answer for that area instead of asking where.
+            u.areas = [context]
+            u.notes = [n for n in u.notes if n != "no area found"] + ["area from the open area"]
         if u.intent == "emergency":
             return AgentAnswer(EMERGENCY_TH, u.intent, None, [h.value for h in u.hazards])
         if u.intent == "greeting":

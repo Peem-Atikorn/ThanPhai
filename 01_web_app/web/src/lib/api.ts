@@ -325,11 +325,12 @@ export const api = {
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),
   search: (q: string) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }[]>(`/v1/areas/search?q=${encodeURIComponent(q)}`),
   locate: (lat: number, lon: number) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }>(`/v1/areas/locate?lat=${lat}&lon=${lon}`),
-  ask: async (question: string): Promise<AskAnswer> => {
+  /** areaCode: the area open on the page; the backend uses it only when the question names no place. */
+  ask: async (question: string, areaCode: string | null = null): Promise<AskAnswer> => {
     const res = await fetch("/api/v1/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, area_code: areaCode }),
     });
     if (!res.ok) throw new Error(`${res.status}`);
     return res.json();
