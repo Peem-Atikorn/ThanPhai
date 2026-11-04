@@ -66,6 +66,73 @@ class DataTools:
 agent = HazardAgent(GAZ, DataTools())
 
 
+@pytest.mark.parametrize("question,field,local", [
+    ("เมืองเชียงใหม่ PM2.5 สูงสุดเท่าไหร่", "pm25", "TH50"),
+    ("น้ำเค็มรุกเสนาไหม", "salinity_gl", "TH14"),
+    ("ภาคเหนือ PM2.5 สถานีไหนสูงสุด", "pm25", "TH50"),
+    ("ภาคกลางความเค็มสูงสุดเท่าไหร่", "salinity_gl", "TH14"),
+])
+def test_station_answers_filter_province_or_region_before_ranking(question, field, local):
+    class ScopedTools(DataTools):
+        def stations(self):
+            return [
+                {"name_th": "นอกพื้นที่", "province_code": "TH40", field: 99, "time": NOW.isoformat()},
+                {"name_th": "ในพื้นที่", "province_code": local, field: 10, "time": NOW.isoformat()},
+                {"name_th": "ไม่ทราบจังหวัด", field: 100, "time": NOW.isoformat()},
+            ]
+        get_pm25_stations = get_water_quality = stations
+
+    answer = HazardAgent(GAZ, ScopedTools()).ask(question, NOW)
+    assert [row["name_th"] for row in answer.evidence] == ["ในพื้นที่"]
+    assert "นอกพื้นที่" not in answer.text and "ไม่ทราบจังหวัด" not in answer.text
+    assert "จังหวัด" in answer.text or "ภาค" in answer.text
+
+
+def test_pm25_area_text_resolves_province_and_discloses_province_scope():
+    class ScopedTools(DataTools):
+        def get_pm25_stations(self):
+            return [
+                {"name_th": "นอกพื้นที่", "area_th": "เสนา พระนครศรีอยุธยา", "pm25": 90, "time": NOW.isoformat()},
+                {"name_th": "ในพื้นที่", "area_th": "เมืองเชียงใหม่, เชียงใหม่", "pm25": 10, "time": NOW.isoformat()},
+            ]
+
+    answer = HazardAgent(GAZ, ScopedTools()).ask("เมืองเชียงใหม่ PM2.5 สูงสุดเท่าไหร่", NOW)
+    assert [row["name_th"] for row in answer.evidence] == ["ในพื้นที่"]
+    assert "จังหวัดเชียงใหม่" in answer.text and "ระดับจังหวัด" in answer.text
+
+
+def test_station_address_uses_admin_suffix_instead_of_road_name():
+    gaz = Gazetteer([
+        *GAZ.areas,
+        Area("TH10", "province", "กรุงเทพมหานคร", "Bangkok", None, 13.7, 100.5, 1500),
+        Area("TH1004", "amphoe", "บางรัก", "Bang Rak", "TH10", 13.7, 100.5, 6),
+        Area("TH96", "province", "นราธิวาส", "Narathiwat", None, 6.4, 101.8, 4500),
+    ])
+
+    class RoadTools(DataTools):
+        def get_pm25_stations(self):
+            return [{"name_th": "สถานีในกรุงเทพ", "area_th": "ริมถนนนราธิวาส เขตบางรัก, กรุงเทพฯ", "pm25": 20, "time": NOW.isoformat()}]
+
+    station_agent = HazardAgent(gaz, RoadTools())
+    assert station_agent.ask("กรุงเทพ PM2.5 สถานีไหนสูงสุด", NOW).evidence
+    assert not station_agent.ask("นราธิวาส PM2.5 สถานีไหนสูงสุด", NOW).evidence
+
+
+@pytest.mark.parametrize("question", ["เสนา PM2.5 สถานีไหนสูงสุด", "ความเค็มจังหวัดเชียงใหม่สูงสุดเท่าไหร่"])
+def test_no_station_in_requested_area_does_not_fall_back_to_country(question):
+    answer = agent.ask(question, NOW)
+    assert not answer.evidence
+    assert "ไม่พบสถานี" in answer.text
+    assert "จังหวัด" in answer.text
+
+
+@pytest.mark.parametrize("word", ["เท่าไร", "เท่าไหร่"])
+def test_hotspot_count_alternative_wording(word):
+    answer = agent.ask(f"จุดความร้อนเชียงใหม่วันนี้{word}", NOW)
+    assert answer.intent == "fire_hotspots"
+    assert "7 จุด" in answer.text
+
+
 @pytest.mark.parametrize("question,providers", [
     ("ตอนนี้มีพายุอะไรบ้าง", ("thaiwater_storms", "gdacs_cyclones")),
     ("แผ่นดินไหวล่าสุดเกิดที่ไหน", ("tmd_earthquakes", "usgs_earthquakes")),

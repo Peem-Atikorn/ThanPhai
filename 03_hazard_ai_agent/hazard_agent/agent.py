@@ -6,6 +6,7 @@ questions and `compose` for wording, but it must keep the same evidence and aler
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+import re
 from typing import Callable, Protocol
 
 from decision_engine.rag import get_disaster_guidance
@@ -357,6 +358,29 @@ class HazardAgent:
             return AgentAnswer("\n".join(lines), intent, None, [], evidence=evidence,
                                sources=list(dict.fromkeys(sources)), tool_calls=calls)
 
+        def station_scope(stations: list[dict]) -> tuple[list[dict], str]:
+            if u.regions:
+                wanted = {code for region in u.regions for code in REGION_CODES[region]}
+                label = " / ".join(u.regions)
+            elif u.areas:
+                wanted = {area.code[:4] for area in u.areas}
+                names = [self.gazetteer.by_code[code].name_th for code in sorted(wanted)]
+                label = "จังหวัด" + " / ".join(names) + " (สรุประดับจังหวัด)"
+            else:
+                return stations, "ทั่วประเทศ"
+
+            def province(station: dict) -> str | None:
+                if station.get("province_code"):
+                    return station["province_code"]
+                # Air4Thai supplies administrative names in area_th, but no province code.
+                text = station.get("province_th") or (station.get("area_th") or "").rsplit(",", 1)[-1]
+                # Road/park names may name another province; use the final administrative part.
+                text = re.split(r"จังหวัด|จ\.|อำเภอ|อ\.|เขต|ตำบล|ต\.|แขวง", text)[-1]
+                codes = {area.code[:4] for area in self.gazetteer.find_in_text(text)}
+                return next(iter(codes)) if len(codes) == 1 else None
+
+            return [station for station in stations if province(station) in wanted], label
+
         if intent == "earthquake":
             quakes = rows("get_earthquakes")[:5]
             if not quakes:
@@ -421,13 +445,13 @@ class HazardAgent:
             return finish(lines, waves[:5], ["Open-Meteo Marine"])
 
         if intent == "water_quality":
-            stations = rows("get_water_quality")
+            stations, scope = station_scope(rows("get_water_quality"))
             stations.sort(key=lambda row: row.get("salinity_gl") or 0, reverse=True)
             if not stations:
                 message = ("แหล่งข้อมูลคุณภาพน้ำขัดข้อง จึงยังตรวจสอบค่าความเค็มล่าสุดไม่ได้"
-                           if sources_down("thaiwater_waterquality") else "ยังไม่มีข้อมูลสถานีคุณภาพน้ำที่รายงานค่าความเค็ม")
+                           if sources_down("thaiwater_waterquality") else f"ไม่พบสถานีคุณภาพน้ำที่มีข้อมูลและระบุจังหวัดได้ใน{scope}")
                 return finish([message], [], ["คลังข้อมูลน้ำแห่งชาติ (สสน.)"])
-            lines = ["สถานีที่มีค่าความเค็มสูงสุด:"]
+            lines = [f"สถานีที่มีค่าความเค็มสูงสุด — {scope}:"]
             for station in stations[:5]:
                 value = station.get("salinity_gl")
                 time = _time_th(station.get("time"))
@@ -440,13 +464,13 @@ class HazardAgent:
             return finish(lines, stations[:5], ["คลังข้อมูลน้ำแห่งชาติ (สสน.)", "กรมควบคุมมลพิษ", "การประปานครหลวง"])
 
         if intent == "pm25_stations":
-            stations = rows("get_pm25_stations")
+            stations, scope = station_scope(rows("get_pm25_stations"))
             stations.sort(key=lambda row: row.get("pm25") or 0, reverse=True)
             if not stations:
                 message = ("แหล่งข้อมูล Air4Thai ขัดข้อง จึงยังตรวจสอบค่า PM2.5 ล่าสุดไม่ได้"
-                           if sources_down("air4thai") else "ยังไม่มีสถานี Air4Thai ที่รายงานค่า PM2.5 ล่าสุด")
+                           if sources_down("air4thai") else f"ไม่พบสถานี Air4Thai ที่มีข้อมูลและระบุจังหวัดได้ใน{scope}")
                 return finish([message], [], ["กรมควบคุมมลพิษ (Air4Thai)"])
-            lines = ["สถานีที่มีค่า PM2.5 สูงสุด:"]
+            lines = [f"สถานีที่มีค่า PM2.5 สูงสุด — {scope}:"]
             for station in stations[:5]:
                 value = station.get("pm25")
                 where = station.get("area_th")

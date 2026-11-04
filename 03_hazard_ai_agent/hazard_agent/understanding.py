@@ -146,7 +146,7 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         data_intent = "water_quality"
     elif ("pm2.5" in lowered or "pm 2.5" in lowered or "pm25" in lowered) and any(w in lowered for w in ("สถานี", "ตัวเลข", "ค่าเท่า", "สูงสุด")):
         data_intent = "pm25_stations"
-    elif any(w in lowered for w in ("จุดความร้อน", "hotspot")) and any(w in lowered for w in ("กี่", "จำนวน")):
+    elif any(w in lowered for w in ("จุดความร้อน", "hotspot")) and any(w in lowered for w in ("กี่", "จำนวน", "เท่าไร", "เท่าไหร่")):
         data_intent = "fire_hotspots"
     elif any(w in lowered for w in ("เรดาร์", "ภาพพยากรณ์", "ภาพฝน", "ภาพพายุ", "ภาพคลื่น", "media", "ลิงก์ภาพ")):
         data_intent = "media"
