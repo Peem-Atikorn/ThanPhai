@@ -311,6 +311,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [radarAvailable, setRadarAvailable] = useState(false);
     const [radarFrames, setRadarFrames] = useState<RadarFrame[]>([]);
     const [radarFrameIndex, setRadarFrameIndex] = useState(0);
+    const selectedRadarTime = useRef<number | null>(null);
     const radarFrame = radarFrames[radarFrameIndex] ?? null;
     const radarNextFrame = radarFrames.length > 1 ? radarFrames[(radarFrameIndex + 1) % radarFrames.length] : null;
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
@@ -397,9 +398,11 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         api.radar().then((result) => { if (!cancelled) {
             setRadarAvailable(result.enabled);
             setRadarFrames(result.frames);
-            setRadarFrameIndex(Math.max(0, result.frames.length - 1));
+            const refreshedIndex = result.frames.findIndex((frame) => frame.time === selectedRadarTime.current);
+            const nextIndex = refreshedIndex >= 0 ? refreshedIndex : Math.max(0, result.frames.length - 1);
+            selectedRadarTime.current = result.frames[nextIndex]?.time ?? null;
+            setRadarFrameIndex(nextIndex);
         } }).catch(() => { if (!cancelled) {
-            setRadarAvailable(false);
             setRadarFrames([]);
         } });
         return () => { cancelled = true; };
@@ -803,7 +806,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(view === "rivers" && rivers.status === "loading" && <div className="map-notice" role="status"><span className="spinner"/>{tr("กำลังโหลดข้อมูลแม่น้ำ\u2026")}</div>)}
             {tr(view === "rivers" && rivers.status === "error" && !rivers.list.length && <div className="map-notice error-notice" role="alert"><Icon name="info"/><div><strong>{tr("โหลดข้อมูลแม่น้ำไม่สำเร็จ")}</strong><p>{tr("ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง")}</p></div><button className="text-button" onClick={() => setRevision((value) => value + 1)}>{tr("ลองใหม่")}</button></div>)}
           </div>
-          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} onChange={setRadarFrameIndex}/>}
+          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} onChange={(index) => { selectedRadarTime.current = radarFrames[index]?.time ?? null; setRadarFrameIndex(index); }}/>}
           <details className="map-supplement"><summary>{tr(overview ? "ชั้นข้อมูลและคำอธิบายแผนที่" : "คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
           {tr(hideToolbar && overview && !selectedRiskLevel && mapControls)}
           {tr(overview && !selectedRiskLevel && <div className="overview-overlay-summary">
