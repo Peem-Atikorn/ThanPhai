@@ -187,10 +187,6 @@
   border-color: var(--scene-stroke);
   backdrop-filter: blur(16px);
 }
-.landscape-shell.command-shell :is(.map-supplement, .map-supplement > summary, .risk-alert-detail, .dam-sort) {
-  background: var(--cc-glass);
-  backdrop-filter: blur(16px);
-}
 /* Performance: a backdrop blur is recomputed whenever anything behind or inside it repaints. The map redraws on
    every pan, zoom and radar frame, and the side panels scroll, so blurring these large surfaces made the page
    stutter. They get an opaque tint instead; small chrome (category bar, buttons, dialogs) keeps its glass. */
