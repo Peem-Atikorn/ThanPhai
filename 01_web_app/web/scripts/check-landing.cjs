@@ -99,6 +99,54 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   }
   assert.deepEqual(environmentRequests, ['air_quality', 'heat'], 'Map tabs reuse the summary layers without another request');
   stopEnvironment();
+  const originalArea = lib.api.area;
+  let areaReading = 12, areaCalls = 0, delayedArea;
+  lib.api.area = async code => {
+    areaCalls++;
+    const data = { area: { code, level: 'amphoe', name_th: code, parents: [] }, assessments: [
+      { hazard: 'air_quality', level: areaReading === 12 ? 'NORMAL' : 'WARNING', observations: { pm25_24h: areaReading }, sources: [], notices: [], rule_ids: [] },
+      { hazard: 'heat', level: areaReading === 12 ? 'NORMAL' : 'WATCH', observations: { heat_index_max_24h: areaReading + 20 }, sources: [], notices: [], rule_ids: [] },
+    ], forecast: [], rivers: [], official_warnings: [], degraded_services: [] };
+    return delayedArea ? new Promise(resolve => { delayedArea = () => resolve(data); }) : data;
+  };
+  const refreshEffects = [], refreshApp = instance(Dashboard, refreshEffects);
+  const refreshProps = { activeView: 'hazard', activeHazard: 'overview' };
+  let refreshTree = refreshApp.render(refreshProps);
+  const mapOf = tree => nodes(tree).find(n => n.props.mode === 'hazard' && 'dark' in n.props);
+  const summaryOf = tree => nodes(tree).find(n => n.type === EnvironmentSummary).props;
+  const refreshArea = () => {
+    refreshEffects.length = 0; refreshTree = refreshApp.render(refreshProps);
+    const effect = refreshEffects.find(e => /api\.area/.test(String(e)));
+    assert(effect, 'Selected areas have a refresh effect'); return effect();
+  };
+  mapOf(refreshTree).props.onSelect('TH1001'); await tick();
+  refreshTree = refreshApp.render(refreshProps);
+  assert.equal(summaryOf(refreshTree).area.assessments[0].observations.pm25_24h, 12);
+  areaReading = 40;
+  nodes(refreshTree).find(n => n.props['aria-label'] === 'โหลดข้อมูลแผนที่ใหม่').props.onClick();
+  let stopAreaRefresh = refreshArea(); await tick(); refreshTree = refreshApp.render(refreshProps);
+  assert.equal(areaCalls, 2, 'Refresh reloads the selected area once');
+  assert.deepEqual(summaryOf(refreshTree).area.assessments.map(a => a.level), ['WARNING', 'WATCH']);
+  assert.deepEqual(summaryOf(refreshTree).area.assessments.map(a => Object.values(a.observations)[0]), [40, 60]);
+  stopAreaRefresh?.(); delayedArea = true;
+  stopAreaRefresh = refreshArea(); await tick();
+  const resolveOldArea = delayedArea; delayedArea = false;
+  refreshTree = refreshApp.render(refreshProps); mapOf(refreshTree).props.onSelect('TH1002'); await tick();
+  resolveOldArea(); await tick(); refreshTree = refreshApp.render(refreshProps);
+  assert.equal(summaryOf(refreshTree).area.area.code, 'TH1002', 'Old refresh cannot overwrite a new selection'); stopAreaRefresh?.();
+  delayedArea = true; stopAreaRefresh = refreshArea(); await tick();
+  const resolveClearedArea = delayedArea; delayedArea = false;
+  refreshTree = refreshApp.render(refreshProps);
+  nodes(refreshTree).find(n => n.props.className?.includes('area-reset')).props.onClick();
+  resolveClearedArea(); await tick(); refreshTree = refreshApp.render(refreshProps);
+  assert.equal(summaryOf(refreshTree).area, null, 'Old refresh cannot restore a cleared selection'); stopAreaRefresh?.();
+  delayedArea = true;
+  mapOf(refreshTree).props.onSelect('TH1003'); await tick();
+  const resolveInitialArea = delayedArea; delayedArea = false;
+  stopAreaRefresh = refreshArea(); await tick(); resolveInitialArea(); await tick();
+  const refreshedPlace = refreshApp.render({ ...refreshProps, activeView: 'rivers' });
+  assert(!content(refreshedPlace).includes('กำลังโหลดพื้นที่…'), 'Refresh during initial selection also fills the place name'); stopAreaRefresh?.();
+  lib.api.area = originalArea;
   let radarRequests = 0;
   let radarEnabled = true;
   lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frame: null }; };

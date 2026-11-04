@@ -465,6 +465,22 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             .catch(() => latestArea.current === request && setAreaStatus("error"));
     }, []);
     const selectedCode = useRef<string | null>(null);
+    useEffect(() => {
+        const code = selectedCode.current;
+        if (!code) return;
+        const request = ++latestArea.current;
+        let cancelled = false;
+        api.area(code).then(data => {
+            if (!cancelled && latestArea.current === request) {
+                setArea(data);
+                setPlace(data.area);
+                setAreaStatus("success");
+            }
+        }).catch(() => {
+            if (!cancelled && latestArea.current === request) setAreaStatus("error");
+        });
+        return () => { cancelled = true; };
+    }, [revision]);
     const selectFromMap = useCallback((code: string) => {
         outlineRequest.current++;
         setOutline(null); // a tapped district is outlined by the map's own selection layer
