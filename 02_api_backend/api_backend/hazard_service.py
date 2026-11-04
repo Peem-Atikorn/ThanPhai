@@ -710,6 +710,8 @@ class HazardService:
         now = datetime.now(timezone.utc)
         if tmd is not None:
             tmd = self._remember_tmd_quakes(tmd, now)
+        else:
+            tmd = list(self._tmd_quakes.values())
         merged = sorted(merge_quakes(tmd or [], usgs or []), key=lambda r: r.observed_at, reverse=True)
         week = [r for r in merged if now - r.observed_at <= QUAKE_HISTORY_WINDOW]
         self._last_quakes = [{

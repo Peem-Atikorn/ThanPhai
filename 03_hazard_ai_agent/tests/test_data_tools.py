@@ -318,7 +318,7 @@ def test_unavailable_source_is_reported_instead_of_claiming_no_observations():
 class MonthOfQuakes(DataTools):
     def get_earthquakes(self):
         return [
-            {"magnitude": 2.3, "place_th": "ต.ปง อ.ปง จ.พะเยา", "time": "2026-11-04T07:52:26+00:00", "lat": 19.13, "lon": 100.29,
+            {"magnitude": 2.3, "place_th": "ต.ปง อ.ปง จ.พะเยา", "time": "2026-11-04T01:52:26+00:00", "lat": 19.13, "lon": 100.29,
              "source": "กรมอุตุนิยมวิทยา"},
             {"magnitude": 3.1, "place_th": "ประเทศเวียดนาม", "time": "2026-11-04T06:41:17+00:00", "lat": 15.0, "lon": 108.1,
              "source": "กรมอุตุนิยมวิทยา"},
@@ -343,4 +343,13 @@ def test_quakes_this_month_in_a_province_lists_every_nearby_event_since_the_firs
 
 def test_quake_count_question_with_mai_still_gets_the_list():
     answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("สัปดาห์นี้พะเยามีแผ่นดินไหวกี่ครั้ง", NOW)
-    assert answer.intent == "earthquake" and "2 ครั้ง" in answer.text
+    assert answer.intent == "earthquake" and "1 ครั้ง" in answer.text
+    assert "4/11/2569" in answer.text and "1/11/2569" not in answer.text
+
+
+def test_quakes_last_month_uses_previous_calendar_month():
+    answer = HazardAgent(PHAYAO, MonthOfQuakes()).ask("พะเยาแผ่นดินไหวเดือนที่แล้วกี่ครั้ง", NOW)
+
+    assert "1 ครั้ง" in answer.text
+    assert "20/10/2569" in answer.text
+    assert "1/11/2569" not in answer.text and "4/11/2569" not in answer.text

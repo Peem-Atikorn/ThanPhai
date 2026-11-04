@@ -150,24 +150,33 @@ def _km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * 6371 * asin(sqrt(a))
 
 
-def _quake_period(question: str, now: datetime) -> tuple[datetime, str]:
-    """Start of the past period an earthquake question asks about, and its Thai label (default: 7 days)."""
+def _quake_period(question: str, now: datetime) -> tuple[datetime, datetime, str]:
+    """Bounds of the earthquake period asked about, and its Thai label (default: past 7 days)."""
     lowered = question.lower()
     local = now.astimezone(BANGKOK)
     today = local.replace(hour=0, minute=0, second=0, microsecond=0)
     match = re.search(r"(\d+)\s*(วัน|days?)", lowered)
     if match:
         days = min(int(match.group(1)), 30)
-        return local - timedelta(days=days), f" ย้อนหลัง {days} วัน"
+        return local - timedelta(days=days), local, f" ย้อนหลัง {days} วัน"
     if "เดือนนี้" in lowered or "this month" in lowered:
-        return today.replace(day=1), " ตั้งแต่ต้นเดือนนี้"
+        return today.replace(day=1), local, " ตั้งแต่ต้นเดือนนี้"
+    if any(w in lowered for w in ("เดือนที่แล้ว", "เดือนก่อน", "last month")):
+        first_of_month = today.replace(day=1)
+        previous_month = first_of_month - timedelta(days=1)
+        return previous_month.replace(day=1), first_of_month, " เดือนที่แล้ว"
+    if any(w in lowered for w in ("สัปดาห์นี้", "อาทิตย์นี้", "this week")):
+        return today - timedelta(days=today.weekday()), local, " ตั้งแต่ต้นสัปดาห์นี้"
+    if any(w in lowered for w in ("สัปดาห์ที่แล้ว", "สัปดาห์ก่อน", "อาทิตย์ที่แล้ว", "อาทิตย์ก่อน", "last week")):
+        this_week = today - timedelta(days=today.weekday())
+        return this_week - timedelta(days=7), this_week, " สัปดาห์ที่แล้ว"
     if any(w in lowered for w in ("เดือน", "month")):
-        return local - timedelta(days=30), " ย้อนหลัง 30 วัน"
+        return local - timedelta(days=30), local, " ย้อนหลัง 30 วัน"
     if any(w in lowered for w in ("วันนี้", "today")):
-        return today, " วันนี้"
+        return today, local, " วันนี้"
     if any(w in lowered for w in ("เมื่อวาน", "yesterday")):
-        return today - timedelta(days=1), " ตั้งแต่เมื่อวาน"
-    return local - timedelta(days=7), " ย้อนหลัง 7 วัน"
+        return today - timedelta(days=1), today, " ตั้งแต่เมื่อวาน"
+    return local - timedelta(days=7), local, " ย้อนหลัง 7 วัน"
 
 
 def _time_th(value: str | None) -> str | None:
@@ -455,9 +464,9 @@ class HazardAgent:
             return [station for station in stations if province(station) in wanted], label
 
         if intent == "earthquake":
-            since, period = _quake_period(question, now)
+            since, until, period = _quake_period(question, now)
             all_quakes = rows("get_earthquakes")
-            quakes = [q for q in all_quakes if (_parse_time(q.get("time")) or since) >= since]
+            quakes = [q for q in all_quakes if since <= (_parse_time(q.get("time")) or since) < until]
             where = ""
             if u.areas:
                 # Province or district centre: events within QUAKE_NEAR_KM of it (a province is up to ~150 km across).
