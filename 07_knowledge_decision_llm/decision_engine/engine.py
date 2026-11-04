@@ -20,6 +20,8 @@ class DecisionInput:
     official_warning_active: bool = False
     # An official warning whose impact starts more than `lead_days` ahead.
     official_warning_upcoming: bool = False
+    # Every active warning reaches the area only through a region, in wording without rules.yaml strong_words.
+    official_warning_regional: bool = False
     observations: dict[str, float | None] = field(default_factory=dict)
     degraded_sources: list[str] = field(default_factory=list)
 
@@ -44,7 +46,10 @@ class DecisionEngine:
         candidates: list[tuple[AlertLevel, float, str]] = []
         conf = self.rules["confidence"]
 
-        if data.official_warning_active:
+        if data.official_warning_active and data.official_warning_regional:
+            level = AlertLevel[self.rules["official_warning"]["regional_level"]]
+            candidates.append((level, conf["official"], "OFFICIAL_WARNING_REGIONAL"))
+        elif data.official_warning_active:
             level = AlertLevel[self.rules["official_warning"]["min_level"]]
             candidates.append((level, conf["official"], "OFFICIAL_WARNING"))
         elif data.official_warning_upcoming:

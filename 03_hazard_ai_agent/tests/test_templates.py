@@ -26,6 +26,10 @@ class Tools:
         self.calls.append(code)
         return [{"hazard": "flood", "level": "WATCH", "sources": ["ThaiWater"]}]
 
+    def get_all_assessments(self):
+        self.calls.append("get_all_assessments")
+        return [{"area_code": "TH1412", "hazard": "flood", "level": "WATCH"}]
+
     def get_official_warnings(self):
         self.calls.append("get_official_warnings")
         return []
@@ -96,21 +100,21 @@ def test_greeting_words_inside_unrelated_text_are_not_greetings():
     assert understand("highlight", GAZ, NOW).intent == "out_of_scope"
 
 
-@pytest.mark.parametrize("question", [
-    "แหล่งข้อมูลน้ำท่วมอำเภอเสนา",
-    "ใช้ข้อมูลจากดาวเทียม แล้วตอนนี้อำเภอเสนาน้ำท่วมไหม",
-    "ใช้ข้อมูลจากดาวเทียม น้ำท่วมไหม",
-    "Using data sources, will it flood in Sena?",
+@pytest.mark.parametrize(("question", "intent"), [
+    ("แหล่งข้อมูลน้ำท่วมอำเภอเสนา", "risk"),
+    ("ใช้ข้อมูลจากดาวเทียม แล้วตอนนี้อำเภอเสนาน้ำท่วมไหม", "risk"),
+    ("ใช้ข้อมูลจากดาวเทียม น้ำท่วมไหม", "overview"),
+    ("Using data sources, will it flood in Sena?", "risk"),
 ])
-def test_source_words_do_not_override_risk_questions(question):
+def test_source_words_do_not_override_hazard_or_area_questions(question, intent):
     tools = Tools()
     answer = HazardAgent(GAZ, tools).ask(question, NOW)
-    assert answer.intent == "risk"
+    assert answer.intent == intent
     assert "get_sources" not in tools.calls
     if "เสนา" in question or "Sena" in question:
         assert answer.area["code"] == "TH1412" and "TH1412" in tools.calls
     else:
-        assert answer.area is None  # Normal clarification still asks for an area.
+        assert answer.area is None and "get_all_assessments" in tools.calls
 
 
 def test_source_words_do_not_override_preparation():

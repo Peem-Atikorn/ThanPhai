@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -7,6 +9,8 @@ import httpx
 
 from external_data.adapters.base import Adapter, parse_local, to_float
 from thanphai_shared import HazardType, OfficialWarning, SourceRecord
+
+log = logging.getLogger(__name__)
 
 BASE_URL = "https://data.tmd.go.th/api"
 ATTRIBUTION = "ที่มา: กรมอุตุนิยมวิทยา (TMD)"
@@ -94,6 +98,32 @@ def impact_window(title: str, announced: date) -> tuple[date, date] | None:
     return read_days(note.group(1), announced) if note else None
 
 
+def bulletin_body(page_text: str) -> str | None:
+    """The statements of a TMD bulletin from its PDF page 1, or None when the page is not laid out as one.
+
+    The API's HeadlineThai is the first paragraph only: issue 288/2569 said "ส่วนในช่วงวันที่ 7–9 … ภาคใต้" only in the
+    PDF. The statements sit between the "-----" rule under the title and "ประกาศ ณ วันที่"; text from "ทั้งนี้" on is
+    the cause ("ทั้งนี้เนื่องจาก … ประเทศไทยตอนบน") and general advice, which name areas without warning them.
+    Lines are joined without a space, as Thai breaks lines inside sentences ("ประเทศไทย" / "ตอนบน").
+    """
+    lines = page_text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip().startswith("---")), None)
+    end = next((i for i, line in enumerate(lines) if line.strip().startswith("ประกาศ ณ")), None)
+    if start is None or end is None or end <= start:
+        return None
+    body = "".join(line.rstrip() for line in lines[start + 1:end]).split("ทั้งนี้")[0].strip()
+    return body or None
+
+
+def read_bulletin(pdf: bytes) -> str | None:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(BytesIO(pdf))
+    return bulletin_body(reader.pages[0].extract_text()) if reader.pages else None
+
+
 def latest_issues(warnings: list[OfficialWarning]) -> list[OfficialWarning]:
     """The newest issue of each warning, newest first. TMD's feed keeps earlier issues next to the one that replaced
     them (2026-11-02: issues 2 and 3 of the same warning)."""
@@ -157,7 +187,28 @@ class TmdWarnings(Adapter):
 
     async def run_warnings(self, client: httpx.AsyncClient) -> list[OfficialWarning]:
         fetched_at = datetime.now(timezone.utc)
-        return self.parse_warnings(await self.fetch(client), fetched_at)
+        warnings = self.parse_warnings(await self.fetch(client), fetched_at)
+        # Only the newest issue of each warning is used; older issues in the feed keep the headline alone.
+        latest = {id(w) for w in latest_issues(warnings)}
+        bodies = await asyncio.gather(*(self.bulletin(client, w.url if id(w) in latest else None) for w in warnings))
+        return [w.model_copy(update={"body": body}) for w, body in zip(warnings, bodies)]
+
+    # PDF url -> statements. An issue's PDF never changes; a new issue has a new url.
+    _bodies: dict[str, str | None] = {}
+
+    async def bulletin(self, client: httpx.AsyncClient, url: str | None) -> str | None:
+        """The bulletin's statements from its PDF; None (use the headline) when there is no PDF or it cannot be read."""
+        if not url:
+            return None
+        if url not in self._bodies:
+            try:
+                response = await client.get(url, timeout=self.timeout_seconds)
+                response.raise_for_status()
+                TmdWarnings._bodies[url] = await asyncio.to_thread(read_bulletin, response.content)
+            except Exception as exc:  # a PDF that fails now is tried again on the next refresh
+                log.warning("TMD bulletin %s unreadable: %s", url, exc)
+                return None
+        return self._bodies[url]
 
 
 class TmdWeather3Hours(Adapter):

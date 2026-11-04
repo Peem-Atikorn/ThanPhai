@@ -181,6 +181,12 @@ h2 { font-size: 17px; font-weight: 650; }
 .official-warning li { margin-top: 10px; }
 .official-warning a { text-decoration: underline; }
 .official-warning small { display: block; margin-top: 10px; }
+.official-warning-title { margin-top: 10px; line-height: 1.6; }
+.warning-regions { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.warning-regions li { display: flex; gap: 10px; align-items: flex-start; margin-top: 0; }
+.warning-regions .risk-badge { flex: none; }
+.warning-regions b { font-weight: 600; }
+.warning-regions small { margin-top: 2px; opacity: .85; }
 .data-notice, .assessment-list .data-notice { color: var(--warning-text); font-size: 12px; margin-top: 8px; }
 .disclaimer { display: flex; gap: 9px; align-items: flex-start; color: var(--muted); font-size: 12px; padding: 20px 0; }
 .disclaimer svg { width: 17px; height: 17px; margin-top: 1px; }

@@ -9,9 +9,12 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+import time
+import numpy as np
 
 import geopandas as gpd
 import httpx
@@ -26,7 +29,8 @@ from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import DAM_SERIES, ROOT as THAIWATER_ROOT, fetch_dam_year, fetch_station_graph, parse_dam_year
 from external_data.adapters.thaiwater_media import parse_media
 from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues, read_days
-from geo_integration import Gazetteer, hazard_areas, warning_provinces
+from geo_integration import Gazetteer, hazard_areas, warning_provinces, warning_statements
+from geo_integration.warning_areas import REGIONS
 from geo_integration.area_mapper import AreaMapper
 from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import AlertLevel, HazardType
@@ -132,6 +136,9 @@ class HazardService:
         self.source_status: dict[str, dict] = {}
         self.updated_at: datetime | None = None
         self._lock = asyncio.Lock()
+        self._radar_nowcast_lock = asyncio.Lock()
+        self._radar_nowcast_cache: tuple[int, dict, float] | None = None
+        self._thai_radar_mask: np.ndarray | None = None
         self._background: asyncio.Task | None = None
         # Set when slower inputs (satellite, fire model) change, so decisions are rebuilt without
         # pretending the live data is missing (clearing updated_at showed "data time: —" in the UI).
@@ -313,12 +320,27 @@ class HazardService:
             status["tmd_warnings"] = {"ok": True, "records": len(warnings_result), "checked_at": now}
             warnings = []
             for w in latest_issues(warnings_result):
-                text = f"{w.title} {w.headline or ''}"
+                text = f"{w.title} {w.body or w.headline or ''}"
                 issued = w.announced_at.astimezone(BANGKOK).date()
-                areas = hazard_areas(self.gazetteer, [w.title, w.headline or ""], classify_hazards, lambda part: read_days(part, issued))
+                # The PDF body has every region's statement with its own days; the title's "(มีผลกระทบ 5-9)" would
+                # give the south 5-9 Nov where the body says 7-9. Without a body: the title and the headline.
+                texts = [w.body] if w.body else [w.title, w.headline or ""]
+                statements = warning_statements(self.gazetteer, texts, classify_hazards, lambda part: read_days(part, issued))
+                areas = hazard_areas(self.gazetteer, texts, classify_hazards, lambda part: read_days(part, issued))
                 window = impact_window(w.title, issued)
+                # Each statement's days with whether it sets rules.yaml min_level (a province named by name, or a region
+                # in strong_words) or regional_level. A region WATCH on 5-7 Nov and WARNING on 8-9 Nov is a WATCH on 5 Nov.
+                periods: dict[str, dict[str, list]] = {}
+                for s in statements:
+                    days = [d.isoformat() for d in s.days] if s.days else [None, None]
+                    strong = self._strong(s.wording)
+                    for hazard in s.hazards:
+                        for code in sorted(s.provinces):
+                            periods.setdefault(hazard.value, {}).setdefault(code, []).append([*days, strong or code in s.named])
                 warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
                                  "provinces_by_hazard": {hazard.value: sorted(codes) for hazard, codes in areas.items()},
+                                 "periods_by_hazard": periods,
+                                 "by_region": self._by_region(statements, window),
                                  "impact_from": window[0].isoformat() if window else None,
                                  "impact_to": window[1].isoformat() if window else None,
                                  # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
@@ -447,13 +469,15 @@ class HazardService:
                     # Confidence in the stated level: p for a fire level, 1 - p for NORMAL.
                     model_conf = p if model_level != AlertLevel.NORMAL else 1 - p
                     obs = {**obs, "fire_probability_7d": pred["probability"]}
+                active = [regional for _, start, regional in warned if start is None]
                 d = self.engine.decide(DecisionInput(hazard=hazard, observations=obs, degraded_sources=degraded.get(hazard, []),
                                                      model_level=model_level, model_confidence=model_conf,
-                                                     official_warning_active=any(start is None for _, start in warned),
-                                                     official_warning_upcoming=any(start is not None for _, start in warned)))
+                                                     official_warning_active=bool(active),
+                                                     official_warning_upcoming=any(start is not None for _, start, _ in warned),
+                                                     official_warning_regional=bool(active) and all(active)))
                 notices = [f"กรมอุตุนิยมวิทยาประกาศเตือน: {title}" if start is None else
                            f"กรมอุตุนิยมวิทยาประกาศเตือนล่วงหน้า (คาดว่าเริ่ม {thai_date(start)}): {title}"
-                           for title, start in warned] + list(d.notices)
+                           for title, start, _ in warned] + list(d.notices)
                 sources = list(SOURCES[hazard]) + (["กรมอุตุนิยมวิทยา (ประกาศเตือน)"] if warned else [])
                 if obs.get("satellite_flood_cells_7d") is not None:
                     sources.append("GISTDA (ดาวเทียม)")
@@ -503,22 +527,78 @@ class HazardService:
         return datetime.now(BANGKOK).date()
 
     @staticmethod
-    def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None]]]]:
-        """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None) of the
-        TMD warnings that name the province for that hazard. A province uses the days its own statement gives, else the
-        warning's; it is left out once its last impact day has passed."""
-        found: dict[str, dict[HazardType, list[tuple[str, date | None]]]] = {}
+    def _official_by_province(warnings: list[dict], today: date, lead_days: int) -> dict[str, dict[HazardType, list[tuple[str, date | None, bool]]]]:
+        """Province code -> hazard -> (title, first impact day if still more than `lead_days` ahead, else None, whether
+        the statements in force reach the province only through a region without strong wording) of the TMD warnings
+        that name the province for that hazard. Each statement counts on its own days (a statement without days: the
+        warning's), from `lead_days` before its first day to its last; the province is left out once all have passed."""
+        found: dict[str, dict[HazardType, list[tuple[str, date | None, bool]]]] = {}
         for warning in warnings:
             whole = (warning.get("impact_from"), warning.get("impact_to"))
             for hazard, provinces in warning.get("provinces_by_hazard", {}).items():
                 own = warning.get("impact_by_hazard", {}).get(hazard, {})
                 for province in provinces:
-                    first, last = (date.fromisoformat(d) if d else None for d in own.get(province, whole))
-                    if last is not None and today > last:
+                    if "periods_by_hazard" in warning:
+                        periods = warning["periods_by_hazard"].get(hazard, {}).get(province) or [[None, None, True]]
+                    else:  # cached before periods existed: one period, min_level, as it was then
+                        periods = [[*own.get(province, whole), True]]
+                    active, upcoming = [], []
+                    for start, end, firm in periods:
+                        first, last = (date.fromisoformat(d) if d else None
+                                       for d in ((start, end) if start or end else whole))
+                        if last is not None and today > last:
+                            continue
+                        if first is not None and today < first - timedelta(days=lead_days):
+                            upcoming.append(first)
+                        else:
+                            active.append(firm)
+                    if active:
+                        entry = (warning["title"], None, not any(active))
+                    elif upcoming:
+                        entry = (warning["title"], min(upcoming), True)
+                    else:
                         continue
-                    upcoming = first if first is not None and today < first - timedelta(days=lead_days) else None
-                    found.setdefault(province, {}).setdefault(HazardType(hazard), []).append((warning["title"], upcoming))
+                    found.setdefault(province, {}).setdefault(HazardType(hazard), []).append(entry)
         return found
+
+    def _strong(self, wording: str) -> bool:
+        """The statement says heavy impact is likely (rules.yaml strong_words), so a region keeps min_level."""
+        compact = re.sub(r"\s+", "", wording)
+        return any(word in compact for word in self.engine.rules["official_warning"]["strong_words"])
+
+    def _by_region(self, statements: list, window: tuple[date, date] | None) -> list[dict]:
+        """The warning as the overview shows it: one entry per days, level and areas, with the hazards for exactly those
+        areas. Issue 288/2569: upper Thailand 5-7 Nov WATCH (rain), the south 7-9 Nov WARNING (rain, flood).
+
+        Statements with the same days, level and hazards are joined first, and a region whose provinces all lie in
+        another region of the group is left out ("ส่วนภาคเหนือ ภาคกลาง … ในระยะถัดไป" inside "ประเทศไทยตอนบน").
+        Then groups for the same areas join their hazards. Rain in the north and flood in the south stay apart.
+        """
+        rules = self.engine.rules["official_warning"]
+        groups: dict[tuple, list[str]] = {}
+
+        def add(days, level, hazards, labels):
+            first, last = days or window or (None, None)
+            areas = groups.setdefault((first, last, level, tuple(h.value for h in hazards)), [])
+            areas += [label for label in labels if label not in areas]
+
+        for s in statements:
+            level = rules["min_level"] if self._strong(s.wording) else rules["regional_level"]
+            if s.regions:
+                add(s.days, level, s.hazards, s.regions)
+            if s.named:
+                names = [self.gazetteer.by_code[c].name_th for c in sorted(s.named) if c in self.gazetteer.by_code]
+                add(s.days, rules["min_level"], s.hazards, [f"จ.{n}" for n in names])
+        entries: dict[tuple, dict] = {}
+        for (first, last, level, hazards), areas in groups.items():
+            regions = [a for a in areas if a in REGIONS]
+            areas = [a for a in areas if a not in REGIONS or not any(b != a and set(REGIONS[a]) < set(REGIONS[b]) for b in regions)]
+            entry = entries.setdefault((first, last, level, tuple(areas)), {
+                "from": first.isoformat() if first else None, "to": last.isoformat() if last else None,
+                "level": level, "hazards": [], "areas": areas})
+            entry["hazards"] += [h for h in hazards if h not in entry["hazards"]]
+        # By first day, then the higher level first.
+        return sorted(entries.values(), key=lambda e: (e["from"] or "", e["level"] != rules["min_level"]))
 
     @staticmethod
     def _vegetation_observations(veg: dict | None, flooded: bool) -> tuple[dict, str | None]:
@@ -948,6 +1028,10 @@ class HazardService:
                     worst[item["hazard"]] = {**item, "worst_area": code}
         return list(worst.values())
 
+    def get_all_assessments(self) -> list[dict]:
+        """Return the existing per-district decisions for national summaries."""
+        return [{"area_code": code, **item} for code in self.amphoe_codes for item in self.decisions.get(code, [])]
+
     @staticmethod
     def _dam_rows(records) -> list[dict]:
         rows = [{"id": r.station_id, "storage_percent": r.value, "lat": r.lat, "lon": r.lon,
@@ -1315,3 +1399,272 @@ class HazardService:
                 },
             })
         return {"type": "FeatureCollection", "features": features}
+
+    def _get_thai_radar_mask(self) -> np.ndarray:
+        """Return 256x256 boolean mask of Thailand territory on tile 4/12/7.
+
+        A pixel is True if it lies within 35 km of at least one Thai amphoe centroid.
+        """
+        if self._thai_radar_mask is not None:
+            return self._thai_radar_mask
+
+        amphoes = [a for a in self.gazetteer.areas if a.level == "amphoe"]
+        if not amphoes:
+            mask = np.ones((256, 256), dtype=bool)
+            self._thai_radar_mask = mask
+            return mask
+
+        from scipy.spatial import cKDTree
+
+        r_earth = 6371.0
+        def to_xyz(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
+            lat_r, lon_r = np.radians(lats), np.radians(lons)
+            return np.column_stack([
+                r_earth * np.cos(lat_r) * np.cos(lon_r),
+                r_earth * np.cos(lat_r) * np.sin(lon_r),
+                r_earth * np.sin(lat_r),
+            ])
+
+        n = 16.0  # 2 ** 4
+        y_idx, x_idx = np.indices((256, 256))
+        lons = (12.0 + x_idx / 256.0) / n * 360.0 - 180.0
+        y_tot = (7.0 + y_idx / 256.0) / n
+        lats = np.degrees(np.arctan(np.sinh(np.pi * (1.0 - 2.0 * y_tot))))
+
+        grid_xyz = to_xyz(lats.ravel(), lons.ravel())
+        amp_lats = np.array([a.lat for a in amphoes])
+        amp_lons = np.array([a.lon for a in amphoes])
+        amp_xyz = to_xyz(amp_lats, amp_lons)
+
+        tree = cKDTree(amp_xyz)
+        dists, _ = tree.query(grid_xyz, distance_upper_bound=35.0)
+        mask = (dists <= 35.0).reshape((256, 256))
+        self._thai_radar_mask = mask
+        return mask
+
+    async def get_radar_nowcast(self) -> dict:
+        """Return 1-hour radar nowcast calculated from real radar frames with Qwen explanation."""
+        from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes
+        from risk_models.nowcast import decode_png_radar, detect_rain_cells, estimate_motion, track_cells_to_districts
+        from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget
+
+        now = time.monotonic()
+        try:
+            frames = await fetch_radar_maps()
+        except Exception as exc:
+            log.warning("Failed to fetch radar maps from RainViewer: %s", exc)
+            frames = []
+
+        past_frames = frames[-6:] if frames else []
+        curr_time = past_frames[-1]["time"] if past_frames else 0
+
+        # Fast path check outside lock
+        if self._radar_nowcast_cache is not None:
+            cached_time, cached_result, expire_at = self._radar_nowcast_cache
+            if cached_time == curr_time and now < expire_at:
+                return cached_result
+
+        # Acquire lock to serialize calculation and prevent duplicate work when a new frame arrives
+        async with self._radar_nowcast_lock:
+            # Double check inside lock
+            now = time.monotonic()
+            if self._radar_nowcast_cache is not None:
+                cached_time, cached_result, expire_at = self._radar_nowcast_cache
+                if cached_time == curr_time and now < expire_at:
+                    return cached_result
+
+            if len(past_frames) < 2:
+                unavailable_res = {
+                    "status": "unavailable",
+                    "past_frames": past_frames,
+                    "forecast_frames": [],
+                    "motion": None,
+                    "rain_cells": [],
+                    "explanation": "ไม่สามารถดึงข้อมูลเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "source": "RainViewer · ข้อมูลเรดาร์ฝนยังไม่พร้อมใช้งาน",
+                }
+                self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
+                return unavailable_res
+
+            prev_frame_meta = past_frames[-2]
+            curr_frame_meta = past_frames[-1]
+            host = curr_frame_meta.get("host") or prev_frame_meta.get("host") or "https://tilecache.rainviewer.com"
+
+            tile_url_prev = f"{host}{prev_frame_meta['path']}/256/4/12/7/2/1_1.png"
+            tile_url_curr = f"{host}{curr_frame_meta['path']}/256/4/12/7/2/1_1.png"
+
+            try:
+                bytes_prev, bytes_curr = await asyncio.gather(
+                    fetch_tile_bytes(tile_url_prev),
+                    fetch_tile_bytes(tile_url_curr),
+                )
+            except Exception as exc:
+                log.warning("Failed to fetch radar tile bytes: %s", exc)
+                unavailable_res = {
+                    "status": "unavailable",
+                    "past_frames": past_frames,
+                    "forecast_frames": [],
+                    "motion": None,
+                    "rain_cells": [],
+                    "explanation": "ไม่สามารถดึงภาพเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "source": "RainViewer · เกิดข้อผิดพลาดในการโหลดภาพเรดาร์",
+                }
+                self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
+                return unavailable_res
+
+            interval_min = max(5.0, (curr_frame_meta["time"] - prev_frame_meta["time"]) / 60.0)
+
+            # Amphoe list for boundary filtering and tracking
+            amphoe_list = [
+                {"code": a.code, "name_th": a.name_th, "lat": a.lat, "lon": a.lon, "parent_code": a.parent_code}
+                for a in self.gazetteer.areas
+                if a.level == "amphoe"
+            ]
+            thai_mask = self._get_thai_radar_mask()
+
+            def _compute_nowcast_sync() -> tuple[dict | None, list[dict], NowcastSummary, list[dict]]:
+                arr_prev = decode_png_radar(bytes_prev)
+                arr_curr = decode_png_radar(bytes_curr)
+
+                # Estimate bulk motion using spatial cross-correlation with sub-pixel refinement
+                motion = estimate_motion(arr_prev, arr_curr, pixel_size_km=9.5, interval_min=interval_min)
+
+                # Detect rain cells with exact inverse Web Mercator projection and raster mask of Thailand
+                cells = detect_rain_cells(
+                    arr_curr,
+                    threshold=15.0,
+                    min_pixels=4,
+                    z=4,
+                    tx=12,
+                    ty=7,
+                    valid_mask=thai_mask,
+                )
+
+                # Generate extrapolated forecast frames metadata (+10 to +60 minutes)
+                # If motion is undetermined (direction_th == "ทิศทางไม่แน่นอน"), dx/dy are 0
+                is_undetermined = motion.direction_th == "ทิศทางไม่แน่นอน"
+                forecast_frames = [
+                    {
+                        "time": curr_frame_meta["time"] + step * int(interval_min * 60),
+                        "horizon_min": step * int(interval_min),
+                        "dx_pixels": round(motion.dx * step, 1) if (motion and not is_undetermined) else 0.0,
+                        "dy_pixels": round(motion.dy * step, 1) if (motion and not is_undetermined) else 0.0,
+                    }
+                    for step in range(1, 7)
+                ]
+
+                if not cells:
+                    summary = NowcastSummary(
+                        location_desc="",
+                        direction_th="ไม่มีกลุ่มฝน",
+                        speed_kmh=0.0,
+                        intensity_desc="ไม่มีฝน",
+                        targets=[],
+                    )
+                    return None, [], summary, forecast_frames
+
+                lead_cell = cells[0]
+                closest_amphoe = min(
+                    amphoe_list,
+                    key=lambda a: (a["lat"] - lead_cell.centroid_lat) ** 2 + (a["lon"] - lead_cell.centroid_lon) ** 2,
+                    default=None,
+                ) if amphoe_list else None
+                prov_parent = self.gazetteer.by_code.get(closest_amphoe.get("parent_code")) if closest_amphoe else None
+                loc_desc = (
+                    f"บริเวณจังหวัด{prov_parent.name_th}"
+                    if prov_parent
+                    else f"บริเวณพิกัด {lead_cell.centroid_lat:.2f}, {lead_cell.centroid_lon:.2f}"
+                )
+
+                intensity_th = (
+                    "หนัก"
+                    if lead_cell.peak_intensity >= 45.0
+                    else ("ปานกลาง" if lead_cell.peak_intensity >= 25.0 else "กำลังอ่อน")
+                )
+
+                # Check if motion cannot be determined reliably (e.g. noise spikes > 120 km/h)
+                if is_undetermined:
+                    rain_cells_data = [
+                        {
+                            "id": c.id,
+                            "centroid_lat": round(c.centroid_lat, 3),
+                            "centroid_lon": round(c.centroid_lon, 3),
+                            "peak_intensity_dbz": round(c.peak_intensity, 1),
+                            "target_districts": [],
+                        }
+                        for c in cells[:5]
+                    ]
+                    summary = NowcastSummary(
+                        location_desc=loc_desc,
+                        direction_th="ยังประเมินทิศทางไม่ได้",
+                        speed_kmh=0.0,
+                        intensity_desc=intensity_th,
+                        targets=[],
+                    )
+                    return None, rain_cells_data, summary, forecast_frames
+
+                is_moving = motion.speed_kmh >= 2.0
+                motion_data = {
+                    "speed_kmh": round(motion.speed_kmh, 1),
+                    "direction_th": motion.direction_th if is_moving else "เกือบอยู่กับที่",
+                    "direction_deg": round(motion.direction_deg, 1),
+                }
+
+                target_hits = track_cells_to_districts(
+                    cells=cells[:5],
+                    speed_kmh=motion.speed_kmh,
+                    direction_deg=motion.direction_deg,
+                    districts=amphoe_list,
+                    max_horizon_min=60,
+                )
+
+                # Target districts for each cell
+                rain_cells_data = []
+                for c in cells[:5]:
+                    c_targets = [h for h in target_hits if h["cell_id"] == c.id]
+                    c_targets.sort(key=lambda h: h["eta_min"])
+                    rain_cells_data.append({
+                        "id": c.id,
+                        "centroid_lat": round(c.centroid_lat, 3),
+                        "centroid_lon": round(c.centroid_lon, 3),
+                        "peak_intensity_dbz": round(c.peak_intensity, 1),
+                        "target_districts": [
+                            {"amphoe_th": h["amphoe_th"], "eta_min": h["eta_min"]}
+                            for h in c_targets[:3]
+                        ],
+                    })
+
+                # Summary targets must ONLY include targets from the lead cell (cell_id == lead_cell.id)
+                lead_hits = [h for h in target_hits if h["cell_id"] == lead_cell.id]
+                lead_hits.sort(key=lambda h: h["eta_min"])
+                targets_summary = [
+                    RainCellTarget(amphoe_th=h["amphoe_th"], eta_min=h["eta_min"])
+                    for h in lead_hits[:3]
+                ]
+
+                summary = NowcastSummary(
+                    location_desc=loc_desc,
+                    direction_th=motion_data["direction_th"],
+                    speed_kmh=motion.speed_kmh,
+                    intensity_desc=intensity_th,
+                    targets=targets_summary,
+                )
+                return motion_data, rain_cells_data, summary, forecast_frames
+
+            # Execute heavy calculation off event loop
+            motion_data, rain_cells_data, summary, forecast_frames = await asyncio.to_thread(_compute_nowcast_sync)
+
+            explainer = NowcastExplainer()
+            explanation = await asyncio.to_thread(explainer.explain, summary, self.gazetteer)
+
+            result = {
+                "status": "ok",
+                "past_frames": past_frames,
+                "forecast_frames": forecast_frames,
+                "motion": motion_data,
+                "rain_cells": rain_cells_data,
+                "explanation": explanation,
+                "source": "RainViewer · คำนวณ Nowcast 1 ชม. จากภาพเรดาร์จริง",
+            }
+            self._radar_nowcast_cache = (curr_time, result, now + 600.0)
+            return result

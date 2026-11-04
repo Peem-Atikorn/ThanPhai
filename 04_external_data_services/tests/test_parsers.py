@@ -4,7 +4,9 @@ import json
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import httpx
 import pytest
+import respx
 
 from external_data.adapters import (
     Air4ThaiPm25,
@@ -20,7 +22,8 @@ from external_data.adapters import (
 )
 from external_data.adapters.base import BANGKOK, in_thailand_bbox
 from external_data.adapters.thaiwater import bank_quality_flag, signed_bank_diff
-from external_data.adapters.tmd import as_list, classify_hazards, impact_window, latest_issues, read_days
+from external_data.adapters.tmd import BASE_URL as BASE
+from external_data.adapters.tmd import as_list, bulletin_body, classify_hazards, impact_window, latest_issues, read_days
 from thanphai_shared import HazardType
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -133,6 +136,33 @@ def test_tmd_latest_issue_replaces_earlier_ones():
              single]
     kept = latest_issues(TmdWarnings().parse_warnings({"Warning": items}, NOW))
     assert [w.issue_no for w in kept] == ["3", "4"]  # issue 4 is another warning (heavy rain, 2026-10-18)
+
+
+def test_tmd_bulletin_body_keeps_every_region_and_drops_cause_and_advice():
+    # Page 1 of the PDF of issue 5 (288/2569): the API headline has only upper Thailand; the south is in the PDF.
+    bulletin = json.loads((Path(__file__).resolve().parents[2] / "05_geo_data_integration" / "tests" / "fixtures"
+                           / "tmd_bulletin_5.json").read_text(encoding="utf-8"))
+    body = bulletin_body(bulletin["page"])
+    assert body == bulletin["body"]
+    assert body.startswith("ในช่วงวันที่ 5 –7 พฤศจิกายน 2569 บริเวณประเทศไทยตอนบน")
+    assert "ส่วนในช่วงวันที่ 7–9 พฤศจิกายน 2569 บริเวณภาคใต้" in body and "ประเทศไทยตอนบน" in body  # lines joined
+    assert "ทั้งนี้" not in body and "เนื่องจาก" not in body and "ประกาศ ณ" not in body
+    assert bulletin_body("หน้าที่ไม่ใช่ประกาศ") is None
+
+
+@respx.mock
+async def test_tmd_warnings_read_the_bulletin_once_and_fall_back_to_the_headline(monkeypatch):
+    single = load_json("tmd_warning_v2.json")["Warning"]
+    url = "https://tmd.go.th/media/forecast/warning/test.pdf"
+    monkeypatch.setattr(TmdWarnings, "_bodies", {})
+    monkeypatch.setattr("external_data.adapters.tmd.read_bulletin", lambda pdf: pdf.decode())
+    respx.get(url__startswith=BASE).mock(return_value=httpx.Response(200, json={"Warning": {**single, "WebUrlThai": url}}))
+    pdf = respx.get(url).mock(side_effect=[httpx.Response(500), httpx.Response(200, content="ข้อความ".encode())])
+    async with httpx.AsyncClient() as client:
+        assert (await TmdWarnings().run_warnings(client))[0].body is None  # PDF failed: the headline is used
+        assert (await TmdWarnings().run_warnings(client))[0].body == "ข้อความ"
+        assert (await TmdWarnings().run_warnings(client))[0].body == "ข้อความ"
+    assert pdf.call_count == 2  # read once it worked
 
 
 @pytest.mark.parametrize(

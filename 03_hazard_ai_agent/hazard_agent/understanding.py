@@ -76,6 +76,8 @@ def detect_hazards(text: str) -> list[HazardType]:
     # "ฝน" alone is rain; "ฝนทิ้งช่วง" is drought, not rain.
     if HazardType.DROUGHT in found and "ฝนทิ้งช่วง" in lowered and not any(w in lowered for w in ("ฝนตก", "ฝนหนัก", "พายุ")):
         found.remove(HazardType.RAIN_STORM)
+    if HazardType.MARINE in found and "คลื่นลมแรง" in lowered and not any(w in lowered for w in ("ฝนตก", "ฝนหนัก", "พายุ", "ฝน")):
+        found.remove(HazardType.RAIN_STORM)
     # "ไต้ฝุ่น" (typhoon) contains "ฝุ่น" (dust): count dust only if it appears outside the word typhoon.
     if HazardType.AIR_QUALITY in found and not any(w in lowered.replace("ไต้ฝุ่น", "") for w in HAZARD_WORDS[HazardType.AIR_QUALITY]):
         found.remove(HazardType.AIR_QUALITY)
@@ -158,6 +160,8 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     if data_intent:
         return Understanding(data_intent, [], areas, start, end, language, regions=regions)
     hazards = detect_hazards(text)
+    ranking = any(w in lowered for w in ("จังหวัดไหน", "ที่ไหน", "เสี่ยงสุด", "มากที่สุด", "highest", "most at risk"))
+    overview = any(w in lowered for w in ("ทั้งประเทศ", "ทั่วประเทศ", "ภาพรวม", "สรุป", "overview", "nationwide"))
     if MUEANG_QUERY.search(text) and not any(a.level == "amphoe" and a.name_th.startswith("เมือง") for a in areas):
         return Understanding("clarify", hazards, areas, start, end, language, notes=["mueang province required"])
     # Source words must not swallow questions about hazards, areas, dams, or rivers.
@@ -167,6 +171,10 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         intent = "prepare"
     elif any(w in lowered for w in EXPLAIN_WORDS):
         intent = "explain"
+    elif ranking and (not areas or regions) and not future:
+        intent = "ranking"
+    elif (overview or regions or (hazards and not areas)) and (not areas or regions) and not future:
+        intent = "overview"
     elif hazards or areas or regions:
         intent = "risk"
     else:

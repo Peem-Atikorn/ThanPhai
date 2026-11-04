@@ -366,6 +366,16 @@ async def radar() -> dict:
     return {"frame": frame}
 
 
+@app.get("/v1/radar/nowcast")
+async def radar_nowcast() -> dict:
+    """1-hour radar nowcast with extrapolated frame timestamps and Qwen explanation."""
+    if os.getenv("RADAR_LAYER", "off") != "internal":
+        raise HTTPException(404, "radar layer is off")
+    svc = await fresh_service()
+    data = await svc.get_radar_nowcast()
+    return {**data, **meta(svc)}
+
+
 @app.get("/v1/warnings")
 async def warnings() -> dict:
     svc = await fresh_service()

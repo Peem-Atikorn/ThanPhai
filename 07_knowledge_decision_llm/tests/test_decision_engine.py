@@ -42,6 +42,14 @@ def test_upcoming_official_warning_is_a_watch_and_rules_can_raise_it():
     assert decide(official_warning_active=True, official_warning_upcoming=True).rule_ids == ["OFFICIAL_WARNING"]
 
 
+def test_regional_official_warning_is_a_watch_and_rules_can_raise_it():
+    d = decide(official_warning_active=True, official_warning_regional=True)
+    assert d.level == L.WATCH and d.rule_ids == ["OFFICIAL_WARNING_REGIONAL"]
+    assert decide(official_warning_active=True, official_warning_regional=True, observations={"above_bank_m": 0.1}).level == L.WARNING
+    # Regional alone means nothing without an active warning.
+    assert decide(official_warning_regional=True, official_warning_upcoming=True).rule_ids == ["OFFICIAL_WARNING_UPCOMING"]
+
+
 @pytest.mark.parametrize(
     ("above_bank_m", "expected"),
     [(-1.0, L.NORMAL), (-0.3, L.WATCH), (0.0, L.WATCH), (0.01, L.WARNING), (0.5, L.CRITICAL), (1.21, L.CRITICAL)],
