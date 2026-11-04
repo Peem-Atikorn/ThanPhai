@@ -79,7 +79,7 @@ def test_future_national_question_asks_for_a_specific_area(gazetteer):
     answer = HazardAgent(gazetteer, tools).ask("พรุ่งนี้ฝนตกทั่วประเทศไหม", NOW)
 
     assert u.future and u.intent == "risk"
-    assert answer.intent == "risk" and answer.area is None
+    assert answer.intent == "clarify" and answer.area is None
     assert "ระบุพื้นที่" in answer.text or "ไม่พบชื่อพื้นที่" in answer.text
     assert tools.calls == []
 

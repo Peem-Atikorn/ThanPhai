@@ -347,8 +347,12 @@ class HazardAgent:
         if u.intent == "prepare" and not u.area:
             return self._prepare(question, u, [])
         if not u.area:
-            text = "ไม่พบชื่อพื้นที่ในคำถาม ช่วยระบุอำเภอหรือจังหวัด เช่น \"อำเภอเสนา จังหวัดพระนครศรีอยุธยา\" ครับ"
-            return AgentAnswer(text, u.intent, None, [h.value for h in u.hazards], notes=u.notes)
+            # Still a question ThanPhai can answer once it knows where: ask back instead of guessing the country.
+            about = f"เรื่อง{HAZARD_TH[u.hazards[0].value]}" if len(u.hazards) == 1 else ""
+            text = (f"ไม่พบชื่อพื้นที่ในคำถาม อยากให้น้องทันภัยดู{about}ที่อำเภอหรือจังหวัดไหนครับ "
+                    "พิมพ์ชื่อพื้นที่มาได้เลย เช่น \"วันนี้ตากผ้าที่อำเภอเสนาได้ไหม\" "
+                    "หรือเลือกพื้นที่บนแผนที่ก่อนแล้วถามใหม่ครับ")
+            return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards], notes=[*u.notes, "area required"])
         if "ambiguous area" in u.notes:
             same_name = [a for a in u.areas if a.level == u.area.level and a.name_th == u.area.name_th]
             options = " / ".join(_area_label(a, self.gazetteer) for a in same_name[:4])

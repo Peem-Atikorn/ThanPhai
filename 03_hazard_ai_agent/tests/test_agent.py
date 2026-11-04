@@ -645,3 +645,19 @@ def test_reason_names_an_upcoming_tmd_warning():
     assert "ครอบคลุมทั้งภาค" in _reason({"rule_ids": ["OFFICIAL_WARNING_REGIONAL"]})
     assert _reason({"rule_ids": ["OFFICIAL_WARNING_HEAVY_RAIN"]}).endswith("มีฝนตกหนัก")
     assert _reason({"rule_ids": ["OFFICIAL_WARNING_VERY_HEAVY_RAIN"]}).endswith("มีฝนตกหนักมาก")
+
+
+@pytest.mark.parametrize("question", ["วันนี้ฝนตกไหม", "วันนี้สามารถตากผ้าได้ไหม", "พรุ่งนี้ต้องพกร่มไหม", "น้ำจะท่วมไหม"])
+def test_a_hazard_or_daily_weather_question_without_a_place_asks_where(question):
+    answer = agent.ask(question, NOW)
+    assert answer.intent == "clarify" and answer.area is None and answer.evidence == []
+    assert "อำเภอหรือจังหวัดไหน" in answer.text
+
+
+def test_daily_weather_question_with_a_place_is_a_rain_risk_question():
+    u = understand("วันนี้ตากผ้าที่อำเภอเสนาได้ไหม", GAZ, NOW)
+    assert u.intent == "risk" and u.hazards == [HazardType.RAIN_STORM] and u.area.code == "TH1406"
+
+
+def test_national_and_regional_questions_still_get_the_overview():
+    assert understand("สรุปฝนตกหนักทั้งประเทศ", GAZ, NOW).intent == "overview"
