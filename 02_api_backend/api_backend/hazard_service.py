@@ -330,17 +330,25 @@ class HazardService:
                 provinces = {hazard.value: sorted(codes) for hazard, codes in areas.items()}
                 for hazard, codes in periods.items():  # daily tables can name provinces the statements reach only by region
                     provinces[hazard] = sorted(set(provinces.get(hazard, [])) | set(codes))
-                warnings.append({**w.model_dump(mode="json"), "provinces": warning_provinces(self.gazetteer, text),
-                                 "provinces_by_hazard": provinces,
-                                 "periods_by_hazard": periods,
-                                 "by_region": self._by_region(statements, window, tables=bool(w.rain_days)),
-                                 "rain_days": rain_days,
-                                 "impact_from": window[0].isoformat() if window else None,
-                                 "impact_to": window[1].isoformat() if window else None,
-                                 # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
-                                 "impact_by_hazard": {hazard.value: {code: [days[0].isoformat(), days[1].isoformat()]
-                                                                     for code, days in codes.items() if days}
-                                                      for hazard, codes in areas.items()}})
+                w_dict = {
+                    **w.model_dump(mode="json"),
+                    "provinces": warning_provinces(self.gazetteer, text),
+                    "provinces_by_hazard": provinces,
+                    "periods_by_hazard": periods,
+                    "by_region": self._by_region(statements, window, tables=bool(w.rain_days)),
+                    "rain_days": rain_days,
+                    "impact_from": window[0].isoformat() if window else None,
+                    "impact_to": window[1].isoformat() if window else None,
+                    # Days a statement gives for its own provinces ("5–7 พ.ย. ประเทศไทยตอนบน"); others use impact_from/to.
+                    "impact_by_hazard": {
+                        hazard.value: {code: [days[0].isoformat(), days[1].isoformat()] for code, days in codes.items() if days}
+                        for hazard, codes in areas.items()
+                    },
+                }
+                ai_summary, ai_attribution = self._audit_and_summarize_warning(w_dict)
+                w_dict["ai_summary"] = ai_summary
+                w_dict["ai_attribution"] = ai_attribution
+                warnings.append(w_dict)
         # Every warning in TMD's current feed is in force: its EffectEndDate is when the next issue is due, not when
         # the hazard ends. If TMD failed this time, the last good warnings still apply.
         official = self._official_by_province(warnings if warnings is not None else self.warnings, self._today(),
@@ -1238,6 +1246,28 @@ class HazardService:
         if area_code is None:
             return self.dams
         return [d for d in self.dams if d["province_code"] == area_code[:4]]
+
+    def _audit_and_summarize_warning(self, w_dict: dict) -> tuple[str | None, str | None]:
+        """Optionally audit TMD warning and generate AI summary with Qwen if LLM_PROVIDER=qwen."""
+        if os.getenv("LLM_PROVIDER", "").lower() != "qwen":
+            return None, None
+        try:
+            from decision_engine.warning_explainer import WarningAuditor, WarningExplainer
+
+            title = w_dict.get("title", "")
+            body = w_dict.get("body") or w_dict.get("headline") or ""
+            by_region = w_dict.get("by_region", [])
+
+            auditor = WarningAuditor()
+            auditor.audit(title=title, body=body, by_region=by_region)
+
+            explainer = WarningExplainer()
+            summary_res = explainer.summarize(title=title, body=body, by_region=by_region)
+            if summary_res and summary_res.valid:
+                return summary_res.summary_text, summary_res.attribution
+        except Exception as exc:
+            log.warning("Warning audit/summary failed: %s", exc)
+        return None, None
 
     def get_official_warnings(self) -> list[dict]:
         return self.warnings
