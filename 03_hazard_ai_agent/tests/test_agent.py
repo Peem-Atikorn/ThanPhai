@@ -510,11 +510,26 @@ def test_dam_question_for_a_province_without_dams():
     assert "ไม่มีเขื่อนขนาดใหญ่ใน" in a.text
 
 
-def test_dam_answers_are_never_sent_to_the_llm():
-    def must_not_run(q, f):
-        raise AssertionError("dam numbers must come straight from the data")
+def test_dam_answer_is_reworded_from_the_real_numbers_and_keeps_its_source_line():
+    seen = {}
 
-    assert HazardAgent(GAZ, DamTools(), explainer=must_not_run).ask("Nong Pla Lai dam level?", NOW).intent == "dam"
+    def reword(q, facts):
+        seen["facts"] = facts
+        return "เขื่อนหนองปลาไหลมีน้ำอยู่ตามข้อมูลล่าสุดครับ"
+
+    answer = HazardAgent(GAZ, DamTools(), explainer=reword).ask("Nong Pla Lai dam level?", NOW)
+    assert answer.intent == "dam" and answer.llm_used
+    assert answer.facts == seen["facts"] and "หนองปลาไหล" in seen["facts"]
+    sources = [line for line in answer.facts.splitlines() if line.startswith("ที่มา:")]
+    assert all(line in answer.text for line in sources)
+
+
+def test_dam_answer_keeps_the_template_when_the_llm_invents_a_number():
+    from decision_engine.explainer import QwenConfig, QwenExplainer
+
+    inventing = QwenExplainer(QwenConfig(), requester=lambda q, facts: "เขื่อนมีน้ำ 99999 ล้าน ลบ.ม. ครับ")
+    answer = HazardAgent(GAZ, DamTools(), explainer=inventing).ask("Nong Pla Lai dam level?", NOW)
+    assert answer.intent == "dam" and not answer.llm_used and "99999" not in answer.text
 
 
 def test_english_question():
@@ -584,11 +599,35 @@ def test_chao_phraya_dam_release_is_the_flow_below_it():
     assert "C.13 ท้ายเขื่อนเจ้าพระยา" in a.text and "1,800 ลบ.ม./วินาที" in a.text
 
 
-def test_river_answers_are_never_sent_to_the_llm():
-    def must_not_run(q, f):
-        raise AssertionError("river numbers must come straight from the data")
+def test_river_answer_falls_back_to_the_template_when_the_llm_declines():
+    plain = HazardAgent(GAZ, RiverTools()).ask("C.13 ไหลเท่าไหร่", NOW)
+    answer = HazardAgent(GAZ, RiverTools(), explainer=lambda q, f: None).ask("C.13 ไหลเท่าไหร่", NOW)
+    assert answer.intent == "river" and not answer.llm_used and answer.text == plain.text
 
-    assert HazardAgent(GAZ, RiverTools(), explainer=must_not_run).ask("C.13 ไหลเท่าไหร่", NOW).intent == "river"
+
+class ChatExplainer:
+    class config:
+        model = "thanphai-qwen"
+
+    def __init__(self, reply):
+        self.reply = reply
+
+    def __call__(self, question, facts):
+        return None
+
+    def chat(self, question):
+        return self.reply
+
+
+def test_small_talk_is_answered_by_the_llm_with_its_model_name():
+    answer = HazardAgent(GAZ, RiverTools(), explainer=ChatExplainer("สวัสดีครับ น้องทันภัยเองครับ")).ask("สวัสดีครับ", NOW)
+    assert answer.intent == "greeting" and answer.llm_used and answer.llm_model == "thanphai-qwen"
+    assert answer.text == "สวัสดีครับ น้องทันภัยเองครับ"
+
+
+def test_small_talk_falls_back_to_the_fixed_text_without_an_llm_reply():
+    answer = HazardAgent(GAZ, RiverTools(), explainer=ChatExplainer(None)).ask("วันนี้กินอะไรดี", NOW)
+    assert answer.intent == "out_of_scope" and not answer.llm_used and "ทันภัยตอบได้เฉพาะ" in answer.text
 
 
 def test_the_word_river_is_not_the_tambon_named_mae_nam():
@@ -606,3 +645,28 @@ def test_reason_names_an_upcoming_tmd_warning():
     assert "ครอบคลุมทั้งภาค" in _reason({"rule_ids": ["OFFICIAL_WARNING_REGIONAL"]})
     assert _reason({"rule_ids": ["OFFICIAL_WARNING_HEAVY_RAIN"]}).endswith("มีฝนตกหนัก")
     assert _reason({"rule_ids": ["OFFICIAL_WARNING_VERY_HEAVY_RAIN"]}).endswith("มีฝนตกหนักมาก")
+
+
+@pytest.mark.parametrize("question", ["วันนี้ฝนตกไหม", "วันนี้สามารถตากผ้าได้ไหม", "พรุ่งนี้ต้องพกร่มไหม", "น้ำจะท่วมไหม"])
+def test_a_hazard_or_daily_weather_question_without_a_place_asks_where(question):
+    answer = agent.ask(question, NOW)
+    assert answer.intent == "clarify" and answer.area is None and answer.evidence == []
+    assert "อำเภอหรือจังหวัดไหน" in answer.text
+
+
+def test_daily_weather_question_with_a_place_is_a_rain_risk_question():
+    u = understand("วันนี้ตากผ้าที่อำเภอเสนาได้ไหม", GAZ, NOW)
+    assert u.intent == "risk" and u.hazards == [HazardType.RAIN_STORM] and u.area.code == "TH1406"
+
+
+def test_national_and_regional_questions_still_get_the_overview():
+    assert understand("สรุปฝนตกหนักทั้งประเทศ", GAZ, NOW).intent == "overview"
+
+
+def test_a_source_line_the_llm_copies_is_not_shown_twice():
+    def reword(q, facts):
+        source = next(line for line in facts.splitlines() if line.startswith("ที่มา:"))
+        return f"เขื่อนหนองปลาไหลมีน้ำตามข้อมูลล่าสุดครับ\n{source}"
+
+    answer = HazardAgent(GAZ, DamTools(), explainer=reword).ask("Nong Pla Lai dam level?", NOW)
+    assert answer.llm_used and answer.text.count("ที่มา:") == answer.facts.count("ที่มา:") == 1

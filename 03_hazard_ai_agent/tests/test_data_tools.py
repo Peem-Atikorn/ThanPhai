@@ -257,11 +257,8 @@ def test_fire_hotspot_question_filters_to_a_named_province():
     assert answer.intent == "fire_hotspots" and "เชียงใหม่ 7 จุด" in answer.text
 
 
-def test_dam_history_compares_requested_week_and_never_calls_explainer():
-    def must_not_run(question, facts):
-        raise AssertionError("dam history must stay a direct data answer")
-
-    answer = HazardAgent(GAZ, DataTools(), explainer=must_not_run).ask("เขื่อนภูมิพลเทียบกับสัปดาห์ก่อนเป็นอย่างไร", NOW)
+def test_dam_history_compares_requested_week_from_the_records_when_the_llm_declines():
+    answer = HazardAgent(GAZ, DataTools(), explainer=lambda q, f: None).ask("เขื่อนภูมิพลเทียบกับสัปดาห์ก่อนเป็นอย่างไร", NOW)
     assert answer.intent == "dam_history"
     assert "ภูมิพล" in answer.text and "50" in answer.text and "40" in answer.text
     assert "ThaiWater" in answer.text and "3/11/2569" in answer.text

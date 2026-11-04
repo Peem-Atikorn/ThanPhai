@@ -7,6 +7,7 @@ import pytest
 
 import api_backend.main as main
 from api_backend.hazard_service import BANGKOK, HazardService
+from decision_engine.explainer import QwenConfig, QwenExplainer
 from geo_integration import Area, Gazetteer
 from hazard_agent import HazardAgent
 
@@ -55,17 +56,18 @@ async def test_ask_data_tools_http(monkeypatch, question, intent, expected):
     async def fresh_service():
         return service
 
-    def no_llm(*args, **kwargs):
-        raise AssertionError("data answers must bypass the LLM")
+    # An LLM that invents a number: validate() must reject it, so the answer keeps the real records.
+    inventing = QwenExplainer(QwenConfig(), requester=lambda q, facts: "ค่าล่าสุด 999 ครับ")
 
     monkeypatch.setattr(main, "fresh_service", fresh_service)
-    monkeypatch.setattr(main, "agent", HazardAgent(service.gazetteer, service, explainer=no_llm))
+    monkeypatch.setattr(main, "agent", HazardAgent(service.gazetteer, service, explainer=inventing))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as client:
         response = await client.post("/v1/ask", json={"question": question})
     assert response.status_code == 200
     answer = response.json()
     assert answer["intent"] == intent
-    assert expected in answer["text"]
+    assert expected in answer["text"] and "999" not in answer["text"]
+    assert answer["llm_used"] is False
     assert answer["evidence"] and answer["sources"]
     assert answer["data_updated_at"] == now.isoformat()
     assert response.headers["x-request-id"]

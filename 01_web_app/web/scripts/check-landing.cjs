@@ -12,13 +12,14 @@ const hooks = {
   useRef(initial) { const i = current.cursor++; return current.state[i] ??= { current: initial }; },
   useMemo(fn) { current.cursor++; return fn(); },
   useCallback(fn) { current.cursor++; return fn; },
-  useEffect(fn, deps) {
+  useEffect(fn, dependencies) {
+    fn.dependencies = dependencies;
     const i = current.cursor++;
     if (!current.trackEffects) { current.effects?.push(fn); return; }
     const previous = current.effectDeps[i];
-    if (previous && deps?.length === previous.length && deps.every((value, index) => value === previous[index])) return;
+    if (previous && dependencies?.length === previous.length && dependencies.every((value, index) => value === previous[index])) return;
     current.effectCleanups[i]?.();
-    current.effectDeps[i] = deps;
+    current.effectDeps[i] = dependencies;
     current.effectCleanups[i] = fn();
   },
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) { return (getServerSnapshot ?? getSnapshot)(); },
@@ -55,10 +56,38 @@ function content(node) { if (Array.isArray(node)) return node.map(content).join(
 const tick = () => new Promise(resolve => setImmediate(resolve));
 global.requestAnimationFrame = fn => fn();
 global.window = { matchMedia: () => ({ matches: true }) };
-global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) };
+global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ focus() {}, scrollIntoView() {} }) };
 
 (async () => {
   const lib = load('@/lib/api');
+  const { highestEnvironmentValue, default: EnvironmentSummary } = load('@/components/EnvironmentSummary');
+  const environmentLayer = { type: 'FeatureCollection', meta: { data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] }, features: [
+    { properties: { name_th: 'ไม่มีค่า', pm25_24h: null, heat_index_max_24h: null } },
+    { properties: { name_th: 'อำเภอ ก', province_th: 'เชียงใหม่', pm25_24h: 80, heat_index_max_24h: 41, level: 'NORMAL' } },
+    { properties: { name_th: 'อำเภอ ข', province_th: 'สงขลา', pm25_24h: 0, heat_index_max_24h: 39, level: 'WARNING' } },
+  ] };
+  assert.equal(highestEnvironmentValue(environmentLayer, 'air_quality').name, 'อำเภอ ก');
+  assert.equal(highestEnvironmentValue(environmentLayer, 'heat').value, 41);
+  assert.equal(highestEnvironmentValue({ features: [{ properties: { pm25_24h: null } }] }, 'air_quality'), null, 'Null is not zero');
+  assert.equal(highestEnvironmentValue({ features: [environmentLayer.features[2]] }, 'air_quality').value, 0, 'A measured zero remains valid');
+  const metricProps = { layers: { air_quality: { data: environmentLayer, error: false, key: 'air_quality:0' }, heat: { data: environmentLayer, error: false, key: 'heat:0' } }, loadingArea: false, area: null };
+  let metrics = instance(EnvironmentSummary).render(metricProps);
+  assert(content(metrics).includes('80') && content(metrics).includes('41') && content(metrics).includes('เชียงใหม่'), 'National maxima show values and places');
+  assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-NORMAL'), 'API level wins even when value exceeds a frontend threshold');
+  const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
+  metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea });
+  assert(content(metrics).includes('30') && !content(metrics).includes('41'), 'Selected area never shows national maximum');
+  assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-WATCH'), 'Selected area keeps API assessment level');
+  metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea, loadingArea: true });
+  assert(!content(metrics).includes('30'), 'Loading another area hides old values');
+  metrics = instance(EnvironmentSummary).render({ ...metricProps, layers: { air_quality: { data: null, error: true }, heat: { data: null, error: false } } });
+  assert(content(metrics).includes('โหลดข้อมูลไม่ได้') && content(metrics).includes('กำลังโหลด'), 'Independent failure and loading states');
+  metrics = instance(EnvironmentSummary).render({ ...metricProps, area: { ...metricArea, assessments: [{ hazard: 'air_quality', level: 'NORMAL', observations: { pm25_24h: null, pm25_model_24h: 12 }, sources: ['Open-Meteo / CAMS (แบบจำลอง)'] }] } });
+  assert(content(metrics).includes('12') && content(metrics).includes('แบบจำลอง') && content(metrics).includes('CAMS'), 'Selected model fallback is labelled and credited');
+  load('@/lib/i18n').setLanguage('en');
+  metrics = instance(EnvironmentSummary).render(metricProps);
+  assert(content(metrics).includes('Feels like 41') && content(metrics).includes('National maximum'), 'Summary copy translates without changing readings');
+  load('@/lib/i18n').setLanguage('th');
   const { areaWarnings } = load('@/lib/area-warnings');
   const notice = { title: 'ต้นฉบับประกาศ', hazards: ['rain_storm', 'flood'], provinces: ['TH50', 'TH90'],
     provinces_by_hazard: { rain_storm: ['TH50'], flood: ['TH90'] },
@@ -125,6 +154,71 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
   lib.api.area = async () => ({ area: { code: '13', level: 'province', name_th: 'ปทุมธานี', parents: [] }, assessments: [], forecast: [], rivers: [{ status: 'NORMAL' }], river_province: { code: '13', name_th: 'ปทุมธานี' }, official_warnings: [], degraded_services: [] });
   lib.api.boundary = async () => null;
   const Dashboard = load('@/components/Dashboard').default;
+  const environmentRequests = [];
+  lib.api.layer = async id => { environmentRequests.push(id); return environmentLayer; };
+  const environmentEffects = [];
+  const environmentApp = instance(Dashboard, environmentEffects);
+  environmentApp.render({ activeHazard: 'overview' });
+  const refreshEnvironment = environmentEffects.find(effect => /setEnvironmentLayers/.test(String(effect)));
+  assert.deepEqual(refreshEnvironment.dependencies, [0], 'Environment requests depend only on refresh revision, not tab or area');
+  const stopEnvironment = refreshEnvironment();
+  await tick();
+  assert.deepEqual(environmentRequests, ['air_quality', 'heat'], 'Load both summaries once per refresh');
+  for (const activeHazard of ['heat', 'air_quality']) {
+    environmentEffects.length = 0;
+    environmentApp.render({ activeHazard });
+    environmentEffects.find(effect => /setLayerState/.test(String(effect)))();
+  }
+  assert.deepEqual(environmentRequests, ['air_quality', 'heat'], 'Map tabs reuse the summary layers without another request');
+  stopEnvironment();
+  const originalArea = lib.api.area;
+  let areaReading = 12, areaCalls = 0, delayedArea;
+  lib.api.area = async code => {
+    areaCalls++;
+    const data = { area: { code, level: 'amphoe', name_th: code, parents: [] }, assessments: [
+      { hazard: 'air_quality', level: areaReading === 12 ? 'NORMAL' : 'WARNING', observations: { pm25_24h: areaReading }, sources: [], notices: [], rule_ids: [] },
+      { hazard: 'heat', level: areaReading === 12 ? 'NORMAL' : 'WATCH', observations: { heat_index_max_24h: areaReading + 20 }, sources: [], notices: [], rule_ids: [] },
+    ], forecast: [], rivers: [], official_warnings: [], degraded_services: [] };
+    return delayedArea ? new Promise(resolve => { delayedArea = () => resolve(data); }) : data;
+  };
+  const refreshEffects = [], refreshApp = instance(Dashboard, refreshEffects);
+  const refreshProps = { activeView: 'hazard', activeHazard: 'overview' };
+  let refreshTree = refreshApp.render(refreshProps);
+  const mapOf = tree => nodes(tree).find(n => n.props.mode === 'hazard' && 'dark' in n.props);
+  const summaryOf = tree => nodes(tree).find(n => n.type === EnvironmentSummary).props;
+  const refreshArea = () => {
+    refreshEffects.length = 0; refreshTree = refreshApp.render(refreshProps);
+    const effect = refreshEffects.find(e => /api\.area/.test(String(e)));
+    assert(effect, 'Selected areas have a refresh effect'); return effect();
+  };
+  mapOf(refreshTree).props.onSelect('TH1001'); await tick();
+  refreshTree = refreshApp.render(refreshProps);
+  assert.equal(summaryOf(refreshTree).area.assessments[0].observations.pm25_24h, 12);
+  areaReading = 40;
+  nodes(refreshTree).find(n => n.props['aria-label'] === 'โหลดข้อมูลแผนที่ใหม่').props.onClick();
+  let stopAreaRefresh = refreshArea(); await tick(); refreshTree = refreshApp.render(refreshProps);
+  assert.equal(areaCalls, 2, 'Refresh reloads the selected area once');
+  assert.deepEqual(summaryOf(refreshTree).area.assessments.map(a => a.level), ['WARNING', 'WATCH']);
+  assert.deepEqual(summaryOf(refreshTree).area.assessments.map(a => Object.values(a.observations)[0]), [40, 60]);
+  stopAreaRefresh?.(); delayedArea = true;
+  stopAreaRefresh = refreshArea(); await tick();
+  const resolveOldArea = delayedArea; delayedArea = false;
+  refreshTree = refreshApp.render(refreshProps); mapOf(refreshTree).props.onSelect('TH1002'); await tick();
+  resolveOldArea(); await tick(); refreshTree = refreshApp.render(refreshProps);
+  assert.equal(summaryOf(refreshTree).area.area.code, 'TH1002', 'Old refresh cannot overwrite a new selection'); stopAreaRefresh?.();
+  delayedArea = true; stopAreaRefresh = refreshArea(); await tick();
+  const resolveClearedArea = delayedArea; delayedArea = false;
+  refreshTree = refreshApp.render(refreshProps);
+  nodes(refreshTree).find(n => n.props.className?.includes('area-reset')).props.onClick();
+  resolveClearedArea(); await tick(); refreshTree = refreshApp.render(refreshProps);
+  assert.equal(summaryOf(refreshTree).area, null, 'Old refresh cannot restore a cleared selection'); stopAreaRefresh?.();
+  delayedArea = true;
+  mapOf(refreshTree).props.onSelect('TH1003'); await tick();
+  const resolveInitialArea = delayedArea; delayedArea = false;
+  stopAreaRefresh = refreshArea(); await tick(); resolveInitialArea(); await tick();
+  const refreshedPlace = refreshApp.render({ ...refreshProps, activeView: 'rivers' });
+  assert(!content(refreshedPlace).includes('กำลังโหลดพื้นที่…'), 'Refresh during initial selection also fills the place name'); stopAreaRefresh?.();
+  lib.api.area = originalArea;
   for (const activeHazard of ['overview', 'earthquake', 'tropical_cyclone']) {
     const tree = instance(Dashboard).render({ activeView: 'hazard', activeHazard });
     assert.equal(nodes(tree).filter(n => n.type === StormsPanel).length, activeHazard === 'tropical_cyclone' ? 1 : 0, 'HII storms mount only on the cyclone tab');

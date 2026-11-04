@@ -33,8 +33,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 375, height: 667 
   }
 }
 const left = placeMascotChat({ x: 8, y: 200 }, { width: 1440, height: 900 }, 360);
-assert.equal(left.width, 360, 'Desktop chat stays compact');
-assert.equal(placeMascotChat({ x: 8, y: 200 }, { width: 1440, height: 900 }, 2000).maxHeight, 420, 'Long answers scroll within a bounded chat');
+assert.equal(left.width, 420, 'Desktop chat uses the wider conversation layout');
+assert.equal(placeMascotChat({ x: 8, y: 200 }, { width: 1440, height: 900 }, 2000).maxHeight, 765, 'Long answers scroll within 85% of the viewport');
 assert.ok(left.left >= 8 + MASCOT_SIZE.width, 'Chat opens to the right when the character is at the left');
 const right = placeMascotChat({ x: 1280, y: 200 }, { width: 1440, height: 900 }, 360);
 assert.ok(right.left + right.width <= 1280, 'Chat opens to the left when the character is at the right');

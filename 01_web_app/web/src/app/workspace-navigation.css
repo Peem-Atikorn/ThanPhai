@@ -187,10 +187,14 @@
   border-color: var(--scene-stroke);
   backdrop-filter: blur(16px);
 }
-.landscape-shell.command-shell :is(.map-supplement, .map-supplement > summary, .risk-alert-detail, .dam-sort) {
-  background: var(--cc-glass);
-  backdrop-filter: blur(16px);
+/* Performance: a backdrop blur is recomputed whenever anything behind or inside it repaints. The map redraws on
+   every pan, zoom and radar frame, and the side panels scroll, so blurring these large surfaces made the page
+   stutter. They get an opaque tint instead; small chrome (category bar, buttons, dialogs) keeps its glass. */
+.landscape-shell.command-shell :is(.map-panel, .area-panel, .assistant-panel, .dam-panel, .map-supplement, .risk-alert-detail, .dam-sort) {
+  background: var(--cc-solid);
+  backdrop-filter: none;
 }
+.landscape-shell.command-shell .map-supplement > summary { background: transparent; backdrop-filter: none; }
 
 /* Match the summary-card hover, while keeping the accordion inside the rail. */
 .landscape-shell .journey-category-bar .journey-category-button { position: relative; z-index: 0; transform: translateY(0) scale(1); transition: transform 420ms cubic-bezier(.22,1,.36,1), background-color 180ms ease, box-shadow 420ms ease; }

@@ -37,6 +37,7 @@
 .thanphai-mascot[data-phase="drag"] .mascot-sprite:not(.mascot-sprite--original) { animation: mascot-wave .4s ease-in-out infinite; }
 .thanphai-mascot .mascot-chat {
   position: fixed; z-index: 1101; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column;
   padding: 12px 14px; border: 1px solid var(--mascot-line); border-radius: 14px;
   background: linear-gradient(145deg, rgb(84 81 65 / 95%), rgb(29 38 36 / 97%));
   box-shadow: 0 14px 50px #0004; backdrop-filter: blur(22px); color: var(--mascot-text);
@@ -64,6 +65,14 @@
 .thanphai-mascot .question-suggestions button:hover { background: #a8b77822; }
 .thanphai-mascot .answer-text { padding-top: 14px; margin-top: 16px; border-top: 1px solid var(--mascot-line); color: var(--mascot-text); font-size: 14px; line-height: 1.9; white-space: pre-line; overflow-wrap: anywhere; }
 .thanphai-mascot .source-note { color: var(--mascot-muted); font-size: 12px; }
+/* Conversation: only the log scrolls (it shrinks to fit the panel), so the wheel always moves the messages
+   and the heading and input box stay in view. Two nested scrollers sent the wheel to the panel instead. */
+.thanphai-mascot .mascot-chat > * { flex-shrink: 0; }
+.thanphai-mascot .chat-log { flex: 0 1 auto; min-height: 96px; margin-bottom: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.thanphai-mascot .chat-turn + .chat-turn { margin-top: 12px; }
+.thanphai-mascot .chat-question { width: fit-content; max-width: 88%; margin: 0 0 0 auto; padding: 7px 11px; border-radius: 12px 12px 4px 12px; background: #a8b77833; color: var(--mascot-text); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.thanphai-mascot .chat-turn .answer-text { margin-top: 6px; padding-top: 6px; border-top: 0; }
+.thanphai-mascot .chat-clear { margin-top: 8px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--mascot-muted); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .thanphai-mascot .data-notice { color: #ffe6c6; }
 .thanphai-mascot button:focus-visible { outline: 2px solid #d2e687; outline-offset: 3px; }
 .thanphai-mascot .mascot-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -103,7 +103,7 @@ def test_greeting_words_inside_unrelated_text_are_not_greetings():
 @pytest.mark.parametrize(("question", "intent"), [
     ("แหล่งข้อมูลน้ำท่วมอำเภอเสนา", "risk"),
     ("ใช้ข้อมูลจากดาวเทียม แล้วตอนนี้อำเภอเสนาน้ำท่วมไหม", "risk"),
-    ("ใช้ข้อมูลจากดาวเทียม น้ำท่วมไหม", "overview"),
+    ("ใช้ข้อมูลจากดาวเทียม น้ำท่วมไหม", "clarify"),  # a hazard with no place: ask where
     ("Using data sources, will it flood in Sena?", "risk"),
 ])
 def test_source_words_do_not_override_hazard_or_area_questions(question, intent):
@@ -114,7 +114,7 @@ def test_source_words_do_not_override_hazard_or_area_questions(question, intent)
     if "เสนา" in question or "Sena" in question:
         assert answer.area["code"] == "TH1412" and "TH1412" in tools.calls
     else:
-        assert answer.area is None and "get_all_assessments" in tools.calls
+        assert answer.area is None and "get_all_assessments" not in tools.calls  # asks where, reads nothing
 
 
 def test_source_words_do_not_override_preparation():
