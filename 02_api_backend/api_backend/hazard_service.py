@@ -449,6 +449,7 @@ class HazardService:
         forecasts = dict(self.forecasts)
         air_model = {code: r.value for code, r in self.grid["air_model"].items()}
         heat = dict(self.grid["heat_model"])
+        this_hour = datetime.now(BANGKOK).replace(minute=0, second=0, microsecond=0).isoformat()
         marine = dict(self.grid["marine_model"])
         drought = self._current_drought()
         decisions: dict[str, list[dict]] = {}
@@ -473,7 +474,10 @@ class HazardService:
                                          # None when FIRMS failed, 0 when it worked and saw nothing nearby.
                                          "cross_border_hotspots_24h": (float(cross_border.get(code, 0))
                                                                        if records["nasa_firms"] is not None else None)},
-                HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None},
+                # The level stays on the 24-h peak (rules.yaml); "now" is the forecast hour we are in, for display.
+                HazardType.HEAT: {"heat_index_max_24h": heat[code].value if code in heat else None,
+                                  "heat_index_now": (heat[code].extra.get("hourly", {}).get(this_hour)
+                                                     if code in heat else None)},
                 # Inland districts have no sea: no value, and the card says why.
                 HazardType.MARINE: {"wave_height_max_24h": marine[code].value if code in marine else None},
                 HazardType.LANDSLIDE: self._landslide_observations(code, value(rain, "rain_24h", code), forecasts),

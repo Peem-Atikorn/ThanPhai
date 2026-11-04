@@ -62,28 +62,31 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   const lib = load('@/lib/api');
   const { highestEnvironmentValue, default: EnvironmentSummary } = load('@/components/EnvironmentSummary');
   const environmentLayer = { type: 'FeatureCollection', meta: { data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] }, features: [
-    { properties: { name_th: 'ไม่มีค่า', pm25_24h: null, heat_index_max_24h: null } },
-    { properties: { name_th: 'อำเภอ ก', province_th: 'เชียงใหม่', pm25_24h: 80, heat_index_max_24h: 41, level: 'NORMAL' } },
-    { properties: { name_th: 'อำเภอ ข', province_th: 'สงขลา', pm25_24h: 0, heat_index_max_24h: 39, level: 'WARNING' } },
+    { properties: { name_th: 'ไม่มีค่า', pm25_24h: null, heat_index_now: null, heat_index_max_24h: null } },
+    { properties: { name_th: 'อำเภอ ก', province_th: 'เชียงใหม่', pm25_24h: 80, heat_index_now: 33, heat_index_max_24h: 41, level: 'NORMAL' } },
+    { properties: { name_th: 'อำเภอ ข', province_th: 'สงขลา', pm25_24h: 0, heat_index_now: 35, heat_index_max_24h: 39, level: 'WARNING' } },
   ] };
   assert.equal(highestEnvironmentValue(environmentLayer, 'air_quality').name, 'อำเภอ ก');
-  assert.equal(highestEnvironmentValue(environmentLayer, 'heat').value, 41);
+  // The heat card ranks districts by how hot it feels now; the 24-h peak of that district rides along.
+  const hottestNow = highestEnvironmentValue(environmentLayer, 'heat');
+  assert.deepEqual([hottestNow.value, hottestNow.name, hottestNow.peak], [35, 'อำเภอ ข', 39], 'National heat is the district hottest now, with its own peak');
   assert.equal(highestEnvironmentValue({ features: [{ properties: { pm25_24h: null } }] }, 'air_quality'), null, 'Null is not zero');
   assert.equal(highestEnvironmentValue({ features: [environmentLayer.features[2]] }, 'air_quality').value, 0, 'A measured zero remains valid');
   const metricProps = { layers: { air_quality: { data: environmentLayer, error: false, key: 'air_quality:0' }, heat: { data: environmentLayer, error: false, key: 'heat:0' } }, loadingArea: false, area: null };
   let metrics = instance(EnvironmentSummary).render(metricProps);
-  assert(content(metrics).includes('80') && content(metrics).includes('41') && content(metrics).includes('เชียงใหม่'), 'National maxima show values and places');
+  assert(content(metrics).includes('80') && content(metrics).includes('เชียงใหม่'), 'National PM2.5 maximum shows value and place');
+  assert(content(metrics).includes('ตอนนี้ร้อนเหมือน 35') && content(metrics).includes('สงขลา') && content(metrics).includes('สูงสุดใน 24 ชม. ข้างหน้า 39'), 'National heat shows now, place and the 24-h peak of that district');
   assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-NORMAL'), 'API level wins even when value exceeds a frontend threshold');
-  const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
+  const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_now: 27, heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea });
-  assert(content(metrics).includes('30') && !content(metrics).includes('41'), 'Selected area never shows national maximum');
+  assert(content(metrics).includes('27') && content(metrics).includes('30') && !content(metrics).includes('35'), 'Selected area shows its own now and peak, never the national one');
   assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-WATCH'), 'Selected area keeps API assessment level');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea, loadingArea: true });
-  assert(!content(metrics).includes('30'), 'Loading another area hides old values');
+  assert(!content(metrics).includes('27') && !content(metrics).includes('30'), 'Loading another area hides old values');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, layers: { air_quality: { data: null, error: true }, heat: { data: null, error: false } } });
   assert(content(metrics).includes('โหลดข้อมูลไม่ได้') && content(metrics).includes('กำลังโหลด'), 'Independent failure and loading states');
   const heatPending = { ...environmentLayer, meta: { ...environmentLayer.meta, inputs_pending: ['heat_model', 'marine_model'] },
-    features: environmentLayer.features.map(f => ({ properties: { ...f.properties, heat_index_max_24h: null } })) };
+    features: environmentLayer.features.map(f => ({ properties: { ...f.properties, heat_index_now: null, heat_index_max_24h: null } })) };
   metrics = instance(EnvironmentSummary).render({ ...metricProps, layers: { air_quality: { data: { ...environmentLayer, meta: { ...environmentLayer.meta, inputs_pending: ['marine_model'] } }, error: false }, heat: { data: heatPending, error: false } } });
   const [airCard, heatCard] = nodes(metrics).filter(n => n.type === 'article');
   assert(content(heatCard).includes('กำลังโหลด') && !content(heatCard).includes('ไม่มีข้อมูล'), 'A heat forecast still loading reads as loading, not as no data');
@@ -93,7 +96,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert(content(metrics).includes('12') && content(metrics).includes('แบบจำลอง') && content(metrics).includes('CAMS'), 'Selected model fallback is labelled and credited');
   load('@/lib/i18n').setLanguage('en');
   metrics = instance(EnvironmentSummary).render(metricProps);
-  assert(content(metrics).includes('Feels like 41') && content(metrics).includes('National maximum'), 'Summary copy translates without changing readings');
+  assert(content(metrics).includes('Feels like now 35') && content(metrics).includes('National maximum'), 'Summary copy translates without changing readings');
   load('@/lib/i18n').setLanguage('th');
   const { areaWarnings } = load('@/lib/area-warnings');
   const notice = { title: 'ต้นฉบับประกาศ', hazards: ['rain_storm', 'flood'], provinces: ['TH50', 'TH90'],

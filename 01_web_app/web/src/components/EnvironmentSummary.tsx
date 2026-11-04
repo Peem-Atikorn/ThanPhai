@@ -7,18 +7,21 @@ import Icon from "@/components/Icon";
 type Metric = "air_quality" | "heat";
 export type EnvironmentLayer = GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } };
 export type EnvironmentState = { key: string; data: EnvironmentLayer | null; error: boolean };
-const fields = { air_quality: "pm25_24h", heat: "heat_index_max_24h" } as const;
+// The heat card shows the forecast for the hour it is now; its level and the small line use the 24-h peak.
+const fields = { air_quality: "pm25_24h", heat: "heat_index_now" } as const;
+const HEAT_PEAK = "heat_index_max_24h";
 // The backend's name for each card's Open-Meteo forecast while it is still loading after a restart (`inputs_pending`).
 const models = { air_quality: "air_model", heat: "heat_model" } as const;
 
 export function highestEnvironmentValue(layer: GeoJSON.FeatureCollection | null, metric: Metric) {
-    let highest: { value: number; name: string; province: string; level: Level } | null = null;
+    let highest: { value: number; peak: number | null; name: string; province: string; level: Level } | null = null;
     for (const feature of layer?.features ?? []) {
         const p = feature.properties;
         const value = p?.[fields[metric]];
         if (typeof value !== "number" || !Number.isFinite(value)) continue;
         if (!highest || value > highest.value)
-            highest = { value, name: p?.name_th ?? "", province: p?.province_th ?? "", level: p?.level ?? null };
+            highest = { value, peak: metric === "heat" ? p?.[HEAT_PEAK] ?? null : null,
+                        name: p?.name_th ?? "", province: p?.province_th ?? "", level: p?.level ?? null };
     }
     return highest;
 }
@@ -43,6 +46,7 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             const model = metric === "air_quality" && area && measured == null;
             const value = area ? (model ? assessment?.observations.pm25_model_24h : measured) : maximum?.value;
             const hasValue = typeof value === "number" && Number.isFinite(value);
+            const peak = metric === "heat" ? (area ? assessment?.observations[HEAT_PEAK] : maximum?.peak) : null;
             // Only this card's own forecast counts; another input still loading does not make this card incomplete.
             const pending = !area && !!state?.data?.meta.inputs_pending?.includes(models[metric]);
             const loading = loadingArea || (!area && !areaError && !state?.data && !state?.error) || (pending && !hasValue);
@@ -54,10 +58,11 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             return <article key={metric}>
                 <h3><Icon name={metric}/>{tr(metric === "air_quality" ? "ฝุ่น PM2.5" : "ดัชนีความร้อน")}</h3>
                 <p className="environment-scope">{tr(area || loadingArea || areaError ? "พื้นที่ที่เลือก" : "สูงสุดในประเทศ · อำเภอที่มีข้อมูล")}</p>
-                <p className="environment-value">{metric === "heat" && available && <span>{tr("ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
+                <p className="environment-value">{metric === "heat" && available && <span>{tr("ตอนนี้ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) : "—"}</strong>{available && <span>{tr(metric === "heat" ? "°C" : " มคก./ลบ.ม.")}</span>}</p>
                 <span className={"risk-badge level-" + (level ?? "NONE")}>{tr(loading ? "กำลังโหลด…" : error ? "โหลดข้อมูลไม่ได้" : levelInfo(level).th)}</span>
                 <p className="environment-place">{tr(area ? area.area.name_th : available ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : loading ? "" : "ยังไม่มีข้อมูล")}</p>
-                <small>{tr(metric === "air_quality" ? model ? "แบบจำลอง · เฉลี่ย 24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม." : "สูงสุดใน 24 ชม. ข้างหน้า")}</small>
+                <small>{metric === "air_quality" ? tr(model ? "แบบจำลอง · เฉลี่ย 24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม.")
+                    : <>{tr("ค่าคาดการณ์ชั่วโมงนี้")}{!loading && !error && typeof peak === "number" && Number.isFinite(peak) && <>{tr(" · สูงสุดใน 24 ชม. ข้างหน้า ")}{peak.toLocaleString(getLocale(), { maximumFractionDigits: 1 })}°C</>}</>}</small>
                 <small>{tr(source)}</small>
                 <small>{tr("อัปเดต ")}{updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at)}{tr(" · เวลาไทย")}</small>
                 {!!(pending || degraded) && <small className="data-notice">{tr(pending ? "ข้อมูลยังไม่ครบ" : "ข้อมูลบางแหล่งไม่พร้อมใช้งาน")}</small>}
