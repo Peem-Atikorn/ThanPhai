@@ -37,6 +37,9 @@ python 07_knowledge_decision_llm/training/generate_explainer_dataset.py --count 
 
 ## 2. การเทรนบน Kaggle (GPU T4 x2)
 
+ติดตั้งด้วย `pip install unsloth` อย่างเดียว ไม่ต้องลง trl แยก เพราะ unsloth เลือกเวอร์ชันให้เอง (unsloth 2026.11.1 ใช้ trl 0.18.2–1.15.0) สคริปต์ส่งค่าผ่าน `SFTConfig` ตามรูปแบบของ trl ชุดนี้
+ห้ามลง `trl<0.12` เพราะใช้ร่วมกับ unsloth ไม่ได้ ถ้าสคริปต์ error ให้แจ้งทีม อย่าแก้ค่าในสคริปต์เอง
+
 ใช้ Unsloth QLoRA 4-bit เพื่อประหยัด VRAM และเพิ่มความเร็วในการเทรน โดยแยก 2 งานลง 2 GPU พร้อมกัน:
 
 ```bash
