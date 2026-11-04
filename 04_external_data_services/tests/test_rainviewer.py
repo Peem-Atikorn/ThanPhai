@@ -75,3 +75,63 @@ def test_fetch_radar_maps_caches_results(monkeypatch):
     frames2 = asyncio.run(fetch_radar_maps(client=mock_client))
     assert mock_client.get.call_count == 1
     assert frames1 == frames2
+
+
+@pytest.fixture
+def fresh_adapter(monkeypatch):
+    monkeypatch.setattr(rainviewer, "_CACHE_FRAMES", None)
+    monkeypatch.setattr(rainviewer, "_CACHE_TIME", 0.0)
+    monkeypatch.setattr(rainviewer, "_FAIL_ERROR", None)
+    monkeypatch.setattr(rainviewer, "_FAIL_TIME", 0.0)
+
+
+class SlowClient:
+    """Answers after a pause so concurrent callers overlap the first request."""
+
+    def __init__(self, fail: bool = False):
+        self.calls = 0
+        self.fail = fail
+
+    async def get(self, url):
+        self.calls += 1
+        await asyncio.sleep(0.05)
+        if self.fail:
+            raise httpx.ConnectError("down")
+        resp = MagicMock()
+        resp.json.return_value = SAMPLE_MAPS
+        return resp
+
+
+async def _many(client, n=20):
+    return await asyncio.gather(*(fetch_radar_maps(client=client) for _ in range(n)), return_exceptions=True)
+
+
+@pytest.mark.parametrize("expired", [False, True])
+def test_concurrent_callers_share_one_request(fresh_adapter, monkeypatch, expired):
+    if expired:
+        monkeypatch.setattr(rainviewer, "_CACHE_FRAMES", [{"time": 1, "path": "/old"}])
+        monkeypatch.setattr(rainviewer, "_CACHE_TIME", time.time() - rainviewer.CACHE_TTL_SECONDS - 1)
+    client = SlowClient()
+    results = asyncio.run(_many(client))
+    assert client.calls == 1
+    assert all(r == results[0] for r in results)
+    assert results[0][-1]["time"] == 1793723400
+
+
+def test_concurrent_failure_shares_one_request_then_retries(fresh_adapter, monkeypatch):
+    client = SlowClient(fail=True)
+    results = asyncio.run(_many(client))
+    assert client.calls == 1
+    assert all(isinstance(r, Exception) for r in results)
+
+    # Within the retry wait: no new request.
+    with pytest.raises(RuntimeError):
+        asyncio.run(fetch_radar_maps(client=client))
+    assert client.calls == 1
+
+    # After the wait, concurrent callers retry with one request and succeed.
+    monkeypatch.setattr(rainviewer, "_FAIL_TIME", time.time() - rainviewer.RETRY_SECONDS - 1)
+    client.fail = False
+    results = asyncio.run(_many(client))
+    assert client.calls == 2
+    assert all(isinstance(r, list) and len(r) == 3 for r in results)
