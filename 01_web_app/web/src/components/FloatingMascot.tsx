@@ -86,9 +86,16 @@ export default function FloatingMascot({ topic, status, children }: { topic: Map
   useEffect(() => {
     if (!open || !panel.current) return;
     const content = panel.current;
-    const measure = () => setPanelHeight(content.scrollHeight + 2);
+    // Natural height: the panel itself never overflows (only the chat log scrolls), so add what the log hides.
+    const measure = () => {
+      const log = content.querySelector<HTMLElement>(".chat-log");
+      setPanelHeight(content.scrollHeight + (log ? log.scrollHeight - log.clientHeight : 0) + 2);
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(content);
+    // New messages grow the log's content, not the panel's box, so watch the content too.
+    const mutations = new MutationObserver(measure);
+    mutations.observe(content, { childList: true, subtree: true, characterData: true });
     measure();
     const focusTimer = window.setTimeout(() => content.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true }), 160);
     function escape(event: globalThis.KeyboardEvent) {
@@ -100,6 +107,7 @@ export default function FloatingMascot({ topic, status, children }: { topic: Map
     document.addEventListener("keydown", escape);
     return () => {
       observer.disconnect();
+      mutations.disconnect();
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", escape);
     };

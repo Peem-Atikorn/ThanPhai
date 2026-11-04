@@ -44,8 +44,9 @@ export function clampMascotPosition(saved: unknown, viewport: MascotViewport): M
 export function placeMascotChat(position: MascotPosition, viewport: MascotViewport, contentHeight: number) {
   const margin = 8;
   const gap = 12;
-  const width = Math.min(360, viewport.width - margin * 2);
-  const height = Math.min(contentHeight, 420, viewport.height - margin * 2);
+  const width = Math.min(420, viewport.width - margin * 2);
+  // Tall enough to read a few answers at once: up to 85% of the screen (at least 420px when the screen allows).
+  const height = Math.min(contentHeight, Math.max(420, Math.round(viewport.height * 0.85)), viewport.height - margin * 2);
   const right = position.x + MASCOT_SIZE.width + gap;
   const left = position.x - width - gap;
   if (right + width <= viewport.width - margin || left >= margin) {

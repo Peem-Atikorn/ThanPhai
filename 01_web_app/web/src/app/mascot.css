@@ -37,6 +37,7 @@
 .thanphai-mascot[data-phase="drag"] .mascot-sprite:not(.mascot-sprite--original) { animation: mascot-wave .4s ease-in-out infinite; }
 .thanphai-mascot .mascot-chat {
   position: fixed; z-index: 1101; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column;
   padding: 12px 14px; border: 1px solid var(--mascot-line); border-radius: 14px;
   background: linear-gradient(145deg, rgb(84 81 65 / 95%), rgb(29 38 36 / 97%));
   box-shadow: 0 14px 50px #0004; backdrop-filter: blur(22px); color: var(--mascot-text);
@@ -64,8 +65,10 @@
 .thanphai-mascot .question-suggestions button:hover { background: #a8b77822; }
 .thanphai-mascot .answer-text { padding-top: 14px; margin-top: 16px; border-top: 1px solid var(--mascot-line); color: var(--mascot-text); font-size: 14px; line-height: 1.9; white-space: pre-line; overflow-wrap: anywhere; }
 .thanphai-mascot .source-note { color: var(--mascot-muted); font-size: 12px; }
-/* Conversation: the log scrolls on its own so the input box stays in view below it. */
-.thanphai-mascot .chat-log { max-height: min(46vh, 420px); margin-bottom: 12px; overflow-y: auto; overscroll-behavior: contain; }
+/* Conversation: only the log scrolls (it shrinks to fit the panel), so the wheel always moves the messages
+   and the heading and input box stay in view. Two nested scrollers sent the wheel to the panel instead. */
+.thanphai-mascot .mascot-chat > * { flex-shrink: 0; }
+.thanphai-mascot .chat-log { flex: 0 1 auto; min-height: 96px; margin-bottom: 12px; overflow-y: auto; overscroll-behavior: contain; }
 .thanphai-mascot .chat-turn + .chat-turn { margin-top: 12px; }
 .thanphai-mascot .chat-question { width: fit-content; max-width: 88%; margin: 0 0 0 auto; padding: 7px 11px; border-radius: 12px 12px 4px 12px; background: #a8b77833; color: var(--mascot-text); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .thanphai-mascot .chat-turn .answer-text { margin-top: 6px; padding-top: 6px; border-top: 0; }
