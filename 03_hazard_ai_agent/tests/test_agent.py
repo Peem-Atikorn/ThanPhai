@@ -442,6 +442,25 @@ def test_explainer_rewrites_and_keeps_facts():
     assert "2.11" in a.facts and calls[0][0] == "น้ำจะท่วมอำเภอเสนาไหม"
 
 
+def test_follow_up_without_a_place_uses_the_open_area():
+    # "แล้วมีโอกาสฝนตกกี่เปอร์เซ็น" after a question about Sena (or with Sena picked on the map).
+    tools = FakeTools()
+    a = HazardAgent(GAZ, tools).ask("แล้วฝนตกไหม", NOW, area_code="TH1406")
+    assert a.intent == "risk" and a.area["code"] == "TH1406" and tools.calls == ["TH1406"]
+    assert "area from the open area" in a.notes
+
+
+def test_named_place_wins_over_the_open_area():
+    a = HazardAgent(GAZ, FakeTools()).ask("น้ำจะท่วมอำเภอบางบัวทองไหม", NOW, area_code="TH1406")
+    assert a.area["code"] == "TH1205"
+
+
+def test_unknown_or_missing_open_area_still_asks_where():
+    agent_ = HazardAgent(GAZ, FakeTools())
+    assert agent_.ask("ฝนตกไหม", NOW, area_code="TH9999").intent == "clarify"
+    assert agent_.ask("ฝนตกไหม", NOW).intent == "clarify"
+
+
 def test_rewrite_that_copies_the_warning_shows_it_once():
     # Seen live: the model repeated the TMD warning without "⚠" and with other spacing, above the verbatim copy.
     def copying_llm(question, facts):

@@ -736,7 +736,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         setChat(old => [...old, { asked, sent, answer: null }]);
         const settle = (answer: AskAnswer) => setChat(old => old.map((turn, i) => i === old.length - 1 ? { ...turn, answer } : turn));
         try {
-            const response = await api.ask(sent);
+            // The area on screen (map pick or the last answer's area) answers "แล้วฝนตกไหม" without naming it again.
+            const response = await api.ask(sent, area?.area.code ?? null);
             settle(response);
             if (response.area)
                 chooseArea(response.area);
