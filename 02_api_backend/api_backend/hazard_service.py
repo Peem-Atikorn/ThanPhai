@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import re
+import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 import time
@@ -25,7 +26,7 @@ from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsCyclones, 
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
 from external_data.adapters.gistda import GistdaFloodCells
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
-from external_data.adapters.thaiwater_graphs import fetch_dam_year, fetch_station_graph
+from external_data.adapters.thaiwater_graphs import DAM_SERIES, fetch_dam_year, fetch_dam_year_sync, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
 from external_data.adapters.tmd import THAI_MONTHS, classify_hazards, impact_window, latest_issues, read_days
 from geo_integration import Gazetteer, hazard_areas, table_provinces, warning_provinces, warning_statements
@@ -159,6 +160,7 @@ class HazardService:
         self._wave_grid: list[tuple[str, float, float]] | None = None  # sea points only, from the last full-grid check
         self._wave_grid_checked_at: datetime | None = None
         self._graph_cache: dict[tuple, tuple[datetime, dict]] = {}
+        self._agent_history_lock = threading.Lock()
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._boundaries: dict[str, dict] = {}  # area outlines, read on first request
         self._drought_mtime: float | None = None
@@ -1232,6 +1234,75 @@ class HazardService:
         year = datetime.now(BANGKOK).year
         return await self._cached(("dam", dam_id, series, year), DAM_HISTORY_TTL,
                                   lambda c: fetch_dam_year(c, int(dam_id), series, [year - 1, year]))
+
+    def get_dam_history(self, dam_id: str, series: str = "storage") -> dict | None:
+        """Synchronous tool for HazardAgent, sharing the graph endpoint's cache."""
+        if not dam_id.isdigit() or not any(d["id"] == dam_id for d in self.dams):
+            return None
+        if series not in DAM_SERIES:
+            raise ValueError(f"unknown dam series {series}")
+        year = datetime.now(BANGKOK).year
+        key = ("dam", dam_id, series, year)
+        now = datetime.now(timezone.utc)
+        with self._agent_history_lock:
+            cached = self._graph_cache.get(key)
+            if cached and now - cached[0] < (FAILURE_TTL if isinstance(cached[1], Exception) else DAM_HISTORY_TTL):
+                if isinstance(cached[1], Exception):
+                    raise cached[1]
+                return cached[1]
+            try:
+                with httpx.Client(headers=USER_AGENT, follow_redirects=True) as client:
+                    history = fetch_dam_year_sync(client, int(dam_id), series, [year - 1, year])
+            except httpx.HTTPError as exc:
+                self._graph_cache[key] = (now, exc)
+                raise
+            self._graph_cache[key] = (now, history)
+            return history
+
+    def get_earthquakes(self) -> list[dict]:
+        return self.quakes
+
+    def get_storms(self) -> list[dict]:
+        return self.storms
+
+    def get_cyclones(self) -> list[dict]:
+        """One row per GDACS cyclone; wind bands are thresholds over analysed and forecast areas."""
+        grouped: dict[str, dict] = {}
+        for feature in self.cyclone_overlay()["features"]:
+            props = feature.get("properties", {})
+            if props.get("kind") not in {"wind_area", "track", "forecast", "track_point"}:
+                continue
+            event_id = props.get("event_id")
+            row = grouped.setdefault(event_id, {"event_id": event_id, "name": props.get("name"),
+                                                 "event": props.get("event"), "wind_threshold_kmh": None})
+            wind = props.get("wind_kmh")
+            if wind is not None:
+                row["wind_threshold_kmh"] = max(row["wind_threshold_kmh"] or 0, wind)
+        timestamp = self.cyclone_updated_at.isoformat() if self.cyclone_updated_at else None
+        return [{**row, "time": timestamp} for row in grouped.values()]
+
+    def get_waves(self) -> list[dict]:
+        return self.wave_points
+
+    def get_water_quality(self) -> list[dict]:
+        return self.water_quality
+
+    def get_pm25_stations(self) -> list[dict]:
+        return self.pm25_stations
+
+    def get_fire_hotspots(self) -> list[dict]:
+        """District FIRMS counts for 24 hours, with the latest completed decision refresh time."""
+        rows = []
+        for code, assessments in self.decisions.items():
+            fire = next((item for item in assessments if item.get("hazard") == "fire"), None)
+            if fire and fire.get("observations", {}).get("hotspots_24h") is not None:
+                rows.append({"area_code": code, "hotspots_24h": fire["observations"]["hotspots_24h"],
+                             "time": self.updated_at.isoformat() if self.updated_at else None})
+        return rows
+
+    def get_media(self) -> dict:
+        return {**(self.media or {}), "data_updated_at": self.updated_at.isoformat() if self.updated_at else None,
+                "source": "คลังข้อมูลน้ำแห่งชาติ (สสน.)"}
 
     def get_dams(self, area_code: str | None = None) -> list[dict]:
         """All large dams, or those in the province of `area_code` (dams sit on province land, not districts)."""
