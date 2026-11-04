@@ -124,6 +124,7 @@ function applyLook(m: MapLibreMap, dark: boolean, riskOnly: boolean) {
 // RainViewer serves zoom 0-7; MapLibre stretches zoom 7 tiles beyond that.
 const RADAR_MAX_ZOOM = 7;
 const RADAR_ATTRIBUTION = '<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>';
+type RadarSources = { activeId: string; activeTiles: string | null; preloadId: string; preloadTiles: string | null };
 function applyRadarSource(m: MapLibreMap, id: string, radar: string | null, opacity: number, attribution = "") {
     if (!radar) {
         if (m.getLayer(id)) m.removeLayer(id);
@@ -140,10 +141,22 @@ function applyRadarSource(m: MapLibreMap, id: string, radar: string | null, opac
     // The invisible second layer preloads just one frame, keeping tile traffic bounded while playback is running.
     m.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": opacity } }, "line");
 }
-function applyRadar(m: MapLibreMap, radar: string | null, radarNext: string | null) {
+function applyRadar(m: MapLibreMap, radar: string | null, radarNext: string | null, sources: RadarSources) {
     // Over district colours, below the lines and markers.
-    applyRadarSource(m, "radar", radar, 0.8, RADAR_ATTRIBUTION);
-    applyRadarSource(m, "radar-preload", radarNext, 0);
+    if (radar && radar === sources.preloadTiles) {
+        [sources.activeId, sources.preloadId] = [sources.preloadId, sources.activeId];
+        [sources.activeTiles, sources.preloadTiles] = [sources.preloadTiles, sources.activeTiles];
+        m.setPaintProperty(sources.activeId, "raster-opacity", 0.8);
+        m.setPaintProperty(sources.preloadId, "raster-opacity", 0);
+    }
+    if (sources.activeTiles !== radar) {
+        applyRadarSource(m, sources.activeId, radar, 0.8, RADAR_ATTRIBUTION);
+        sources.activeTiles = radar;
+    }
+    if (sources.preloadTiles !== radarNext) {
+        applyRadarSource(m, sources.preloadId, radarNext, 0);
+        sources.preloadTiles = radarNext;
+    }
 }
 function applyMode(m: MapLibreMap, mode: "hazard" | "points" | "risk") {
     for (const id of AREA_LAYERS)
@@ -155,6 +168,7 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
     const container = useRef<HTMLDivElement>(null);
     const map = useRef<MapLibreMap | null>(null);
     const ready = useRef(false);
+    const radarSources = useRef<RadarSources>({ activeId: "radar", activeTiles: null, preloadId: "radar-preload", preloadTiles: null });
     // Latest props, so the map "load" handler can apply whatever arrived before the style was ready.
     const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, dark, riskOnly, overlays });
     useEffect(() => {
@@ -306,7 +320,7 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
     }, [stations]);
     useEffect(() => {
         if (ready.current && map.current)
-            applyRadar(map.current, radar, radarNext);
+            applyRadar(map.current, radar, radarNext, radarSources.current);
     }, [radar, radarNext]);
     useEffect(() => {
         if (ready.current && map.current)

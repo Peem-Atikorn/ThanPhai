@@ -32,8 +32,9 @@ def cached_frames(*frames):
 
 
 async def test_radar_returns_the_seven_latest_frames_from_the_last_hour(radar_state, monkeypatch):
+    latest_time = 1800000000 - 600  # RainViewer's latest image can lag the wall clock.
     frames = parse_radar_frames({"host": "https://tilecache.rainviewer.com", "radar": {"past": [
-        {"time": 1800000000 - minutes * 60, "path": f"/v2/radar/{minutes}"}
+        {"time": latest_time - minutes * 60, "path": f"/v2/radar/{minutes}"}
         for minutes in range(80, -1, -10)
     ]}})
 
@@ -45,7 +46,7 @@ async def test_radar_returns_the_seven_latest_frames_from_the_last_hour(radar_st
         response = await client.get("/v1/radar")
     assert response.status_code == 200
     result = response.json()["frames"]
-    assert [frame["time"] for frame in result] == [1800000000 - minutes * 60 for minutes in (60, 50, 40, 30, 20, 10, 0)]
+    assert [frame["time"] for frame in result] == [latest_time - minutes * 60 for minutes in (60, 50, 40, 30, 20, 10, 0)]
     assert all(set(frame) == {"tiles", "time"} for frame in result)
 
 

@@ -356,11 +356,11 @@ async def radar() -> dict:
     if _radar_cache is None:
         raise HTTPException(502, "RainViewer did not answer; try again later")
     frames = _radar_cache[1] or []
-    # Keep only the past hour for playback; retention follows image time, not when URLs were fetched.
-    now = time.time()
+    # RainViewer's latest image can lag wall time; retain an hour relative to its newest image.
+    latest_time = max((frame["time"] for frame in frames), default=None)
     frames = [
         frame for frame in frames
-        if now - frame["time"] <= RADAR_HISTORY_S
+        if latest_time is not None and 0 <= latest_time - frame["time"] <= RADAR_HISTORY_S
     ]
     return {"frames": frames}
 

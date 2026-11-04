@@ -1,25 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RadarFrame } from "@/lib/api";
 import { getLocale, t as tr } from "@/lib/i18n";
 
 // Five frame changes per minute leave room for the initial and preloaded images within RainViewer's 100 tiles/min/IP limit.
 const PLAYBACK_INTERVAL_MS = 12_000;
 
-export default function RadarPlayback({ frames, index, onChange }: {
+export default function RadarPlayback({ frames, index, onChange, onPlaybackChange }: {
   frames: RadarFrame[];
   index: number;
   onChange: (index: number) => void;
+  onPlaybackChange: (playing: boolean) => void;
 }) {
   const [playing, setPlaying] = useState(false);
+  const playback = useRef({ index, length: frames.length, onChange });
+  playback.current = { index, length: frames.length, onChange };
   const frame = frames[index];
 
   useEffect(() => {
     if (!playing || frames.length < 2) return;
-    const timer = window.setInterval(() => onChange((index + 1) % frames.length), PLAYBACK_INTERVAL_MS);
+    const timer = window.setInterval(() => {
+      const { index, length, onChange } = playback.current;
+      onChange((index + 1) % length);
+    }, PLAYBACK_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [frames.length, index, onChange, playing]);
+  }, [frames.length, playing]);
+  useEffect(() => onPlaybackChange(playing && frames.length > 1), [frames.length, onPlaybackChange, playing]);
 
   if (!frame) return null;
   const activePlaying = playing && frames.length > 1;

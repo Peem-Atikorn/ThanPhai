@@ -12,7 +12,15 @@ const hooks = {
   useRef(initial) { const i = current.cursor++; return current.state[i] ??= { current: initial }; },
   useMemo(fn) { current.cursor++; return fn(); },
   useCallback(fn) { current.cursor++; return fn; },
-  useEffect(fn) { current.cursor++; current.effects?.push(fn); },
+  useEffect(fn, deps) {
+    const i = current.cursor++;
+    if (!current.trackEffects) { current.effects?.push(fn); return; }
+    const previous = current.effectDeps[i];
+    if (previous && deps?.length === previous.length && deps.every((value, index) => value === previous[index])) return;
+    current.effectCleanups[i]?.();
+    current.effectDeps[i] = deps;
+    current.effectCleanups[i] = fn();
+  },
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) { return (getServerSnapshot ?? getSnapshot)(); },
 };
 const jsx = (type, props) => ({ type, props: props || {} });
@@ -33,9 +41,10 @@ function load(id) {
   new Function('module', 'exports', 'require', js)(mod, mod.exports, load);
   return mod.exports;
 }
-function instance(Component, effects) {
+function instance(Component, effects, trackEffects = false) {
   const state = [];
-  return { state, render(props = {}) { current = { state, cursor: 0, effects }; this.tree = Component(props); return this.tree; } };
+  const effectDeps = [], effectCleanups = [];
+  return { state, render(props = {}) { current = { state, cursor: 0, effects, trackEffects, effectDeps, effectCleanups }; this.tree = Component(props); return this.tree; } };
 }
 function nodes(node, result = []) {
   if (Array.isArray(node)) { node.forEach(n => nodes(n, result)); return result; }
@@ -137,7 +146,34 @@ global.document = { getElementById: () => ({ focus() {}, scrollIntoView() {} }) 
       await tick();
       const enabledTree = radarApp.render(props);
       assert(nodes(enabledTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
-      assert(nodes(enabledTree).some(n => n.type.name === 'RadarPlayback' && n.props.frames.length === 2 && n.props.index === 1), 'Radar playback receives history and opens on the latest frame');
+      const playback = nodes(enabledTree).find(n => n.type.name === 'RadarPlayback');
+      assert(playback && playback.props.frames.length === 2 && playback.props.index === 1, 'Radar playback receives history and opens on the latest frame');
+      assert.equal(nodes(enabledTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Idle radar playback does not preload another frame');
+      playback.props.onPlaybackChange(true);
+      const playingTree = radarApp.render(props);
+      assert.equal(nodes(playingTree).find(n => 'radarNext' in n.props).props.radarNext, radarFrames[0].tiles, 'The next frame is preloaded only while playback is active');
+      playback.props.onPlaybackChange(false);
+      radarApp.render(props);
+
+      let selectedFrame = 1, timerCallback, timerCount = 0, clearCount = 0;
+      window.setInterval = callback => { timerCallback = callback; timerCount++; return timerCount; };
+      window.clearInterval = () => { clearCount++; };
+      const RadarPlayback = load('@/components/RadarPlayback').default;
+      const playbackApp = instance(RadarPlayback, undefined, true);
+      const playbackProps = () => ({ frames: radarFrames, index: selectedFrame, onChange: index => { selectedFrame = index; }, onPlaybackChange() {} });
+      let playbackControl = nodes(playbackApp.render(playbackProps())).find(n => n.type === 'button');
+      playbackControl.props.onClick();
+      playbackApp.render(playbackProps());
+      selectedFrame = 0;
+      playbackApp.render(playbackProps());
+      assert.equal(timerCount, 1, 'Parent renders and callback identity changes do not restart the playback timer');
+      timerCallback();
+      assert.equal(selectedFrame, 1, 'Playback advances from the latest selected frame after a parent render');
+      playbackControl = nodes(playbackApp.render(playbackProps())).find(n => n.type === 'button');
+      playbackControl.props.onClick();
+      playbackApp.render(playbackProps());
+      assert.equal(clearCount, 1, 'Pausing clears the playback timer');
+
       nodes(enabledTree).find(n => n.type.name === 'RadarPlayback').props.onChange(0);
       radarFrames = [
         { tiles: 'https://tiles.test/older/{z}/{x}/{y}.png', time: 1799992800 },
