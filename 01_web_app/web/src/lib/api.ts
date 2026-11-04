@@ -248,7 +248,30 @@ export interface OfficialWarning {
   headline?: string;
   url?: string;
   hazards: Hazard[];
+  provinces?: string[];
+  provinces_by_hazard?: Partial<Record<Hazard, string[]>>;
+  impact_from?: string | null;
+  impact_to?: string | null;
+  impact_by_hazard?: Partial<Record<Hazard, Record<string, [string | null, string | null]>>>;
+  periods_by_hazard?: Partial<Record<Hazard, Record<string, [string | null, string | null, string | boolean][]>>>;
   by_region?: { from: string | null; to: string | null; level: Exclude<Level, null>; hazards: Hazard[]; areas: string[] }[];
+}
+
+export interface Storm {
+  name: string;
+  time: string;
+  lat: number | null;
+  lon: number | null;
+  wind_kmh: number | null;
+  category: { category?: string | null; strength?: string | null } | null;
+}
+
+export interface StormsResponse {
+  storms: Storm[];
+  source: string;
+  data_updated_at?: string | null;
+  degraded_services?: string[];
+  inputs_pending?: string[];
 }
 
 export type AreaBoundary = Omit<GeoJSON.Feature, "bbox"> & { bbox: [number, number, number, number] };
@@ -292,6 +315,7 @@ export const api = {
     return { enabled: true, frame: (await res.json()).frame };
   },
   warnings: () => get<{ warnings: OfficialWarning[] }>(`/v1/warnings`),
+  storms: () => get<StormsResponse>(`/v1/storms`),
   earthquakes: () => get<{ earthquakes: Earthquake[] }>(`/v1/earthquakes`),
   regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),

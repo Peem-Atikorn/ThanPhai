@@ -181,6 +181,14 @@ h2 { font-size: 17px; font-weight: 650; }
 .official-warning li { margin-top: 10px; }
 .official-warning a { text-decoration: underline; }
 .official-warning small { display: block; margin-top: 10px; }
+.command-shell .official-warning.area-warnings { background: transparent; color: var(--foreground); border: 1px solid var(--line); padding: 10px; }
+.area-warnings > p { margin: 8px 0; color: var(--muted); }
+.area-warnings > ul { list-style: none; margin: 0; padding: 0; }
+.area-warnings a { overflow-wrap: anywhere; line-height: 1.6; }
+.area-warning-periods { list-style: none; padding: 0; display: grid; gap: 8px; }
+.area-warning-periods li { display: grid; gap: 4px; }
+.warning-assessment { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.storms-panel .event-list li { min-width: 0; overflow-wrap: anywhere; }
 .official-warning-title { margin-top: 10px; line-height: 1.6; }
 .warning-regions { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
 .warning-regions li { display: flex; gap: 10px; align-items: flex-start; margin-top: 0; }
