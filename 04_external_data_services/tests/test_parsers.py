@@ -309,6 +309,19 @@ def test_open_meteo_heat_takes_peak_of_next_24_hours():
     hourly = records[0].extra["hourly"]
     assert len(hourly) == 24 and max(hourly.values()) == records[0].value
     assert hourly["2026-10-22T00:00:00+07:00"] == round(heat_index_c(h["temperature_2m"][0], h["relative_humidity_2m"][0]), 1)
+    assert records[0].extra["rain_chance"] is None  # the fixture has no precipitation_probability
+
+
+def test_open_meteo_rain_chance_peak_and_hours():
+    from external_data.adapters.open_meteo import rain_chance
+
+    hours = [{"time": datetime(2026, 11, 5, h, tzinfo=BANGKOK), "precipitation_probability": p}
+             for h, p in [(3, 10), (4, None), (15, 70), (16, 55)]]
+    chance = rain_chance(hours)
+    assert chance["max_pct"] == 70 and chance["peak_time"] == "2026-11-05T15:00:00+07:00"
+    assert chance["hourly"] == {"2026-11-05T03:00:00+07:00": 10, "2026-11-05T15:00:00+07:00": 70,
+                                "2026-11-05T16:00:00+07:00": 55}
+    assert rain_chance([{"time": hours[0]["time"], "precipitation_probability": None}]) is None
 
 
 def test_tmd_earthquakes_rss():

@@ -465,7 +465,9 @@ class HazardService:
             observations = {
                 HazardType.FLOOD: {"above_bank_m": above_bank,
                                    "satellite_flood_cells_7d": float(sat["cells"]) if sat else None},
-                HazardType.RAIN_STORM: {"rain_24h": value(rain, "rain_24h", code)},
+                # Chance of rain is shown only: rules.yaml does not read it, so it never sets the level.
+                HazardType.RAIN_STORM: {"rain_24h": value(rain, "rain_24h", code),
+                                        **self._rain_chance(heat.get(code), this_hour)},
                 HazardType.FIRE: {"hotspots_24h": value(fire, "hotspots_24h", code)},
                 HazardType.DROUGHT: drought_obs,
                 # A station reading wins; the model fills only districts without one.
@@ -522,6 +524,11 @@ class HazardService:
                     peak = heat[code].extra
                     notices.append(f"ค่าคาดการณ์จากแบบจำลอง ช่วงร้อนสุด {peak['peak_time'][11:16]} น. "
                                    f"อุณหภูมิ {peak['temperature_c']:.0f}°C ความชื้น {peak['humidity_pct']:.0f}%")
+                if hazard == HazardType.RAIN_STORM and code in heat and heat[code].extra.get("rain_chance"):
+                    chance = heat[code].extra["rain_chance"]
+                    notices.append(f"แบบจำลอง Open-Meteo คาดโอกาสฝนตกสูงสุด {chance['max_pct']:.0f}% "
+                                   f"ราว {chance['peak_time'][11:16]} น. (ใน 24 ชม. ข้างหน้า)")
+                    sources.append("Open-Meteo (แบบจำลองโอกาสฝน)")
                 if hazard == HazardType.MARINE:
                     if code in marine:
                         notices.append(f"คลื่นสูงสุดคาดว่าราว {marine[code].extra['peak_time'][11:16]} น. (ค่าจากแบบจำลอง)")
@@ -1608,6 +1615,14 @@ class HazardService:
             "status": self._overlay_status(self.wave_updated_at, "open_meteo_waves"), "grid_degrees": WAVE_GRID_DEGREES,
             "updated_at": self.wave_updated_at.isoformat() if self.wave_updated_at else None,
             "source": "Open-Meteo Marine (แบบจำลองคลื่น)"}}
+
+    @staticmethod
+    def _rain_chance(record, this_hour: str) -> dict:
+        """Open-Meteo chance of rain for a district (it comes with the heat forecast): now, and the 24-h peak."""
+        chance = record.extra.get("rain_chance") if record is not None else None
+        if not chance:
+            return {"rain_chance_now": None, "rain_chance_max_24h": None}
+        return {"rain_chance_now": chance["hourly"].get(this_hour), "rain_chance_max_24h": chance["max_pct"]}
 
     def map_layer(self, hazard: str) -> dict:
         features = []

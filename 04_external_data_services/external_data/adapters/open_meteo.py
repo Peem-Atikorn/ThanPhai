@@ -118,7 +118,9 @@ class OpenMeteoGrid(Adapter):
         for cell, loc in zip(self.cells, (loc for batch in raw for loc in batch)):
             hourly = loc["hourly"]
             rows = [{"time": datetime.fromisoformat(t).replace(tzinfo=BANGKOK),
-                     **{name: hourly[name][i] for name in self.hourly}} for i, t in enumerate(hourly["time"])]
+                     # A variable the model does not provide here comes back missing: read it as no value.
+                     **{name: hourly[name][i] if name in hourly else None for name in self.hourly}}
+                    for i, t in enumerate(hourly["time"])]
             per_cell[cell] = self.summarise([r for r in rows if start <= r["time"] < end])
         records = []
         for (code, lat, lon), cell in zip(self.points, self.cell_of):
@@ -181,12 +183,16 @@ def heat_index_c(temp_c: float, rh: float) -> float:
 
 
 class OpenMeteoHeatIndex(OpenMeteoGrid):
-    """Highest heat index in the next 24 hours, from forecast temperature and humidity."""
+    """Highest heat index in the next 24 hours, from forecast temperature and humidity.
+
+    The same call also brings the chance of rain (`precipitation_probability`, %), kept in `extra["rain_chance"]`:
+    one more hourly variable costs no extra Open-Meteo quota, a second adapter would cost ~2,400 calls a day.
+    """
 
     name = "open_meteo_heat"
     attribution = "Weather data by Open-Meteo.com (CC BY 4.0)"
     base_url = "https://api.open-meteo.com/v1/forecast"
-    hourly = ("temperature_2m", "relative_humidity_2m")
+    hourly = ("temperature_2m", "relative_humidity_2m", "precipitation_probability")
     variable = "heat_index_max_24h"
     unit = "°C"
 
@@ -199,7 +205,18 @@ class OpenMeteoHeatIndex(OpenMeteoGrid):
         # Every hour's value, so the card can show the hour it is now between 3-hourly fetches.
         hourly = {h["time"].isoformat(): round(heat_index_c(h["temperature_2m"], h["relative_humidity_2m"]), 1) for h in rows}
         return round(value, 1), {"peak_time": peak["time"].isoformat(), "temperature_c": peak["temperature_2m"],
-                                 "humidity_pct": peak["relative_humidity_2m"], "hourly": hourly}
+                                 "humidity_pct": peak["relative_humidity_2m"], "hourly": hourly,
+                                 "rain_chance": rain_chance(hours)}
+
+
+def rain_chance(hours: list[dict]) -> dict | None:
+    """Highest chance of rain (%) in these hours, when it is, and every hour's value; None if the model gave none."""
+    rows = [h for h in hours if h.get("precipitation_probability") is not None]
+    if not rows:
+        return None
+    peak = max(rows, key=lambda h: h["precipitation_probability"])
+    return {"max_pct": float(peak["precipitation_probability"]), "peak_time": peak["time"].isoformat(),
+            "hourly": {h["time"].isoformat(): float(h["precipitation_probability"]) for h in rows}}
 
 
 class OpenMeteoMarine(OpenMeteoGrid):
