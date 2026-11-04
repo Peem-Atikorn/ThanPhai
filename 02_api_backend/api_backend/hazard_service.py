@@ -1694,6 +1694,7 @@ class HazardService:
                     "motion": None,
                     "rain_cells": [],
                     "explanation": "ไม่สามารถดึงข้อมูลเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "explanation_source": "template",
                     "source": "RainViewer · ข้อมูลเรดาร์ฝนยังไม่พร้อมใช้งาน",
                 }
                 self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
@@ -1720,6 +1721,7 @@ class HazardService:
                     "motion": None,
                     "rain_cells": [],
                     "explanation": "ไม่สามารถดึงภาพเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "explanation_source": "template",
                     "source": "RainViewer · เกิดข้อผิดพลาดในการโหลดภาพเรดาร์",
                 }
                 self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
@@ -1868,7 +1870,7 @@ class HazardService:
             motion_data, rain_cells_data, summary, forecast_frames = await asyncio.to_thread(_compute_nowcast_sync)
 
             explainer = NowcastExplainer()
-            explanation = await asyncio.to_thread(explainer.explain, summary, self.gazetteer)
+            explanation, explanation_source = await asyncio.to_thread(explainer.explain_with_source, summary, self.gazetteer)
 
             result = {
                 "status": "ok",
@@ -1877,6 +1879,7 @@ class HazardService:
                 "motion": motion_data,
                 "rain_cells": rain_cells_data,
                 "explanation": explanation,
+                "explanation_source": explanation_source,
                 "source": "RainViewer · คำนวณ Nowcast 1 ชม. จากภาพเรดาร์จริง",
             }
             self._radar_nowcast_cache = (curr_time, result, now + 600.0)

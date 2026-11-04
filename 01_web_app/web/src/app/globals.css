@@ -104,7 +104,13 @@ h2 { font-size: 17px; font-weight: 650; }
 .radar-play-button:disabled { opacity: .55; }
 .radar-play-button:not(:disabled):hover { background: var(--accent-soft); }
 .radar-playback input[type="range"] { width: 100%; min-height: 36px; accent-color: var(--brand); }
+.radar-frame-time { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.radar-frame-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 3px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--brand); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.radar-frame-badge.is-forecast { background: #fff0d5; color: #8b4c00; }
 .radar-playback time { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.radar-forecast-copy { grid-column: 1 / -1; padding: 9px 12px; border-left: 3px solid #e4a33b; border-radius: 0 8px 8px 0; background: #fff8eb; color: #5d3a0a; }
+.radar-forecast-copy p { margin: 0 0 4px; font-size: 13px; line-height: 1.5; }
+.radar-forecast-copy small { display: block; color: #75501c; font-size: 11px; line-height: 1.45; }
 .legend-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .legend-heading h3 { font-size: 13px; font-weight: 600; }
 .legend-heading > span { font-size: 12px; color: var(--muted); }
@@ -253,6 +259,8 @@ h2 { font-size: 17px; font-weight: 650; }
   .radar-playback { grid-template-columns: auto 1fr; gap: 6px 10px; padding: 8px 12px; }
   .radar-playback input[type="range"] { grid-column: 1 / -1; grid-row: 2; }
   .radar-playback time { justify-self: end; }
+  .radar-frame-time { grid-column: 2; grid-row: 1; flex-wrap: wrap; }
+  .radar-forecast-copy { grid-row: 3; }
   .site-header { min-height: 72px; padding: 10px 16px; gap: 10px; }
   .brand-symbol { width: 38px; height: 42px; border-radius: 11px; }
   .brand-name { font-size: 23px; }

@@ -37,6 +37,8 @@ interface Props {
     radar?: string | null;
     /** The next frame is loaded invisibly so changing the slider does not flash or fetch at play time. */
     radarNext?: string | null;
+    /** Amber projected tracks/positions for the selected forecast frame. */
+    radarForecast?: GeoJSON.FeatureCollection | null;
     overlays?: {
         flood?: GeoJSON.FeatureCollection | null;
         cyclones?: GeoJSON.FeatureCollection | null;
@@ -164,16 +166,16 @@ function applyMode(m: MapLibreMap, mode: "hazard" | "points" | "risk") {
     for (const id of POINT_LAYERS)
         m.setLayoutProperty(id, "visibility", mode !== "hazard" ? "visible" : "none");
 }
-export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null, radarNext = null, dark = false, riskOnly = false, overlays }: Props) {
+export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null, radarNext = null, radarForecast = null, dark = false, riskOnly = false, overlays }: Props) {
     const container = useRef<HTMLDivElement>(null);
     const map = useRef<MapLibreMap | null>(null);
     const ready = useRef(false);
     const radarSources = useRef<RadarSources>({ activeId: "radar", activeTiles: null, preloadId: "radar-preload", preloadTiles: null });
     // Latest props, so the map "load" handler can apply whatever arrived before the style was ready.
-    const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, dark, riskOnly, overlays });
+    const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarForecast, dark, riskOnly, overlays });
     useEffect(() => {
-        latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, dark, riskOnly, overlays };
-    }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, dark, riskOnly, overlays]);
+        latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarForecast, dark, riskOnly, overlays };
+    }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarForecast, dark, riskOnly, overlays]);
     useEffect(() => {
         if (!container.current)
             return;
@@ -198,6 +200,10 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
                 filter: ["==", ["get", "code"], ""],
             });
             addOverlays(m);
+            m.addSource("radar-forecast", { type: "geojson", data: EMPTY });
+            m.addLayer({ id: "radar-forecast-track", type: "line", source: "radar-forecast", filter: ["==", ["get", "kind"], "track"], paint: { "line-color": "#f59e0b", "line-width": 3, "line-dasharray": [2, 2] } }, "selected");
+            m.addLayer({ id: "radar-forecast-position", type: "circle", source: "radar-forecast", filter: ["==", ["get", "kind"], "position"], paint: { "circle-color": "#f59e0b", "circle-radius": 6, "circle-stroke-color": "#fff", "circle-stroke-width": 2 } }, "selected");
+            (m.getSource("radar-forecast") as GeoJSONSource).setData(latest.current.radarForecast ?? EMPTY);
             applyOverlays(m, latest.current.overlays);
             // Searched area: a white casing under a dark line stays visible over every risk colour.
             m.addSource("outline", { type: "geojson", data: EMPTY });
@@ -322,6 +328,10 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
         if (ready.current && map.current)
             applyRadar(map.current, radar, radarNext, radarSources.current);
     }, [radar, radarNext]);
+    useEffect(() => {
+        if (ready.current && map.current)
+            (map.current.getSource("radar-forecast") as GeoJSONSource).setData(radarForecast ?? EMPTY);
+    }, [radarForecast]);
     useEffect(() => {
         if (ready.current && map.current)
             applyOverlays(map.current, overlays);
