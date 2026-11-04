@@ -17,7 +17,9 @@ import sys
 from pathlib import Path
 
 
-def train(task: str, model_name: str, data_dir: str, output_dir: str, max_seq_length: int = 1024):
+# Explainer prompts carry the agent's real facts: up to ~2,200 Qwen tokens with the system prompt and answer.
+# A shorter limit cuts the end of the text, which is the answer the model should learn.
+def train(task: str, model_name: str, data_dir: str, output_dir: str, max_seq_length: int = 2560):
     print(f"=== Starting QLoRA training for task: {task} ===")
     print(f"Base model: {model_name}")
     print(f"CUDA_VISIBLE_DEVICES: {os.getenv('CUDA_VISIBLE_DEVICES', 'default')}")
@@ -140,9 +142,10 @@ def main():
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-7B-Instruct", help="Base model")
     parser.add_argument("--data-dir", type=str, default="07_knowledge_decision_llm/training/data")
     parser.add_argument("--output-dir", type=str, default="07_knowledge_decision_llm/training/models")
+    parser.add_argument("--max-seq-length", type=int, default=2560)
     args = parser.parse_args()
 
-    train(args.task, args.model, args.data_dir, args.output_dir)
+    train(args.task, args.model, args.data_dir, args.output_dir, args.max_seq_length)
 
 
 if __name__ == "__main__":
