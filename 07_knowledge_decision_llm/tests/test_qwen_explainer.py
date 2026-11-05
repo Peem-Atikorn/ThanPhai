@@ -186,3 +186,9 @@ def test_create_explainer_qwen_with_gemini_fallback(monkeypatch):
 
     monkeypatch.setenv("LLM_FALLBACK", "none")
     assert isinstance(create_explainer_from_env(), QwenExplainer)
+
+
+def test_an_answer_that_repeats_the_prompt_is_rejected():
+    leaked = "ระดับน้ำของแต่ละจุดมาจากข้อเท็จจริงที่ให้มา ห้ามเปลี่ยน\n" + GOOD_ANSWER
+    assert any("repeats its instructions" in p for p in validate(leaked, FACTS))
+    assert not any("repeats" in p for p in validate(GOOD_ANSWER, FACTS))

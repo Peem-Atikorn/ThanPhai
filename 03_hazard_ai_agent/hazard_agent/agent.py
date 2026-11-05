@@ -13,7 +13,7 @@ from decision_engine.rag import get_disaster_guidance
 from decision_engine.rag.models import format_page_ranges
 from geo_integration import Area, Gazetteer
 from geo_integration.regions import REGION_CODES
-from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, understand
+from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, detect_hazards, understand
 from thanphai_shared import HazardType
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
@@ -388,6 +388,9 @@ class HazardAgent:
     def _route(self, question: str, now: datetime, area_code: str | None = None) -> AgentAnswer:
         # "พรุ่งนี้" means tomorrow in Thailand; with a UTC clock it would be wrong between 00:00 and 07:00.
         u = understand(question, self.gazetteer, now.astimezone(BANGKOK))
+        if u.intent in ("risk", "out_of_scope", "clarify") and self._names_a_dam(question, u):
+            # "ภูมิพล" or "สิริกิติ์ตอนนี้น้ำเท่าไหร่" without the word "เขื่อน".
+            return self._dams(question, u)
         context = self.gazetteer.by_code.get(area_code) if area_code else None
         if context is not None and u.intent in ("risk", "explain") and not u.areas and not u.regions:
             # A question about "here" with an area already open: answer for that area instead of asking where.
@@ -853,6 +856,16 @@ class HazardAgent:
         lines.append("ที่มา: " + ", ".join(sources))
         return AgentAnswer("\n".join(lines), "dam", area_info, [], chosen, sources, ["get_dams()"])
 
+    def _names_a_dam(self, question: str, u: Understanding) -> bool:
+        """A large dam's name with no hazard asked about, and not also the name of the place found
+        ("บางพระ" is a dam and a tambon: a place question about the tambon stays one)."""
+        if detect_hazards(question):
+            return False
+        get = getattr(self.tools, "get_dams", None)
+        places = {a.name_th for a in u.areas}
+        return any(len(name) >= 4 and name in question and name not in places
+                   for name in ((d.get("name_th") or "") for d in (get() if get else [])))
+
     def _rivers(self, question: str, u: Understanding, chao_phraya_dam: bool = False) -> AgentAnswer:
         """River flow and bank levels per station, straight from the hourly data (no LLM rewrite)."""
         get = getattr(self.tools, "get_rivers", None)
@@ -864,6 +877,10 @@ class HazardAgent:
         codes = list(dict.fromkeys(c for c in STATION_CODE.findall(question) if c in by_code))
         named = [r for r in sorted(rivers, key=lambda r: -len(r.get("name_th") or ""))
                  if r.get("name_th") and len(r["name_th"]) >= 4 and r["name_th"] in question]
+        # Rivers named in full as the data writes them ("แม่น้ำมูล", "ลำน้ำยัง"). "เจ้าพระยา" alone keeps the
+        # main-stem overview below (its tributaries included) unless a place narrows it.
+        asked_rivers = [n for n in sorted({r["river_th"] for r in rivers if len(r.get("river_th") or "") >= 4}, key=len, reverse=True)
+                        if n in question and (u.area or "เจ้าพระยา" not in n)]
         title = None
         if chao_phraya_dam and CHAO_PHRAYA_DAM_STATION in by_code:
             chosen = [by_code[CHAO_PHRAYA_DAM_STATION]]
@@ -871,6 +888,24 @@ class HazardAgent:
                      "น้ำที่เขื่อนปล่อยลงมาวัดได้ที่สถานีท้ายเขื่อน (C.13):")
         elif codes or named:
             chosen = list({id(r): r for r in [by_code[c] for c in codes] + named}.values())[:3]
+        elif asked_rivers:
+            on_river = [r for r in rivers if r.get("river_th") in asked_rivers]
+            river_label = asked_rivers[0]
+            where = ""
+            if u.area:
+                province = u.area.code[:4]
+                label = _area_label(self.gazetteer.by_code[province], self.gazetteer) if province in self.gazetteer.by_code else u.area.name_th
+                here = [r for r in on_river if r.get("province_code") == province]
+                if here:
+                    on_river, where = here, f"ใน{label}"
+                else:
+                    where = f" (ไม่มีสถานีวัดน้ำบน{river_label}ใน{label} จึงแสดงทุกสถานีบนแม่น้ำสายนี้)"
+            # Closest to the bank first, so a question about overflowing sees the answer at the top.
+            on_river.sort(key=lambda r: -(r["above_bank_m"] if r.get("above_bank_m") is not None else -999))
+            chosen = on_river[:8]
+            order = (f"แสดง {len(chosen)} แห่งที่น้ำใกล้ตลิ่งที่สุด" if len(on_river) > len(chosen)
+                     else "เรียงจากน้ำใกล้ตลิ่งที่สุด")
+            title = f"{river_label}{where}: สถานีวัดน้ำ {len(on_river)} แห่ง {order}:"
         elif u.area:
             province = u.area.code[:4]
             chosen = [r for r in rivers if r.get("province_code") == province][:6]

@@ -25,6 +25,8 @@ FACT_LINE = re.compile(r"^• (น้ำท่วม|ฝนหนัก/พา�
 QUESTION_TIME_NUMBER = re.compile(r"(\d+)\s*(?:วัน|ชม|ชั่วโมง|สัปดาห์|อาทิตย์|day|hour|week)", re.I)
 # Advice the LLM must not invent ("go to the temple", "you should evacuate").
 ADVICE_WORDS = ("อพยพ", "ควร", "ไปที่", "หลบไป", "evacuat", "should", "go to", "move to")
+# Words from the prompt that a reader should never see ("ข้อเท็จจริง (ห้ามเปลี่ยน)").
+PROMPT_WORDS = ("ข้อเท็จจริง", "ห้ามเปลี่ยน", "ห้ามเพิ่ม", "ที่ให้มา", "the facts", "given facts")
 FACT_HAZARD = {"น้ำท่วม": "flood", "ฝนหนัก/พายุ": "rain_storm", "ไฟป่า/ไฟหญ้า": "fire", "ภัยแล้ง": "drought", "ฝุ่น PM2.5": "air_quality", "ความร้อนจัด": "heat", "แผ่นดินไหว": "earthquake", "คลื่นลมแรง": "marine", "พายุหมุนเขตร้อน": "tropical_cyclone", "ดินถล่ม": "landslide"}
 # Forecast days, one line each: "• พยากรณ์ฝน 20/10: ปกติ — 0.7 มม."
 FORECAST_LINE = re.compile(r"^• พยากรณ์ฝน \S+: (ปกติ|เฝ้าระวัง|เตือนภัย|วิกฤต)", re.M)
@@ -199,6 +201,10 @@ def validate(answer: str, facts: str, question: str = "") -> list[str]:
     for word in ADVICE_WORDS:
         if word in lowered and word not in facts.lower():
             problems.append(f"advice not in facts: {word}")
+    # The prompt's own wording ("…มาจากข้อเท็จจริงที่ให้มา ห้ามเปลี่ยน") showed up in a live answer.
+    echoed = [w for w in PROMPT_WORDS if w in lowered and w not in facts.lower()]
+    if echoed:
+        problems.append(f"repeats its instructions: {echoed}")
     # Warnings, emergency numbers and sources are appended verbatim by the agent, not written by the LLM.
     return problems
 

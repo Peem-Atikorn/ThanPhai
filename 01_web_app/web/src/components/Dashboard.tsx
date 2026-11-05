@@ -105,6 +105,22 @@ function scale(value: number, stops: [
 const damRadius = (d: Dam) => scale(Math.sqrt(d.storage_mcm ?? 0), [[0, 6], [40, 11], [135, 20]]);
 const riverRadius = (r: River) => scale(Math.sqrt(r.discharge_m3s ?? 0), [[0, 4], [10, 6], [45, 15]]);
 const riverKey = (r: River) => r.id ?? r.code;
+const CHAO_PHRAYA_DAM_STATION = "C.13";
+const CHAO_PHRAYA_DAM_ID = "chao-phraya-dam";
+type WaterResult = { key: string; title: string; detail: string } & ({ kind: "dam"; dam: Dam } | { kind: "station"; river: River });
+
+/** Dams and river stations found by the area search; each opens in its own view. */
+function WaterResults({ items, onOpen }: { items: WaterResult[]; onOpen: (item: WaterResult) => void }) {
+    return <div className="search-results water-results">
+        <div className="results-heading"><span>{tr("เขื่อนและสถานีวัดน้ำ · ")}{tr(items.length)}{tr(" รายการ")}</span></div>
+        <ul aria-label={tr("เขื่อนและสถานีวัดน้ำ")}>{items.map((item) => <li key={item.key}>
+            <button type="button" onClick={() => onOpen(item)}>
+                <Icon name={item.kind === "dam" || item.key === CHAO_PHRAYA_DAM_ID ? "dam" : "river"}/>
+                <span><strong>{tr(item.title)}</strong><small>{tr(item.detail)}</small></span><Icon name="arrow"/>
+            </button>
+        </li>)}</ul>
+    </div>;
+}
 const RID_HOURLY = "https://hyd-app.rid.go.th/hydro5h.html";
 type View = MapView;
 // The rain radar is drawn on these maps.
@@ -350,6 +366,12 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
     const visibleQuality = useMemo(() => provinceCode ? quality.list.filter(s => s.province_code === provinceCode) : quality.list, [quality.list, provinceCode]);
     const visibleDams = useMemo(() => provinceCode ? dams.list.filter(d => d.province_code === provinceCode) : dams.list, [dams.list, provinceCode]);
+    // เขื่อนเจ้าพระยา is a diversion dam with no reservoir, so it is not one of the 35 large dams; what it releases is
+    // measured at C.13 below it. The dam view shows it with that reading and links to the station.
+    const chaoPhrayaDam = useMemo(() => {
+        const station = rivers.list.find((r) => r.code === CHAO_PHRAYA_DAM_STATION);
+        return station && (!provinceCode || station.province_code === provinceCode) ? station : null;
+    }, [rivers.list, provinceCode]);
     const qualityPoints = useMemo<GeoJSON.FeatureCollection>(() => ({ type: "FeatureCollection", features: visibleQuality.filter(s => s.lat != null && s.lon != null).map(s => ({ type: "Feature", geometry: { type: "Point", coordinates: [s.lon!, s.lat!] }, properties: { id: qualityKey(s), color: qualityColor(s), radius: 7 } })) }), [visibleQuality]);
     const [selectedRiver, setSelectedRiver] = useState<string | null>(null);
     const [riverSort, setRiverSort] = useState<RiverSort>("chain");
@@ -420,12 +442,19 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [damSort, setDamSort] = useState<"storage" | "release">("storage");
     const damPoints = useMemo<GeoJSON.FeatureCollection>(() => ({
         type: "FeatureCollection",
-        features: visibleDams.filter((d) => d.lat != null && d.lon != null).map((d) => ({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [d.lon!, d.lat!] },
-            properties: { id: damKey(d), color: damColor(d), radius: damRadius(d) },
-        })),
-    }), [visibleDams]);
+        features: [
+            ...visibleDams.filter((d) => d.lat != null && d.lon != null).map((d): GeoJSON.Feature => ({
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [d.lon!, d.lat!] },
+                properties: { id: damKey(d), color: damColor(d), radius: damRadius(d) },
+            })),
+            ...(chaoPhrayaDam ? [{
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [chaoPhrayaDam.lon, chaoPhrayaDam.lat] },
+                properties: { id: CHAO_PHRAYA_DAM_ID, color: "#8a94a0", radius: 7 },
+            } satisfies GeoJSON.Feature] : []),
+        ],
+    }), [visibleDams, chaoPhrayaDam]);
     const riverPoints = useMemo<GeoJSON.FeatureCollection>(() => ({
         type: "FeatureCollection",
         features: visibleRivers.map((r) => ({
@@ -727,6 +756,42 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         revealPanel();
     }
     const selectRiverFromMap = useCallback((id: string) => { setSelectedRiver(id); revealPanel(); }, [revealPanel]);
+    /** Open a dam or river station picked from search (or the Chao Phraya Dam marker) in its own view. */
+    function openWater(item: WaterResult) {
+        const province = item.kind === "dam" ? item.dam.province_code : item.river.province_code;
+        // The lists follow the open area's province; another province's dam or station needs the whole country.
+        if (provinceCode && province !== provinceCode) clearArea();
+        else { setSearchActive(false); setResults(null); setSearchStatus("idle"); }
+        if (item.kind === "dam") { setView("dams"); chooseDam(item.dam); }
+        else { setView("rivers"); chooseRiver(item.river); }
+    }
+    function openChaoPhrayaDam() {
+        if (chaoPhrayaDam) openWater({ kind: "station", river: chaoPhrayaDam, key: CHAO_PHRAYA_DAM_ID, title: "", detail: "" });
+    }
+    const selectDamPoint = (id: string) => id === CHAO_PHRAYA_DAM_ID ? openChaoPhrayaDam() : selectDamFromMap(id);
+    // Dams and river stations matching the search text, from the lists already loaded for the map.
+    // Plain filter, not useMemo: empty unless a search is open, and the lists are small (35 dams, ~200 stations).
+    const waterResults: WaterResult[] = (() => {
+        const text = query.trim();
+        if (!searchActive || text.length < 2) return [];
+        const core = text.replace(/^(เขื่อน|อ่างเก็บน้ำ|อ่าง)\s*/, "").trim();
+        const lowered = text.toLowerCase();
+        const found: WaterResult[] = [];
+        if (core.length >= 2) {
+            for (const d of dams.list.filter((d) => d.name_th.includes(core) || text.includes(d.name_th)).slice(0, 5))
+                found.push({ kind: "dam", dam: d, key: "dam:" + damKey(d), title: "เขื่อน" + d.name_th, detail: "เขื่อนขนาดใหญ่" + (d.province_th ? " · จ." + d.province_th : "") });
+            const c13 = rivers.list.find((r) => r.code === CHAO_PHRAYA_DAM_STATION);
+            if (c13 && "เจ้าพระยา".includes(core) && /เขื่อน|เจ้าพระยา/.test(text))
+                found.push({ kind: "station", river: c13, key: CHAO_PHRAYA_DAM_ID, title: "เขื่อนเจ้าพระยา (เขื่อนทดน้ำ)", detail: "น้ำที่ปล่อยวัดที่สถานีท้ายเขื่อน C.13 · จ.ชัยนาท" });
+        }
+        const stations = rivers.list.filter((r) => r.code.toLowerCase() === lowered || r.code.toLowerCase().startsWith(lowered + ".")
+            || (core.length >= 2 && ((r.name_th ?? "").includes(core) || (r.river_th ?? "").includes(core))));
+        for (const r of stations.slice(0, 8))
+            found.push({ kind: "station", river: r, key: "river:" + riverKey(r), title: `${r.code} ${r.name_th ?? ""}`.trim(), detail: [r.river_th, r.province_th && "จ." + r.province_th].filter(Boolean).join(" · ") });
+        return found;
+    })();
+    // "เขื่อน…", "แม่น้ำ…" or a station code: the water results are what was asked for, so they go above the areas.
+    const waterFirst = /^(เขื่อน|อ่าง|แม่น้ำ|[A-Za-z]{1,3}\.\d)/.test(query.trim());
     function chooseQuality(station: WaterQualityStation) {
         setSelectedQuality(qualityKey(station));
         if (station.lat != null && station.lon != null)
@@ -860,6 +925,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             number
         ][];
     }, [hazard, layer]);
+    const waterBlock = searchActive && !!waterResults.length && <WaterResults items={waterResults} onOpen={openWater}/>;
     const searchPanel = (<section className="search-panel">
             <h2>{tr("พื้นที่ที่คุณอยากรู้")}</h2><p className="section-description" id="area-search-description">{tr("พิมพ์ชื่อจังหวัด อำเภอ หรือตำบลที่คุณสนใจ เพื่อดูความเสี่ยงและสถานการณ์ภัยในพื้นที่")}</p>
             <form onSubmit={onSearch} className="search-form" role="search">
@@ -893,9 +959,11 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             <div aria-live="polite">
               {tr(searchStatus === "loading" && <p className="search-feedback">{tr("กำลังค้นหาพื้นที่\u2026")}</p>)}
               {tr(searchStatus === "error" && <p className="search-feedback data-notice">{tr("ค้นหาไม่สำเร็จ กรุณากดค้นหาเพื่อลองอีกครั้ง")}</p>)}
-              {tr(results?.length === 0 && <p className="search-feedback">{tr("ไม่พบพื้นที่นี้ ลองใช้ชื่อจังหวัดหรืออำเภอเต็ม")}</p>)}
+              {tr(results?.length === 0 && !waterResults.length && <p className="search-feedback">{tr("ไม่พบพื้นที่นี้ ลองใช้ชื่อจังหวัด อำเภอ เขื่อน หรือแม่น้ำ")}</p>)}
             </div>
+            {tr(waterFirst && waterBlock)}
             {tr(searchActive && !!results?.length && <div className="search-results"><div className="results-heading"><span>{tr("พื้นที่แนะนำ \u00B7 ")}{tr(results.length)}{tr(" รายการ")}</span><button className="icon-button" aria-label={tr("ปิดผลการค้นหา")} onClick={() => { searchRequest.current++; setSearchActive(false); setResults(null); setSearchStatus("idle"); }}><Icon name="close"/></button></div><ul id="area-suggestions" role="listbox" aria-label={tr("พื้นที่แนะนำ")}>{tr(results.map((item, index) => <li key={item.code} role="presentation"><button role="option" id={`area-option-${item.code}`} aria-selected={activeSuggestion === index} tabIndex={-1} onClick={() => chooseArea(item, true)}><Icon name="pin"/><span><strong>{tr(prefix(item.level))}{tr(item.name_th)}</strong><small>{tr(item.parents.join(" · ") || "ประเทศไทย")}</small></span><Icon name="arrow"/></button></li>))}</ul></div>)}
+            {tr(!waterFirst && waterBlock)}
           </section>);
     const subTabs = (<>
           {tr(currentGroup.items.length > 1 && <div className="hazard-subtabs" role="group" aria-label={tr("เลือกภัยในกลุ่ม" + currentGroup.th)}>
@@ -938,7 +1006,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
-            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarShift={radarFrame?.shift ?? null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
+            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamPoint : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarShift={radarFrame?.shift ?? null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
               <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>{tr("แผนที่กลางคืน")}</button>
@@ -1017,6 +1085,11 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               <div className="area-intro"><h2>{tr("เขื่อนขนาดใหญ่")}{tr(areaProvince ? tr(" \u00B7 จ.") + tr(areaProvince.name) + tr("") : "ทั่วประเทศ")}</h2>
               <p className="section-description">{tr("แตะชื่อเขื่อนหรือวงกลมบนแผนที่ เพื่อดูว่าวันนี้ระบายน้ำเท่าไหร่")}</p>
               </div>
+              {tr(chaoPhrayaDam && <div className="diversion-dam">
+                <div><strong>{tr("เขื่อนเจ้าพระยา · จ.ชัยนาท")}</strong><span className="diversion-dam-badge">{tr("เขื่อนทดน้ำ")}</span></div>
+                <p>{tr("ไม่มีอ่างเก็บน้ำ จึงไม่มีค่า % ความจุเหมือนเขื่อนขนาดใหญ่ ")}{tr(chaoPhrayaDam.discharge_m3s != null ? <>{tr("ปล่อยน้ำลงท้ายเขื่อน ")}<strong>{tr(number.format(Math.round(chaoPhrayaDam.discharge_m3s)))}{tr(" ลบ.ม./วินาที")}</strong>{tr(" (สถานี C.13, ")}{tr(riverTime(chaoPhrayaDam.time))})</> : tr("น้ำที่ปล่อยวัดที่สถานีท้ายเขื่อน C.13"))}</p>
+                <button type="button" className="text-button" onClick={openChaoPhrayaDam}>{tr("ดูระดับน้ำและกราฟท้ายเขื่อน")}<Icon name="arrow"/></button>
+              </div>)}
             </>)}
             {tr(!!visibleDams.length && <>
               <div className="dam-sort" role="group" aria-label={tr("เรียงรายชื่อเขื่อน")}>

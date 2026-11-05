@@ -150,8 +150,13 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         # Such a name counts as a place only when written as one ("ต.แม่น้ำ", "ตำบลแม่น้ำ").
         areas = [a for a in areas if a.name_th not in RIVER_WORDS
                  or f"ต.{a.name_th}" in text or f"ตำบล{a.name_th}" in text]
-    if (any(w in lowered for w in FLOW_WORDS) or STATION_CODE.search(text)
-            or (any(w in lowered for w in RIVER_WORDS) and not areas)):
+    # "แม่น้ำน่านที่พิษณุโลก" names a river and a place: a river question for that place, unless it also asks
+    # about a hazard ("แม่น้ำเจ้าพระยาท่วมอยุธยาไหม" stays a flood question for Ayutthaya).
+    # With a place, only a named river counts: "อำเภอเสนาน้ำล้นตลิ่งไหม" keeps the district's flood assessment.
+    river_named = any(w in lowered for w in ("แม่น้ำ", "เจ้าพระยา", "river"))
+    river_asked = (any(w in lowered for w in RIVER_WORDS) and not areas) or (river_named and (
+        not detect_hazards(text) or any(w in text for w in ("ล้นตลิ่ง", "ระดับน้ำ"))))
+    if any(w in lowered for w in FLOW_WORDS) or STATION_CODE.search(text) or river_asked:
         return Understanding("river", [], areas, start, end, language, regions=regions)
     # These requests need numeric source records, rather than a model-generated risk summary.
     # Keep ordinary area risk questions (e.g. "เชียงใหม่แผ่นดินไหวไหม") on the existing assessment path.
