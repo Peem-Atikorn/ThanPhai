@@ -114,6 +114,36 @@ function addOverlays(m: MapLibreMap) {
     m.addImage("wave-arrow", ctx.getImageData(0, 0, 32, 32), { sdf: true });
     m.addLayer({ id: "wave-arrows", type: "symbol", source: "overlay-waves", layout: { "icon-image": "wave-arrow", "icon-rotate": ["get", "direction_to_deg"], "icon-rotation-alignment": "map", "icon-size": ["interpolate", ["linear"], ["get", "height_m"], 0, 0.35, 4, 0.9, 8, 1.2], "icon-allow-overlap": true }, paint: { "icon-color": fillColor, "icon-halo-color": "#ffffff", "icon-halo-width": 1 } }, "selected");
 }
+// The projected position of a rain cell: an amber rain cloud with a white edge, drawn at 2x for sharp screens.
+function addRainCloudIcon(m: MapLibreMap) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 54;
+    const ctx = canvas.getContext("2d")!;
+    const cloud = (grow: number) => {
+        ctx.beginPath();
+        for (const [x, y, r] of [[19, 26, 10], [32, 18, 13], [45, 26, 10]])
+            ctx.arc(x, y, r + grow, 0, Math.PI * 2);
+        ctx.roundRect(9 - grow, 24 - grow, 46 + grow * 2, 14 + grow * 2, 7 + grow);
+        ctx.fill();
+    };
+    ctx.fillStyle = "#ffffff";
+    cloud(3);
+    ctx.fillStyle = "#f59e0b";
+    cloud(0);
+    ctx.lineCap = "round";
+    for (const x of [22, 32, 42]) {
+        for (const [color, width] of [["#ffffff", 6], ["#f59e0b", 3]] as const) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.beginPath();
+            ctx.moveTo(x, 43);
+            ctx.lineTo(x - 3, 50);
+            ctx.stroke();
+        }
+    }
+    m.addImage("rain-cloud", ctx.getImageData(0, 0, canvas.width, canvas.height), { pixelRatio: 2 });
+}
 function applyOverlays(m: MapLibreMap, overlays: Props["overlays"]) {
     for (const id of ["flood", "cyclones", "waves"] as const)
         (m.getSource("overlay-" + id) as GeoJSONSource).setData(overlays?.[id] ?? EMPTY);
@@ -205,7 +235,9 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
             addOverlays(m);
             m.addSource("radar-forecast", { type: "geojson", data: EMPTY });
             m.addLayer({ id: "radar-forecast-track", type: "line", source: "radar-forecast", filter: ["==", ["get", "kind"], "track"], paint: { "line-color": "#f59e0b", "line-width": 3, "line-dasharray": [2, 2] } }, "selected");
-            m.addLayer({ id: "radar-forecast-position", type: "circle", source: "radar-forecast", filter: ["==", ["get", "kind"], "position"], paint: { "circle-color": "#f59e0b", "circle-radius": 6, "circle-stroke-color": "#fff", "circle-stroke-width": 2 } }, "selected");
+            addRainCloudIcon(m);
+            // A stronger cell (higher dBZ) gets a slightly larger cloud.
+            m.addLayer({ id: "radar-forecast-position", type: "symbol", source: "radar-forecast", filter: ["==", ["get", "kind"], "position"], layout: { "icon-image": "rain-cloud", "icon-size": ["interpolate", ["linear"], ["coalesce", ["get", "intensityDbz"], 25], 15, 0.9, 45, 1.3], "icon-allow-overlap": true, "icon-ignore-placement": true } }, "selected");
             (m.getSource("radar-forecast") as GeoJSONSource).setData(latest.current.radarForecast ?? EMPTY);
             applyOverlays(m, latest.current.overlays);
             // Searched area: a white casing under a dark line stays visible over every risk colour.
