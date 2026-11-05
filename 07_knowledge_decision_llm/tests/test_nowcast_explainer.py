@@ -90,8 +90,9 @@ def test_nowcast_explainer_uses_qwen_when_valid(sample_summary):
     mock_requester = MagicMock(return_value=good_answer)
     explainer = NowcastExplainer(requester=mock_requester)
 
-    result = explainer.explain(sample_summary)
+    result, source = explainer.explain_with_source(sample_summary)
     assert result == good_answer
+    assert source == "qwen"
     mock_requester.assert_called_once()
 
 
@@ -99,8 +100,9 @@ def test_nowcast_explainer_skips_qwen_if_provider_not_qwen(sample_summary, monke
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     # When requester is not injected and LLM_PROVIDER is not 'qwen', returns template without calling network
     explainer = NowcastExplainer(requester=None)
-    result = explainer.explain(sample_summary)
+    result, source = explainer.explain_with_source(sample_summary)
     assert result == build_template_answer(sample_summary)
+    assert source == "template"
 
 
 def test_nowcast_explainer_empty_summary_returns_fallback():

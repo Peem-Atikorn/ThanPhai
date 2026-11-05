@@ -86,6 +86,8 @@ FAILURE_TTL = timedelta(seconds=60)
 USER_AGENT = {"User-Agent": "ThanPhai/0.1 (student project)"}
 
 log = logging.getLogger("hazard_service")
+# A new radar frame waits at most this long for Qwen; after that the template answers and Qwen's text replaces it in the cache.
+NOWCAST_EXPLAIN_WAIT_S = 4.0
 SOURCES = {
     HazardType.FLOOD: ["ThaiWater (สสน.)"],
     HazardType.RAIN_STORM: ["ThaiWater (สสน.)"],
@@ -1688,9 +1690,10 @@ class HazardService:
 
     async def get_radar_nowcast(self) -> dict:
         """Return 1-hour radar nowcast calculated from real radar frames with Qwen explanation."""
-        from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes
+        from external_data.adapters.rainviewer import fetch_radar_maps, fetch_tile_bytes, recent_radar_frames
         from risk_models.nowcast import decode_png_radar, detect_rain_cells, estimate_motion, track_cells_to_districts
-        from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget
+        from risk_models.nowcast.cells import pixel_to_latlon_mercator
+        from decision_engine.nowcast_explainer import NowcastExplainer, NowcastSummary, RainCellTarget, build_template_answer
 
         now = time.monotonic()
         try:
@@ -1699,7 +1702,7 @@ class HazardService:
             log.warning("Failed to fetch radar maps from RainViewer: %s", exc)
             frames = []
 
-        past_frames = frames[-6:] if frames else []
+        past_frames = recent_radar_frames(frames, now=time.time(), limit=6)
         curr_time = past_frames[-1]["time"] if past_frames else 0
 
         # Fast path check outside lock
@@ -1725,6 +1728,7 @@ class HazardService:
                     "motion": None,
                     "rain_cells": [],
                     "explanation": "ไม่สามารถดึงข้อมูลเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "explanation_source": "template",
                     "source": "RainViewer · ข้อมูลเรดาร์ฝนยังไม่พร้อมใช้งาน",
                 }
                 self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
@@ -1751,6 +1755,7 @@ class HazardService:
                     "motion": None,
                     "rain_cells": [],
                     "explanation": "ไม่สามารถดึงภาพเรดาร์ฝนได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+                    "explanation_source": "template",
                     "source": "RainViewer · เกิดข้อผิดพลาดในการโหลดภาพเรดาร์",
                 }
                 self._radar_nowcast_cache = (curr_time, unavailable_res, now + 30.0)
@@ -1784,18 +1789,7 @@ class HazardService:
                     valid_mask=thai_mask,
                 )
 
-                # Generate extrapolated forecast frames metadata (+10 to +60 minutes)
-                # If motion is undetermined (direction_th == "ทิศทางไม่แน่นอน"), dx/dy are 0
                 is_undetermined = motion.direction_th == "ทิศทางไม่แน่นอน"
-                forecast_frames = [
-                    {
-                        "time": curr_frame_meta["time"] + step * int(interval_min * 60),
-                        "horizon_min": step * int(interval_min),
-                        "dx_pixels": round(motion.dx * step, 1) if (motion and not is_undetermined) else 0.0,
-                        "dy_pixels": round(motion.dy * step, 1) if (motion and not is_undetermined) else 0.0,
-                    }
-                    for step in range(1, 7)
-                ]
 
                 if not cells:
                     summary = NowcastSummary(
@@ -1805,7 +1799,7 @@ class HazardService:
                         intensity_desc="ไม่มีฝน",
                         targets=[],
                     )
-                    return None, [], summary, forecast_frames
+                    return None, [], summary, []
 
                 lead_cell = cells[0]
                 closest_amphoe = min(
@@ -1845,14 +1839,33 @@ class HazardService:
                         intensity_desc=intensity_th,
                         targets=[],
                     )
-                    return None, rain_cells_data, summary, forecast_frames
+                    return None, rain_cells_data, summary, []
 
                 is_moving = motion.speed_kmh >= 2.0
                 motion_data = {
                     "speed_kmh": round(motion.speed_kmh, 1),
                     "direction_th": motion.direction_th if is_moving else "เกือบอยู่กับที่",
                     "direction_deg": round(motion.direction_deg, 1),
+                    "is_moving": is_moving,
                 }
+                # +10 to +60 minutes: each cell moved by the measured motion, projected on the same tile the cells came from,
+                # so the map draws exactly these positions.
+                forecast_frames = []
+                for step in range(1, 7):
+                    positions = []
+                    for c in cells[:5]:
+                        lat, lon = pixel_to_latlon_mercator(
+                            c.centroid_y + motion.dy * step, c.centroid_x + motion.dx * step,
+                            z=4, tx=12, ty=7, tile_size=arr_curr.shape[0],
+                        )
+                        positions.append({"id": c.id, "lat": round(lat, 3), "lon": round(lon, 3)})
+                    forecast_frames.append({
+                        "time": curr_frame_meta["time"] + step * int(interval_min * 60),
+                        "horizon_min": step * int(interval_min),
+                        "dx_pixels": round(motion.dx * step, 1),
+                        "dy_pixels": round(motion.dy * step, 1),
+                        "cells": positions,
+                    })
 
                 target_hits = track_cells_to_districts(
                     cells=cells[:5],
@@ -1899,7 +1912,27 @@ class HazardService:
             motion_data, rain_cells_data, summary, forecast_frames = await asyncio.to_thread(_compute_nowcast_sync)
 
             explainer = NowcastExplainer()
-            explanation = await asyncio.to_thread(explainer.explain, summary, self.gazetteer)
+            explain_task = asyncio.ensure_future(asyncio.to_thread(explainer.explain_with_source, summary, self.gazetteer))
+            # True only while Qwen is still writing; the page then asks once more for its text.
+            explanation_pending = False
+            try:
+                explanation, explanation_source = await asyncio.wait_for(asyncio.shield(explain_task), NOWCAST_EXPLAIN_WAIT_S)
+            except asyncio.TimeoutError:
+                # Show the radar now; a validated Qwen text replaces the template for later readers of this frame.
+                explanation, explanation_source = build_template_answer(summary), "template"
+                explanation_pending = True
+
+                def _use_late_explanation(task: asyncio.Future) -> None:
+                    cache = self._radar_nowcast_cache
+                    if cache is None or cache[0] != curr_time:
+                        return
+                    update = {"explanation_pending": False}
+                    if not task.cancelled() and task.exception() is None:
+                        text, source = task.result()
+                        update |= {"explanation": text, "explanation_source": source}
+                    self._radar_nowcast_cache = (cache[0], {**cache[1], **update}, cache[2])
+
+                explain_task.add_done_callback(_use_late_explanation)
 
             result = {
                 "status": "ok",
@@ -1908,6 +1941,8 @@ class HazardService:
                 "motion": motion_data,
                 "rain_cells": rain_cells_data,
                 "explanation": explanation,
+                "explanation_source": explanation_source,
+                "explanation_pending": explanation_pending,
                 "source": "RainViewer · คำนวณ Nowcast 1 ชม. จากภาพเรดาร์จริง",
             }
             self._radar_nowcast_cache = (curr_time, result, now + 600.0)

@@ -181,17 +181,17 @@ class NowcastExplainer:
             timeout_ms=self.config.timeout_ms,
         )
 
-    def explain(self, summary: NowcastSummary, gazetteer: Any = None) -> str:
-        """Explain nowcast summary using Qwen; falls back to template on any error or validation failure."""
+    def explain_with_source(self, summary: NowcastSummary, gazetteer: Any = None) -> tuple[str, str]:
+        """Return the safe explanation and whether it came from Qwen or the template."""
         template = build_template_answer(summary)
         if not summary.location_desc or summary.direction_th in ["ไม่มีกลุ่มฝน", "ยังประเมินทิศทางไม่ได้", "ทิศทางไม่แน่นอน"]:
-            return template
+            return template, "template"
 
         # Check if Qwen is explicitly enabled via LLM_PROVIDER=qwen
         # If not enabled or requester not injected, return safe template directly
         provider = os.getenv("LLM_PROVIDER", "").lower()
         if provider != "qwen" and self.requester is None:
-            return template
+            return template, "template"
 
         targets_str_parts = []
         current = [t.amphoe_th for t in summary.targets if t.eta_min == 0]
@@ -219,8 +219,12 @@ class NowcastExplainer:
             raw_answer = self._call_qwen(prompt)
             problems = validate_nowcast_explanation(raw_answer, summary, gazetteer=gazetteer)
             if not problems:
-                return raw_answer
+                return raw_answer, "qwen"
         except Exception:
             pass
 
-        return template
+        return template, "template"
+
+    def explain(self, summary: NowcastSummary, gazetteer: Any = None) -> str:
+        """Explain nowcast summary using Qwen; falls back to template on any error or validation failure."""
+        return self.explain_with_source(summary, gazetteer)[0]

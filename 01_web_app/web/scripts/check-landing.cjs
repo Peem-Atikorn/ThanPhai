@@ -60,6 +60,28 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
 
 (async () => {
   const lib = load('@/lib/api');
+  const savedFetch = global.fetch;
+  let nowcastUrl = '';
+  global.fetch = async url => {
+    nowcastUrl = String(url);
+    return { status: 200, ok: true, json: async () => ({
+      status: 'ok',
+      past_frames: [{ time: 1800000000, tile_url: 'https://tiles.test/observed/{z}/{x}/{y}.png' }],
+      forecast_frames: [{ time: 1800000600, horizon_min: 10, dx_pixels: 2, dy_pixels: -1 }],
+      motion: { speed_kmh: 36, direction_deg: 90, direction_th: 'ตะวันออก' },
+      rain_cells: [{ id: 'cell-1', centroid_lat: 13.5, centroid_lon: 100.5, peak_intensity_dbz: 42 }],
+      explanation: 'กลุ่มฝนเคลื่อนตัวไปทางตะวันออก',
+      explanation_source: 'qwen',
+    }) };
+  };
+  const nowcastResult = await lib.api.radarNowcast();
+  assert.equal(nowcastUrl, '/api/v1/radar/nowcast', 'Nowcast is read through the same-origin backend proxy');
+  assert.equal(nowcastResult.enabled, true, 'An enabled backend exposes the nowcast');
+  assert.equal(nowcastResult.past_frames[0].tile_url, 'https://tiles.test/observed/{z}/{x}/{y}.png');
+  assert.equal(nowcastResult.forecast_frames[0].horizon_min, 10);
+  global.fetch = async () => ({ status: 404, ok: false });
+  assert.equal((await lib.api.radarNowcast()).enabled, false, 'The default-off backend cleanly disables nowcast');
+  global.fetch = savedFetch;
   const { highestEnvironmentValue, default: EnvironmentSummary } = load('@/components/EnvironmentSummary');
   const environmentLayer = { type: 'FeatureCollection', meta: { data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] }, features: [
     { properties: { name_th: 'ไม่มีค่า', pm25_24h: null, heat_index_now: null, heat_index_max_24h: null } },
@@ -76,7 +98,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   const metricProps = { layers: { air_quality: { data: environmentLayer, error: false, key: 'air_quality:0' }, heat: { data: environmentLayer, error: false, key: 'heat:0' }, rain_storm: { data: environmentLayer, error: false, key: 'rain_storm:0' } }, loadingArea: false, area: null };
   let metrics = instance(EnvironmentSummary).render(metricProps);
   assert(content(metrics).includes('80') && content(metrics).includes('เชียงใหม่'), 'National PM2.5 maximum shows value and place');
-  assert(content(metrics).includes('ตอนนี้ร้อนเหมือน 35') && content(metrics).includes('สงขลา') && content(metrics).includes('สูงสุดใน 24 ชม. ข้างหน้า 39'), 'National heat shows now, place and the 24-h peak of that district');
+  assert(content(metrics).includes('ตอนนี้ร้อนเหมือน 35') && content(metrics).includes('ค่าคาดการณ์ชั่วโมงนี้'), 'National heat shows current-hour feel temperature and period');
+  assert(content(metrics).includes('สงขลา') && content(metrics).includes('สูงสุดใน 24 ชม. ข้างหน้า 39'), 'National heat shows place and the 24-h peak of that district');
   assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-NORMAL'), 'API level wins even when value exceeds a frontend threshold');
   const rainCard = nodes(metrics).filter(n => n.type === 'article')[2];
   assert(content(rainCard).includes('โอกาสฝนตก') && content(rainCard).includes('63') && content(rainCard).includes('ราว 18:00 น.') && content(rainCard).includes('แบบจำลอง'), 'Rain card shows the highest chance, its hour, and says it is a model');
@@ -103,7 +126,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert(content(metrics).includes('12') && content(metrics).includes('แบบจำลอง') && content(metrics).includes('CAMS'), 'Selected model fallback is labelled and credited');
   load('@/lib/i18n').setLanguage('en');
   metrics = instance(EnvironmentSummary).render(metricProps);
-  assert(content(metrics).includes('Feels like now 35') && content(metrics).includes('National maximum'), 'Summary copy translates without changing readings');
+  assert(content(metrics).includes('Feels like now 35') && content(metrics).includes('Forecast for this hour') && nodes(metrics).some(n => n.type === 'article' && n.props.title.includes('National maximum')), 'Summary copy translates without changing readings');
+  assert(nodes(metrics).some(n => n.type === 'article' && n.props.title.includes('· Maximum over the next 24 hours')), 'The 24-hour heat peak is translated in English');
   const rainCardEn = content(nodes(metrics).filter(n => n.type === 'article')[2]);
   assert(rainCardEn.includes('highest in 24 h, around 18:00') && !/[฀-๿]/.test(rainCardEn.replace(/อำเภอ ก|เชียงใหม่/g, '')), 'Rain card hour and period translate in English');
   load('@/lib/i18n').setLanguage('th');
@@ -245,33 +269,78 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   let radarRequests = 0;
   let radarEnabled = true;
   let radarFrames = [{ tiles: 'https://tiles.test/old/{z}/{x}/{y}.png', time: 1799996400 }, { tiles: 'https://tiles.test/new/{z}/{x}/{y}.png', time: 1800000000 }];
-  lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frames: radarEnabled ? radarFrames : [] }; };
+  lib.api.radar = async () => ({ enabled: radarEnabled, frames: radarEnabled ? radarFrames : [] });
+  lib.api.radarNowcast = async () => { radarRequests++; return {
+    enabled: radarEnabled,
+    status: radarEnabled ? 'ok' : 'unavailable',
+    past_frames: radarEnabled ? radarFrames.map(frame => ({ tile_url: frame.tiles, time: frame.time })) : [],
+    forecast_frames: radarEnabled ? [
+      { time: radarFrames.at(-1).time + 600, horizon_min: 10, dx_pixels: 1.5, dy_pixels: -0.5, cells: [{ id: 'cell-1', lat: 13.52, lon: 100.61 }] },
+      { time: radarFrames.at(-1).time + 1200, horizon_min: 20, dx_pixels: 3, dy_pixels: -1, cells: [{ id: 'cell-1', lat: 13.54, lon: 100.72 }] },
+    ] : [],
+    motion: radarEnabled ? { speed_kmh: 36, direction_deg: 90, direction_th: 'ตะวันออก', is_moving: true } : null,
+    rain_cells: radarEnabled ? [{ id: 'cell-1', centroid_lat: 13.5, centroid_lon: 100.5, peak_intensity_dbz: 42 }] : [],
+    explanation: 'กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก',
+    explanation_source: 'qwen',
+  }; };
   for (const hazard of ['overview', 'flood', 'rain_storm', 'tropical_cyclone']) {
     const radarEffects = [];
     const radarApp = instance(Dashboard, radarEffects);
     const props = { activeView: 'hazard', activeHazard: hazard };
     const radarTree = radarApp.render(props);
     const before = radarRequests;
-    const cleanupRadar = radarEffects.find(effect => /\.radar\(/.test(String(effect)))();
+    const cleanupRadar = radarEffects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
     assert.equal(radarRequests - before, ['overview', 'rain_storm', 'tropical_cyclone'].includes(hazard) ? 1 : 0, `Only overview and weather topics request radar: ${hazard}`);
     if (hazard === 'overview') {
       assert(!nodes(radarTree).some(n => n.props['data-layer'] === 'radar'), 'Radar stays hidden while availability is unknown');
       await tick();
-      const enabledTree = radarApp.render(props);
+      let enabledTree = radarApp.render(props);
+      enabledTree = radarApp.render(props);
       assert(nodes(enabledTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
+      assert.equal(nodes(enabledTree).find(n => 'radarNext' in n.props).props.radar, radarFrames.at(-1).tiles, 'The first render with frames already draws the latest frame, not the oldest');
       const playback = nodes(enabledTree).find(n => n.type.name === 'RadarPlayback');
-      assert(playback && playback.props.frames.length === 2 && playback.props.index === 1, 'Radar playback receives history and opens on the latest frame');
+      assert(playback && playback.props.frames.length === 4 && playback.props.index === 1, 'Radar playback appends forecasts and opens on the latest observed frame');
+      assert.equal(playback.props.frames[2].kind, 'forecast', 'Forecast entries follow observed radar frames in one timeline');
+      assert.equal(playback.props.frames[2].horizonMin, 10, 'Forecast entry retains its lead time');
       assert.equal(nodes(enabledTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Idle radar playback does not preload another frame');
       playback.props.onPlaybackChange(true);
       const playingTree = radarApp.render(props);
-      assert.equal(nodes(playingTree).find(n => 'radarNext' in n.props).props.radarNext, radarFrames[0].tiles, 'The next frame is preloaded only while playback is active');
+      assert.equal(nodes(playingTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Forecast entries do not preload a radar image');
       playback.props.onPlaybackChange(false);
       radarApp.render(props);
+      playback.props.onChange(2);
+      const forecastTree = radarApp.render(props);
+      const forecastMap = nodes(forecastTree).find(n => 'radarForecast' in n.props);
+      assert.equal(forecastMap.props.radarForecast.features.length, 2, 'Forecast shows the projected path and position for each rain cell');
+      const projected = forecastMap.props.radarForecast.features[1].geometry.coordinates;
+      assert.deepEqual(projected, [100.61, 13.52], 'The map draws the position the backend projected for this lead time');
+      assert.equal(forecastMap.props.radar, radarFrames.at(-1).tiles, 'Forecast keeps the latest observed source without reloading it');
+      assert.equal(forecastMap.props.radarDimmed, true, 'The observed image is clearly dimmed during forecasts');
+      assert.equal(playback.props.frames[2].imageTime, radarFrames.at(-1).time, 'Forecast retains the actual image time');
+      const forecastNote = nodes(forecastTree).find(n => String(n.props.className || '').split(/\s+/).includes('radar-note'));
+      assert.equal(forecastNote, undefined, 'The map hides the observed-radar note while a forecast is selected');
+      const RadarPlayback = load('@/components/RadarPlayback').default;
+      const forecastPlayback = instance(RadarPlayback).render(nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props);
+      assert(content(forecastPlayback).includes('ค่าคาดการณ์จากการคำนวณทิศทางการเคลื่อนที่ของกลุ่มฝน'), 'Forecast is attributed to motion calculations');
+      assert(content(forecastPlayback).includes('อธิบายโดย AI ที่รันในเครื่องของทันภัย'), 'Qwen is credited with explanation only');
+      assert(content(forecastPlayback).includes('ค่าคาดการณ์ +10 นาที'), 'The selected forecast stays visibly labelled in the playback controls');
+      assert(content(forecastPlayback).includes('กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก'), 'The validated Qwen explanation accompanies its frame');
+      assert(content(forecastPlayback).includes('ภาพจางคือเรดาร์จริงล่าสุดเวลา') && content(forecastPlayback).includes('ไม่ใช่ภาพฝนคาดการณ์'), 'The retained image is explicitly labelled observed, not predicted');
+      assert(content(forecastPlayback).includes('ไม่ทำนายฝนที่เกิดใหม่'), 'The forecast limitation stays next to its timeline');
+      assert(!content(forecastPlayback).includes('AI กำลังเรียบเรียง'), 'No waiting notice unless the backend says Qwen is still writing');
+      const pendingPlayback = instance(RadarPlayback).render({ ...nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props, explanationSource: 'template', explanationPending: true });
+      assert(content(pendingPlayback).includes('AI กำลังเรียบเรียงคำอธิบาย'), 'A pending Qwen text is announced');
+      const templatePlayback = instance(RadarPlayback).render({ ...nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props, explanationSource: 'template', explanationPending: false });
+      assert(!content(templatePlayback).includes('AI กำลังเรียบเรียง'), 'A final template answer (Qwen off, failed validation, no direction) has no waiting notice');
+      load('@/lib/i18n').setLanguage('en');
+      const englishPlayback = instance(RadarPlayback).render({ ...nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props, explanation: 'กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก' });
+      assert(nodes(englishPlayback).some(n => n.type === 'p' && n.props.children === 'กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก'), 'The validated explanation is shown exactly, not re-translated');
+      assert.equal(englishPlayback.props['aria-label'], "Play the past hour of radar images and the next hour's forecast", 'The playback label is read in English');
+      load('@/lib/i18n').setLanguage('th');
 
       let selectedFrame = 1, timerCallback, timerCount = 0, clearCount = 0;
       window.setInterval = callback => { timerCallback = callback; timerCount++; return timerCount; };
       window.clearInterval = () => { clearCount++; };
-      const RadarPlayback = load('@/components/RadarPlayback').default;
       const playbackApp = instance(RadarPlayback, undefined, true);
       const playbackProps = () => ({ frames: radarFrames, index: selectedFrame, onChange: index => { selectedFrame = index; }, onPlaybackChange() {} });
       let playbackControl = nodes(playbackApp.render(playbackProps())).find(n => n.type === 'button');
@@ -294,37 +363,122 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
         { tiles: 'https://tiles.test/latest/{z}/{x}/{y}.png', time: 1800003600 },
       ];
       radarApp.render(props);
-      const refreshRadar = radarEffects.filter(effect => /\.radar\(/.test(String(effect))).at(-1)();
+      const refreshRadar = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
       await tick();
       refreshRadar?.();
-      const refreshedTree = radarApp.render(props);
+      let refreshedTree = radarApp.render(props);
+      refreshedTree = radarApp.render(props);
       assert.equal(nodes(refreshedTree).find(n => n.type.name === 'RadarPlayback').props.index, 1, 'Radar refresh preserves the selected frame timestamp when it remains available');
       nodes(refreshedTree).find(n => n.type.name === 'RadarPlayback').props.onChange(0);
       radarFrames = [radarFrames[1], radarFrames[2]];
       radarApp.render(props);
-      const removedRadarFrame = radarEffects.filter(effect => /\.radar\(/.test(String(effect))).at(-1)();
+      const removedRadarFrame = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
       await tick();
       removedRadarFrame?.();
-      const missingFrameTree = radarApp.render(props);
+      let missingFrameTree = radarApp.render(props);
+      missingFrameTree = radarApp.render(props);
       assert.equal(nodes(missingFrameTree).find(n => n.type.name === 'RadarPlayback').props.index, 1, 'Radar refresh selects the latest frame if the selected timestamp expired');
-
-      lib.api.radar = async () => { throw new Error('offline'); };
+      nodes(missingFrameTree).find(n => n.type.name === 'RadarPlayback').props.onChange(2);
+      const pickedForecastTime = radarFrames.at(-1).time + 600;
+      radarFrames = [radarFrames[1], { tiles: 'https://tiles.test/plus10/{z}/{x}/{y}.png', time: pickedForecastTime }, { tiles: 'https://tiles.test/plus20/{z}/{x}/{y}.png', time: pickedForecastTime + 600 }];
       radarApp.render(props);
-      const failRadar = radarEffects.filter(effect => /\.radar\(/.test(String(effect))).at(-1)();
+      const realAtForecastTime = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
+      await tick();
+      realAtForecastTime?.();
+      let realAtForecastTree = radarApp.render(props);
+      realAtForecastTree = radarApp.render(props);
+      assert.equal(nodes(realAtForecastTree).find(n => n.type.name === 'RadarPlayback').props.index, 2, 'A selected forecast does not turn into the real frame with the same time; the latest real frame is shown');
+
+      lib.api.radarNowcast = async () => { throw new Error('offline'); };
+      radarApp.render(props);
+      const failRadar = radarEffects.filter(effect => /\.radarNowcast\(/.test(String(effect))).at(-1)();
       await tick();
       failRadar?.();
       const failedTree = radarApp.render(props);
-      assert(nodes(failedTree).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note') && content(n).includes('ยังโหลดเรดาร์ไม่ได้')), 'Radar failure keeps its unavailable note visible');
-      lib.api.radar = async () => { radarRequests++; return { enabled: radarEnabled, frames: radarEnabled ? radarFrames : [] }; };
+      assert(nodes(failedTree).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note') && content(n).includes('RainViewer')), 'Nowcast failure keeps the observed radar visible');
+      lib.api.radarNowcast = async () => { radarRequests++; return { enabled: radarEnabled, status: 'unavailable', past_frames: [], forecast_frames: [], motion: null, rain_cells: [], explanation: '', explanation_source: 'template' }; };
     }
     cleanupRadar?.();
   }
+  // A delayed lightweight-endpoint failure must not discard successful nowcast history.
+  const savedRadarApi = lib.api.radar, savedNowcastApi = lib.api.radarNowcast;
+  for (const failFirst of [false, true]) {
+    let rejectObserved;
+    lib.api.radar = () => new Promise((_, reject) => { rejectObserved = reject; });
+    let resolveNowcast;
+    lib.api.radarNowcast = () => new Promise(resolve => { resolveNowcast = resolve; });
+    const effects = [], app = instance(Dashboard, effects);
+    const props = { activeView: 'hazard', activeHazard: 'overview' };
+    app.render(props);
+    const cleanup = effects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
+    if (failFirst) { rejectObserved(new Error('timeout')); await tick(); }
+    resolveNowcast({ enabled: true, past_frames: [{ tile_url: 'https://tiles.test/fallback.png', time: 1800000000 }], forecast_frames: [], motion: null, rain_cells: [], explanation: '', explanation_source: 'template' });
+    await tick();
+    if (!failFirst) { rejectObserved(new Error('timeout')); await tick(); }
+    const tree = app.render(props);
+    assert(nodes(tree).some(n => n.type.name === 'RadarPlayback' && n.props.frames.length === 1), 'Nowcast history survives observed endpoint failure in either response order');
+    cleanup?.();
+  }
+  // The two endpoints cache RainViewer separately: forecasts always continue from the last frame on the slider.
+  {
+    const T = 1800000000;
+    const frame = (time, name) => ({ tiles: `https://tiles.test/${name}.png`, time, kind: 'observed' });
+    const nowcastAt = (latest, extra = {}) => ({ enabled: true, status: 'ok',
+      past_frames: [latest - 600, latest].map(time => ({ tile_url: `https://tiles.test/n${time}.png`, time })),
+      forecast_frames: [{ time: latest + 600, horizon_min: 10, dx_pixels: 1, dy_pixels: 0, cells: [{ id: 1, lat: 13.5, lon: 100.6 }] }],
+      motion: { speed_kmh: 1, direction_deg: 90, direction_th: 'เกือบอยู่กับที่', is_moving: false },
+      rain_cells: [{ id: 1, centroid_lat: 13.5, centroid_lon: 100.5, peak_intensity_dbz: 30 }],
+      explanation: 'ข้อความแม่แบบ', explanation_source: 'template', ...extra });
+    const run = async (radarResult, nowcastResult) => {
+      lib.api.radar = radarResult instanceof Error ? async () => { throw radarResult; } : async () => radarResult;
+      lib.api.radarNowcast = async () => nowcastResult;
+      const effects = [], app = instance(Dashboard, effects), props = { activeView: 'hazard', activeHazard: 'overview' };
+      app.render(props);
+      const cleanup = effects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
+      await tick();
+      const tree = app.render(props);
+      return { tree, app, props, cleanup, playback: nodes(tree).find(n => n.type.name === 'RadarPlayback') };
+    };
+    let r = await run({ enabled: true, frames: [frame(T - 1200, 'a'), frame(T - 600, 'b')] }, nowcastAt(T));
+    assert.equal(r.playback.props.frames.filter(f => f.kind === 'observed').at(-1).time, T, 'A lagging /v1/radar gives way to the newer nowcast frames');
+    assert.equal(r.playback.props.frames.find(f => f.kind === 'forecast').imageTime, T, 'The +10 frame shows the image of the last frame on the slider');
+    r.cleanup?.();
+    r = await run({ enabled: true, frames: [frame(T - 600, 'a'), frame(T, 'b'), frame(T + 600, 'c')] }, nowcastAt(T));
+    assert.equal(r.playback.props.frames.at(-1).time, T + 600, 'A newer /v1/radar ends the slider at its latest frame');
+    assert(!r.playback.props.frames.some(f => f.kind === 'forecast'), 'A forecast from an older frame is not appended after a newer real one');
+    r.cleanup?.();
+    r = await run(new Error('timeout'), nowcastAt(T));
+    assert.equal(r.playback.props.frames.filter(f => f.kind === 'observed').at(-1).time, T, 'A failed /v1/radar uses the nowcast frames');
+    r.playback.props.onChange(2);
+    const stationary = nodes(r.app.render(r.props)).find(n => 'radarForecast' in n.props).props.radarForecast;
+    assert.deepEqual(stationary.features.map(f => f.properties.kind), ['position'], 'Rain the backend calls stationary is drawn at its projected position without a track');
+    r.cleanup?.();
+    // Qwen still writing: one more request after the wait, and nothing when the answer is final.
+    const savedSetTimeout = global.setTimeout, timers = [];
+    global.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
+    let nowcastCalls = 0;
+    lib.api.radar = async () => ({ enabled: true, frames: [] });
+    lib.api.radarNowcast = async () => (++nowcastCalls === 1 ? nowcastAt(T, { explanation_pending: true }) : nowcastAt(T, { explanation: 'ข้อความจาก Qwen', explanation_source: 'qwen' }));
+    const effects = [], app = instance(Dashboard, effects), props = { activeView: 'hazard', activeHazard: 'overview' };
+    app.render(props);
+    const cleanup = effects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
+    await tick();
+    assert.equal(timers.filter(t => t.ms === 15000).length, 1, 'A pending explanation schedules one more nowcast request');
+    timers.find(t => t.ms === 15000).fn();
+    await tick();
+    assert.equal(nowcastCalls, 2, 'The retry asks the backend again');
+    assert.equal(nodes(app.render(props)).find(n => n.type.name === 'RadarPlayback').props.explanationSource, 'qwen', 'The late Qwen text reaches the open page');
+    assert.equal(timers.filter(t => t.ms === 15000).length, 1, 'A final answer schedules nothing more');
+    cleanup?.();
+    global.setTimeout = savedSetTimeout;
+  }
+  lib.api.radar = savedRadarApi; lib.api.radarNowcast = savedNowcastApi;
   radarEnabled = false;
   const disabledRadarEffects = [];
   const disabledRadarApp = instance(Dashboard, disabledRadarEffects);
   const disabledRadarProps = { activeView: 'hazard', activeHazard: 'overview' };
   disabledRadarApp.render(disabledRadarProps);
-  const cleanupDisabledRadar = disabledRadarEffects.find(effect => /\.radar\(/.test(String(effect)))();
+  const cleanupDisabledRadar = disabledRadarEffects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
   await tick();
   assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle stays hidden when backend disables it');
   assert(!nodes(disabledRadarApp.render(disabledRadarProps)).some(n => String(n.props.className || '').split(/\s+/).includes('radar-note')), 'Radar note stays hidden when backend disables radar');
@@ -490,5 +644,5 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
     i18n.setLanguage('th');
     global.document = previousDocument;
   }
-  console.log('PASS: landing/search, overlays and polling, risk summaries, water-quality TH/EN thresholds and source/value preservation.');
+  console.log('PASS: landing/search, overlays, radar nowcast timeline, risk summaries and water-quality TH/EN checks.');
 })().catch(error => { console.error(error); process.exit(1); });

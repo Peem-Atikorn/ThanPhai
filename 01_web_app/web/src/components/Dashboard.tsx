@@ -4,7 +4,7 @@ import { t as tr, getLocale } from "@/lib/i18n";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, OfficialWarning, RadarFrame, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
+import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, OfficialWarning, RadarFrame, RadarNowcast, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
 import WaterQualityPanel, { qualityKey, qualityColor } from "@/components/WaterQualityPanel";
 import Icon from "@/components/Icon";
 import FloatingMascot from "@/components/FloatingMascot";
@@ -109,6 +109,34 @@ const RID_HOURLY = "https://hyd-app.rid.go.th/hydro5h.html";
 type View = MapView;
 // The rain radar is drawn on these maps.
 const RADAR_LAYERS: MapLayerId[] = ["overview", "rain_storm", "tropical_cyclone"];
+// Asks once more for the Qwen text the backend was still writing (its Qwen timeout is 15 s).
+const NOWCAST_RETRY_MS = 15_000;
+// Draws the positions the backend projected for this lead time; a track only when the backend says the rain moves.
+function forecastCellLayer(nowcast: RadarNowcast | null, horizonMin: number | undefined): GeoJSON.FeatureCollection {
+    const frame = nowcast?.forecast_frames.find((f) => f.horizon_min === horizonMin);
+    const features: GeoJSON.Feature[] = [];
+    for (const position of frame?.cells ?? []) {
+        const cell = nowcast?.rain_cells.find((c) => c.id === position.id);
+        if (!cell) continue;
+        const end: [number, number] = [position.lon, position.lat];
+        const properties = { cellId: cell.id, intensityDbz: cell.peak_intensity_dbz };
+        if (nowcast?.motion?.is_moving)
+            features.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[cell.centroid_lon, cell.centroid_lat], end] }, properties: { ...properties, kind: "track" } });
+        features.push({ type: "Feature", geometry: { type: "Point", coordinates: end }, properties: { ...properties, kind: "position" } });
+    }
+    return { type: "FeatureCollection", features };
+}
+// One timeline: the newer of the two observed lists, then forecasts only when they start from its last frame.
+function radarTimeline(observedRadar: { frames: RadarFrame[] } | null, nowcast: RadarNowcast | null) {
+    const fromRadar = observedRadar?.frames ?? [];
+    const fromNowcast: RadarFrame[] = (nowcast?.past_frames ?? []).map((frame) => ({ tiles: frame.tile_url, time: frame.time, kind: "observed" }));
+    const observed = (fromNowcast.at(-1)?.time ?? -Infinity) > (fromRadar.at(-1)?.time ?? -Infinity) ? fromNowcast : fromRadar;
+    const latest = observed.at(-1);
+    const forecasts: RadarFrame[] = latest && nowcast?.motion && nowcast.past_frames.at(-1)?.time === latest.time
+        ? nowcast.forecast_frames.map((frame) => ({ tiles: latest.tiles, imageTime: latest.time, time: frame.time, kind: "forecast", horizonMin: frame.horizon_min }))
+        : [];
+    return { frames: [...observed, ...forecasts], latestObservedIndex: Math.max(0, observed.length - 1) };
+}
 const stationFeatures = (stations: AirStation[]): GeoJSON.FeatureCollection => ({
     type: "FeatureCollection",
     features: stations.map((s) => ({
@@ -334,13 +362,21 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(true);
-    const [radarAvailable, setRadarAvailable] = useState(false);
     const [radarPlaying, setRadarPlaying] = useState(false);
-    const [radarFrames, setRadarFrames] = useState<RadarFrame[]>([]);
-    const [radarFrameIndex, setRadarFrameIndex] = useState(0);
-    const selectedRadarTime = useRef<number | null>(null);
+    // Each endpoint's last answer; the timeline and the selected frame are derived from them during render,
+    // so the map never draws a frame that is not the selected one.
+    const [radarObserved, setRadarObserved] = useState<{ enabled: boolean; frames: RadarFrame[] } | null>(null);
+    const [radarNowcast, setRadarNowcast] = useState<RadarNowcast | null>(null);
+    const [radarSelection, setRadarSelection] = useState<{ time: number; kind?: RadarFrame["kind"] } | null>(null);
+    const radarAvailable = !!radarObserved?.enabled || !!radarNowcast?.enabled;
+    const { frames: radarFrames, latestObservedIndex } = useMemo(() => radarTimeline(radarObserved, radarNowcast), [radarObserved, radarNowcast]);
+    const selectedRadarIndex = radarFrames.findIndex((frame) => frame.time === radarSelection?.time && frame.kind === radarSelection?.kind);
+    const radarFrameIndex = selectedRadarIndex >= 0 ? selectedRadarIndex : latestObservedIndex;
     const radarFrame = radarFrames[radarFrameIndex] ?? null;
     const radarNextFrame = radarPlaying && radarFrames.length > 1 ? radarFrames[(radarFrameIndex + 1) % radarFrames.length] : null;
+    const radarForecast = useMemo(() => radarFrame?.kind === "forecast"
+        ? forecastCellLayer(radarNowcast, radarFrame.horizonMin)
+        : null, [radarFrame, radarNowcast]);
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
     const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
     const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
@@ -421,18 +457,18 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         if (!showRadar)
             return;
         let cancelled = false;
-        // A failed radar request just leaves the map without radar; the station data still shows.
-        api.radar().then((result) => { if (!cancelled) {
-            setRadarAvailable(result.enabled);
-            setRadarFrames(result.frames);
-            const refreshedIndex = result.frames.findIndex((frame) => frame.time === selectedRadarTime.current);
-            const nextIndex = refreshedIndex >= 0 ? refreshedIndex : Math.max(0, result.frames.length - 1);
-            selectedRadarTime.current = result.frames[nextIndex]?.time ?? null;
-            setRadarFrameIndex(nextIndex);
-        } }).catch(() => { if (!cancelled) {
-            setRadarFrames([]);
-        } });
-        return () => { cancelled = true; };
+        let retry: ReturnType<typeof setTimeout> | undefined;
+        // Observed tiles show as soon as the lightweight endpoint responds; nowcast/Qwen can finish later.
+        // A failure of one endpoint leaves the other's frames in the timeline.
+        api.radar().then((result) => { if (!cancelled) setRadarObserved(result); })
+            .catch(() => { if (!cancelled) setRadarObserved({ enabled: false, frames: [] }); });
+        const loadNowcast = (first: boolean) => api.radarNowcast().then((result) => {
+            if (cancelled) return;
+            setRadarNowcast(result);
+            if (first && result.explanation_pending) retry = setTimeout(() => loadNowcast(false), NOWCAST_RETRY_MS);
+        }).catch(() => { if (!cancelled && first) setRadarNowcast(null); });
+        loadNowcast(true);
+        return () => { cancelled = true; clearTimeout(retry); };
     }, [showRadar, revision]);
     useEffect(() => {
         let cancelled = false;
@@ -860,7 +896,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
-            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel ? radarNextFrame?.tiles ?? null : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
+            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
               <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>{tr("แผนที่กลางคืน")}</button>
@@ -877,9 +913,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(view === "rivers" && rivers.status === "loading" && <div className="map-notice" role="status"><span className="spinner"/>{tr("กำลังโหลดข้อมูลแม่น้ำ\u2026")}</div>)}
             {tr(view === "rivers" && rivers.status === "error" && !rivers.list.length && <div className="map-notice error-notice" role="alert"><Icon name="info"/><div><strong>{tr("โหลดข้อมูลแม่น้ำไม่สำเร็จ")}</strong><p>{tr("ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง")}</p></div><button className="text-button" onClick={() => setRevision((value) => value + 1)}>{tr("ลองใหม่")}</button></div>)}
           </div>
-          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} onChange={(index) => { selectedRadarTime.current = radarFrames[index]?.time ?? null; setRadarFrameIndex(index); }} onPlaybackChange={setRadarPlaying}/>}
+          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarNowcast?.explanation ?? ""} explanationSource={radarNowcast?.explanation_source ?? "template"} explanationPending={!!radarNowcast?.explanation_pending} onChange={(index) => { const frame = radarFrames[index]; setRadarSelection(frame ? { time: frame.time, kind: frame.kind } : null); }} onPlaybackChange={setRadarPlaying}/>}
           <details className="map-supplement"><summary>{tr(overview ? "ชั้นข้อมูลและคำอธิบายแผนที่" : "คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
-          {tr(hideToolbar && overview && !selectedRiskLevel && mapControls)}
           {tr(overview && !selectedRiskLevel && <div className="overview-overlay-summary">
             <OverlayLegends data={overlays.data} enabled={overlays.enabled}/>
             {tr(pmOn && <section><h4>{tr("ฝุ่น PM2.5 \u00B7 เฉลี่ย 24 ชม.")}</h4><ul className="overlay-levels">{tr(PM25_BANDS.map(b => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}</li>))}</ul><p>{tr(airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ · แสดงข้อมูลเดิมถ้ามี" : !airStations?.length ? "ยังไม่มีข้อมูลสถานี" : tr("") + tr(airStations.length) + tr(" สถานี \u00B7 แต่ละสถานีอาจรายงานคนละเวลา"))}</p><small>{tr("Air4Thai (กรมควบคุมมลพิษ) \u00B7 เวลาล่าสุด ")}{tr(formatTime(airStations?.map(s => s.time).sort().at(-1)))}{tr(" (เวลาไทย)")}</small></section>)}
@@ -898,7 +933,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             <div className="legend-heading"><h3>{tr("ระดับความเสี่ยง")}</h3><span>{tr(displayedLayer ? number.format(displayedLayer.features.length) + " อำเภอ" : "รอข้อมูล")}</span></div>
             <ul className="risk-legend">{tr(counts.map((level) => <li key={level.id}><span className="legend-dot" style={{ background: level.color }}/><span>{tr(level.th)}</span><strong>{tr(layer ? number.format(level.n) : "—")}</strong></li>))}</ul>
             {tr(hazard === "air_quality" && <div className="pm-legend"><h3>{tr("จุดสถานีวัด PM2.5 (กรมควบคุมมลพิษ) \u00B7 ตัวเลขคือค่าเฉลี่ย 24 ชม. \u00B7 วงใหญ่ = หลายสถานี แสดงค่าสูงสุด")}</h3><ul>{tr(PM25_BANDS.map((b, i) => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}<small>{tr(i === 0 ? "0–15" : i === PM25_BANDS.length - 1 ? "> 75" : `${PM25_BANDS[i - 1].max}–${b.max}`)}</small></li>))}</ul>{tr(airStations && <p className="source-note">{tr(number.format(airStations.length))}{tr(" สถานีที่มีค่าล่าสุดไม่เกิน 6 ชม. \u00B7 อำเภอที่ไม่มีสถานีใช้ค่าจากแบบจำลอง")}</p>)}</div>)}
-            {tr(showRadar && radarAvailable && <p className="source-note radar-note">{tr(radarFrame ? <>{tr("เรดาร์ฝนเวลา ")}{tr(new Date(radarFrame.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. \u00B7 ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</> : "ยังโหลดเรดาร์ไม่ได้")}</p>)}
+            {tr(showRadar && radarAvailable && radarFrame?.kind !== "forecast" && <p className="source-note radar-note">{tr(!radarFrame ? "ยังโหลดเรดาร์ไม่ได้" : <>{tr("เรดาร์ฝนเวลา ")}{tr(new Date(radarFrame.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. · ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</>)}</p>)}
             <div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(layer?.meta.data_updated_at))}{tr(" (เวลาไทย)")}{tr(pending && " · กำลังโหลดข้อมูลดาวเทียมและพยากรณ์เพิ่มเติม")}</span></div>
             {tr(!!layer?.meta.degraded_services.length && <p className="data-notice">{tr("ข้อมูลบางแหล่งไม่พร้อมใช้งาน: ")}{tr(layer.meta.degraded_services.join(", "))}</p>)}
           </div>)}

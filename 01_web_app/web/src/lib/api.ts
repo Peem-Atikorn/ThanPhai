@@ -1,6 +1,26 @@
 export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone" | "landslide";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
-export type RadarFrame = { tiles: string; time: number };
+export type RadarFrame = {
+  tiles: string | null;
+  time: number;
+  kind?: "observed" | "forecast";
+  horizonMin?: number;
+  /** Forecast frames show the latest real image; this is its time. */
+  imageTime?: number;
+};
+export type RadarNowcast = {
+  enabled: boolean;
+  status: "ok" | "unavailable";
+  past_frames: { tile_url: string; time: number }[];
+  /** `cells` are the backend's projected positions of each rain cell at this lead time. */
+  forecast_frames: { time: number; horizon_min: number; dx_pixels: number; dy_pixels: number; cells?: { id: number | string; lat: number; lon: number }[] }[];
+  motion: { speed_kmh: number; direction_deg: number; direction_th: string; is_moving?: boolean } | null;
+  rain_cells: { id: number | string; centroid_lat: number; centroid_lon: number; peak_intensity_dbz: number }[];
+  explanation: string;
+  explanation_source: "qwen" | "template";
+  /** Qwen was still writing when the backend answered; asking again later returns its text. */
+  explanation_pending?: boolean;
+};
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "flood", th: "น้ำท่วม", ready: true },
@@ -316,7 +336,13 @@ export const api = {
     const res = await fetch("/api/v1/radar", { cache: "no-store" });
     if (res.status === 404) return { enabled: false, frames: [] };
     if (!res.ok) throw new Error(`${res.status}`);
-    return { enabled: true, frames: (await res.json()).frames };
+    return { enabled: true, frames: (await res.json()).frames.map((frame: { tiles: string; time: number }) => ({ ...frame, kind: "observed" as const })) };
+  },
+  radarNowcast: async (): Promise<RadarNowcast> => {
+    const res = await fetch("/api/v1/radar/nowcast", { cache: "no-store" });
+    if (res.status === 404) return { enabled: false, status: "unavailable", past_frames: [], forecast_frames: [], motion: null, rain_cells: [], explanation: "", explanation_source: "template" };
+    if (!res.ok) throw new Error(`${res.status}`);
+    return { enabled: true, ...(await res.json()) };
   },
   warnings: () => get<{ warnings: OfficialWarning[] }>(`/v1/warnings`),
   storms: () => get<StormsResponse>(`/v1/storms`),
