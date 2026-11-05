@@ -73,7 +73,7 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             return <article key={metric} title={details}>
                 <span className="environment-icon" aria-hidden="true"><Icon name={metric}/></span>
                 <h3>{tr(titles[metric])}</h3>
-                <p className="environment-value">{metric === "heat" && available && <span className="sr-only">{tr("ตอนนี้ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: metric === "rain_storm" ? 0 : 1 }) : "—"}</strong>{available && <span>{tr(units[metric])}</span>}</p>
+                <p className="environment-value">{metric === "heat" && available && <span className="sr-only">{tr("ตอนนี้ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: metric === "rain_storm" ? 0 : 1 }) : "—"}</strong>{available && <span>{tr(units[metric])}</span>}{available && peakHour && <span className="environment-hour">{tr(peakHour)}</span>}</p>
                 <small className="environment-status">{tr(available ? (model || metric === "rain_storm" ? "แบบจำลอง · " : "") + period : status)}</small>
                 <span className="sr-only"><span className={"risk-badge level-" + (level ?? "NONE")}>{tr(status)}</span> · {details}</span>
             </article>;

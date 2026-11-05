@@ -16,7 +16,8 @@ export default function DataClock({ updatedAt }: { updatedAt: string | null }) {
     const now = useSyncExternalStore(subscribe, minute, () => null);
     const fetched = updatedAt ? Date.parse(updatedAt) : NaN;
     if (now === null) return null;  // no clock on the server render
-    return <p className="data-clock" aria-live="off">
+    // A div, not a p: the landscape footer hides its <p> children.
+    return <div className="data-clock" aria-live="off">
         {tr("ดึงข้อมูลล่าสุด ")}{Number.isNaN(fetched) ? "—" : thaiTime(fetched)}{tr(" · ตอนนี้ ")}{thaiTime(now * 60000)}{tr(" (เวลาไทย)")}
-    </p>;
+    </div>;
 }
