@@ -7,6 +7,8 @@ export type RadarFrame = {
   horizonMin?: number;
   /** Forecast frames show the latest real image; this is its time. */
   imageTime?: number;
+  /** Forecast frames: how far the latest real image is moved (pixels of zoom-4 tile 12/7, from the nowcast). */
+  shift?: { dx: number; dy: number };
 };
 export type RadarNowcast = {
   enabled: boolean;

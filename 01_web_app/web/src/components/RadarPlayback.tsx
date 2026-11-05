@@ -5,9 +5,17 @@ import type { RadarFrame } from "@/lib/api";
 import { CurrentTime } from "@/components/DataClock";
 import { getLocale, t as tr } from "@/lib/i18n";
 
-// Keep the original 12-second interval at 1x.
+// At 1x the timeline moves one frame (10 min of radar) every 12 s; 3x and 5x only move the clock faster.
+// RainViewer allows 100 tiles/min/IP, so an image the browser has not loaded yet is shown at most once every
+// 12 s (five a minute, as at 1x): playback waits on that frame until then. Images already shown come from the
+// browser cache (RainViewer sends max-age=172800), and forecast frames reuse the latest real image, so after
+// the first pass 3x and 5x run without waiting.
 const PLAYBACK_INTERVAL_MS = 12_000;
-const PLAYBACK_SPEEDS = [0.2, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5];
+const NEW_IMAGE_INTERVAL_MS = 12_000;
+const PLAYBACK_SPEEDS = [1, 3, 5];
+// The slider and its time label move in small steps; re-rendering on every animation frame (~60/s) adds nothing.
+const SLIDER_UPDATE_MS = 100;
+const clock = (seconds: number) => new Intl.DateTimeFormat(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }).format(seconds * 1000);
 
 export default function RadarPlayback({ frames, index, explanation, explanationSource, explanationPending = false, onChange, onPlaybackChange }: {
   frames: RadarFrame[];
@@ -19,17 +27,23 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
   onPlaybackChange?: (playing: boolean) => void;
 }) {
   const [playing, setPlaying] = useState(false);
-  const [speedIndex, setSpeedIndex] = useState(4);
+  const [speedIndex, setSpeedIndex] = useState(0);
   const speed = PLAYBACK_SPEEDS[speedIndex];
   const [position, setPosition] = useState(index);
   const cursor = useRef(index);
   const selected = useRef(index);
-  const playback = useRef({ length: frames.length, onChange });
+  const playback = useRef({ frames, onChange });
+  // Tile URLs the map has already shown (so the browser has them), and when playback last showed a new one.
+  const seenTiles = useRef(new Set<string>());
+  const lastNewImage = useRef(-Infinity);
   const frame = frames[index];
 
   useEffect(() => {
-    playback.current = { length: frames.length, onChange };
-  }, [frames.length, onChange]);
+    playback.current = { frames, onChange };
+  }, [frames, onChange]);
+  useEffect(() => {
+    if (frame?.tiles) seenTiles.current.add(frame.tiles);
+  }, [frame?.tiles]);
   useEffect(() => {
     if (selected.current !== index || cursor.current >= frames.length) {
       cursor.current = index;
@@ -40,16 +54,37 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
   useEffect(() => {
     if (!playing || frames.length < 2) return;
     let previous: number | null = null;
+    let rendered = -Infinity;
     let animationId: number;
     const tick = (now: number) => {
+      // The shown image and the preloaded next one have just been fetched; the first new one waits its turn too.
+      // Timed on the animation clock, the same one every later check uses.
+      if (lastNewImage.current === -Infinity) lastNewImage.current = now;
       const elapsed = previous === null ? 0 : now - previous;
       previous = now;
-      const { length, onChange } = playback.current;
+      const { frames, onChange } = playback.current;
+      const length = frames.length;
+      const before = cursor.current;
       cursor.current = (cursor.current + elapsed * speed / PLAYBACK_INTERVAL_MS) % length;
-      setPosition(Math.min(cursor.current, length - 1));
       // The map still receives only whole image changes; fractional progress stays in this component.
       const nextIndex = Math.floor(cursor.current);
-      if (nextIndex !== selected.current) {
+      let changed = nextIndex !== selected.current;
+      const tiles = frames[nextIndex]?.tiles;
+      if (changed && tiles && !seenTiles.current.has(tiles)) {
+        if (now - lastNewImage.current < NEW_IMAGE_INTERVAL_MS) {
+          // Not loaded yet and the last new image was too recent: hold at the end of the current frame.
+          cursor.current = before;
+          changed = false;
+        } else {
+          lastNewImage.current = now;
+          seenTiles.current.add(tiles);
+        }
+      }
+      if (changed || now - rendered >= SLIDER_UPDATE_MS) {
+        rendered = now;
+        setPosition(Math.min(cursor.current, length - 1));
+      }
+      if (changed) {
         selected.current = nextIndex;
         onChange(nextIndex);
       }
@@ -73,7 +108,7 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
   const before = Math.floor(displayPosition);
   const after = Math.min(before + 1, frames.length - 1);
   const cursorTime = frames[before].time + (frames[after].time - frames[before].time) * (displayPosition - before);
-  const sliderTime = new Intl.DateTimeFormat(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }).format(cursorTime * 1000);
+  const sliderTime = clock(cursorTime);
   const seek = (value: number) => {
     const next = Math.max(0, Math.min(value, frames.length - 1));
     setPlaying(false);
@@ -117,10 +152,12 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
     </div>
     <div className="radar-frame-time">
       <span className={"radar-frame-badge" + (forecast ? " is-forecast" : "")}>{forecast ? <>{tr("ค่าคาดการณ์")} +{frame.horizonMin ?? 0} {tr("นาที")}</> : tr("เรดาร์จริง")}</span>
-      <CurrentTime/>
+      {/* The time of the image on the map; the clock beside it is only "now", so the two are labelled apart. */}
+      <time className="radar-image-time" dateTime={new Date(frame.time * 1000).toISOString()}>{tr(forecast ? "เวลา " : "ภาพเวลา ")}{clock(frame.time)}{tr(" น.")}</time>
+      <small className="radar-now">{tr("ตอนนี้ ")}<CurrentTime/></small>
     </div>
     {forecast && <div className="radar-forecast-copy">
-      {frame.imageTime != null && <p>{tr("ภาพจางคือเรดาร์จริงล่าสุดเวลา ")}{new Intl.DateTimeFormat(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }).format(frame.imageTime * 1000)}{tr(" น. ไม่ใช่ภาพฝนคาดการณ์")}</p>}
+      {frame.imageTime != null && <p>{tr("ภาพคาดการณ์คือภาพเรดาร์จริงเวลา ")}{clock(frame.imageTime)}{tr(" น. เลื่อนตามทิศทางและความเร็วที่วัดได้ ไม่รวมฝนที่เกิดใหม่หรือสลายไป")}</p>}
       {explanationPending && <small>{tr("AI กำลังเรียบเรียงคำอธิบาย ระหว่างนี้แสดงข้อความแม่แบบ")}</small>}
       {/* Shown exactly as validated; translating it would rewrite LLM text after validate(). */}
       {explanation && <p>{explanation}</p>}

@@ -19,7 +19,7 @@ import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
 import RadarPlayback from "@/components/RadarPlayback";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
-import { OverlayControls, useOverviewLayers } from "@/components/OverviewLayers";
+import { OverlayControls, OverlayLegends, useOverviewLayers } from "@/components/OverviewLayers";
 import { RiverDetail, RiverRow, riverTime, RiverSort, sortRivers } from "@/components/RiverPanel";
 const HazardMap = dynamic(() => import("@/components/HazardMap"), {
     ssr: false,
@@ -133,7 +133,7 @@ function radarTimeline(observedRadar: { frames: RadarFrame[] } | null, nowcast: 
     const observed = (fromNowcast.at(-1)?.time ?? -Infinity) > (fromRadar.at(-1)?.time ?? -Infinity) ? fromNowcast : fromRadar;
     const latest = observed.at(-1);
     const forecasts: RadarFrame[] = latest && nowcast?.motion && nowcast.past_frames.at(-1)?.time === latest.time
-        ? nowcast.forecast_frames.map((frame) => ({ tiles: latest.tiles, imageTime: latest.time, time: frame.time, kind: "forecast", horizonMin: frame.horizon_min }))
+        ? nowcast.forecast_frames.map((frame) => ({ tiles: latest.tiles, imageTime: latest.time, time: frame.time, kind: "forecast", horizonMin: frame.horizon_min, shift: { dx: frame.dx_pixels, dy: frame.dy_pixels } }))
         : [];
     return { frames: [...observed, ...forecasts], latestObservedIndex: Math.max(0, observed.length - 1) };
 }
@@ -365,6 +365,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const displayedLayer = useMemo(() => selectedRiskLevel && overviewData ? { ...overviewData, features: overviewData.features.filter(f => f.properties?.level === selectedRiskLevel) } : layer, [selectedRiskLevel, overviewData, layer]);
     const overlays = useOverviewLayers(overview, revision);
     const [pmOn, setPmOn] = useState(false);
+    const overviewLegend = overview && !selectedRiskLevel && (pmOn || Object.values(overlays.enabled).some(Boolean));
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(false);
@@ -937,7 +938,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
-            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
+            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarShift={radarFrame?.shift ?? null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
               <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>{tr("แผนที่กลางคืน")}</button>
@@ -955,7 +956,12 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(view === "rivers" && rivers.status === "error" && !rivers.list.length && <div className="map-notice error-notice" role="alert"><Icon name="info"/><div><strong>{tr("โหลดข้อมูลแม่น้ำไม่สำเร็จ")}</strong><p>{tr("ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง")}</p></div><button className="text-button" onClick={() => setRevision((value) => value + 1)}>{tr("ลองใหม่")}</button></div>)}
           </div>
           {showRadar && !selectedRiskLevel && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarNowcast?.explanation ?? ""} explanationSource={radarNowcast?.explanation_source ?? "template"} explanationPending={!!radarNowcast?.explanation_pending} onChange={(index) => { const frame = radarFrames[index]; setRadarSelection(frame ? { time: frame.time, kind: frame.kind } : null); }} onPlaybackChange={setRadarPlaying}/>}
-          {!overview && <details className="map-supplement"><summary>{tr("คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
+          {/* The overview shows the legend only while a layer is on; it explains the colours each layer draws. */}
+          {(!overview || overviewLegend) && <details className="map-supplement"><summary>{tr(overview ? "ชั้นข้อมูลและคำอธิบายแผนที่" : "คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
+          {tr(overviewLegend && <div className="overview-overlay-summary">
+            <OverlayLegends data={overlays.data} enabled={overlays.enabled}/>
+            {tr(pmOn && <section><h4>{tr("ฝุ่น PM2.5 · เฉลี่ย 24 ชม.")}</h4><ul className="overlay-levels">{tr(PM25_BANDS.map(b => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}</li>))}</ul><p>{tr(airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ · แสดงข้อมูลเดิมถ้ามี" : !airStations?.length ? "ยังไม่มีข้อมูลสถานี" : tr("") + tr(airStations.length) + tr(" สถานี · แต่ละสถานีอาจรายงานคนละเวลา"))}</p><small>{tr("Air4Thai (กรมควบคุมมลพิษ) · เวลาล่าสุด ")}{tr(formatTime(airStations?.map(s => s.time).sort().at(-1)))}{tr(" (เวลาไทย)")}</small></section>)}
+          </div>)}
           {tr(view === "water-quality" ? <div className="map-summary"><div className="legend-heading"><h3>{tr("สถานีวัดคุณภาพน้ำ")}</h3><span>{tr(visibleQuality.length)}{tr(" สถานี")}</span></div><p className="source-note"><span style={{ color: "#e07b16" }}>●</span>{tr(" มีค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#2f7fb5" }}>●</span>{tr(" ไม่พบค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#8a97a3" }}>●</span>{tr(" ไม่มีค่าความเค็มและออกซิเจน")}</p><div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(quality.updated))}{tr(" (เวลาไทย)")}</span></div></div> : view === "rivers" ? <div className="map-summary">
             <div className="legend-heading"><h3>{tr("สถานะน้ำเทียบตลิ่ง")}{tr(riverProvince && tr(" \u00B7 จ.") + tr(riverProvince.name) + tr(""))}</h3><span>{tr(rivers.list.length ? number.format(visibleRivers.length) + " สถานี" : "รอข้อมูล")}</span></div>
             <ul className="risk-legend">{tr(RIVER_STATUS.map((c) => <li key={c.id}><span className="legend-dot" style={{ background: c.color }}/><span>{tr(c.th)}</span><strong>{tr(rivers.list.length ? number.format(visibleRivers.filter((r) => r.status === c.id).length) : "—")}</strong></li>))}</ul>
