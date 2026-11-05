@@ -1,7 +1,10 @@
 """Daily hotspot counts per district and the features/labels for the fire model.
 
 Target: will the district have >= 3 hotspots in the next 7 days? (the same count as the WATCH rule).
-Features use only data up to day t, so training and live prediction see the same inputs.
+Features use only data up to day t, so training and live prediction see the same inputs:
+- Multi-day composite sources (e.g. MODIS 16-day NDVI) must use composites ending on or before day t.
+- Relative humidity must represent observations actually available as of day t (e.g. from TMD daily observations),
+  never incorporating look-ahead future observations.
 """
 
 import gzip
@@ -17,6 +20,7 @@ HORIZON_DAYS = 7
 TARGET_MIN_HOTSPOTS = 3
 HISTORY_DAYS = 30
 FEATURES = ["c1", "c3", "c7", "c30", "frp7", "prov7", "doy_sin", "doy_cos", "clim"]
+EXTENDED_FEATURES = [*FEATURES, "ndvi", "rel_humidity"]
 
 
 def load_hotspots(folder: Path) -> pd.DataFrame:
@@ -75,7 +79,13 @@ def climatology(grid: DailyGrid, years: set[int]) -> np.ndarray:
     return clim
 
 
-def features(grid: DailyGrid, province_of: list[str], clim: np.ndarray) -> dict[str, np.ndarray]:
+def features(
+    grid: DailyGrid,
+    province_of: list[str],
+    clim: np.ndarray,
+    ndvi: np.ndarray | None = None,
+    humidity: np.ndarray | None = None,
+) -> dict[str, np.ndarray]:
     """Feature arrays shaped [days, amphoe]."""
     c7 = _window_sum(grid.counts, 7)
     provinces = sorted(set(province_of))
@@ -85,7 +95,7 @@ def features(grid: DailyGrid, province_of: list[str], clim: np.ndarray) -> dict[
     doy = np.array([d.timetuple().tm_yday for d in grid.dates], dtype=np.float32)
     months = np.array([d.month for d in grid.dates])
     ones = np.ones(grid.counts.shape, dtype=np.float32)
-    return {
+    feats = {
         "c1": grid.counts,
         "c3": _window_sum(grid.counts, 3),
         "c7": c7,
@@ -96,6 +106,12 @@ def features(grid: DailyGrid, province_of: list[str], clim: np.ndarray) -> dict[
         "doy_cos": ones * np.cos(2 * np.pi * doy / 365.25)[:, None],
         "clim": clim[months - 1],
     }
+    for name, arr in (("ndvi", ndvi), ("rel_humidity", humidity)):
+        if arr is not None:
+            if arr.shape != grid.counts.shape:
+                raise ValueError(f"{name} shape {arr.shape} != {grid.counts.shape}")
+            feats[name] = arr.astype(np.float32)
+    return feats
 
 
 def labels(grid: DailyGrid) -> np.ndarray:

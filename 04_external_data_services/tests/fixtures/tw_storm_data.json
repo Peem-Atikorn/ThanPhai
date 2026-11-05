@@ -1,0 +1,101 @@
+{
+ "result": "OK",
+ "data": [
+  {
+   "storm_name": "CHAMPI",
+   "storm_data": [
+    {
+     "storm_datetime": "2026-10-22 12:00",
+     "storm_lat": 21.2,
+     "storm_direction_lat": "N",
+     "storm_long": 124.9,
+     "storm_direction_long": "E",
+     "storm_name": "CHAMPI",
+     "storm_pressure": "",
+     "storm_wind": "100"
+    }
+   ]
+  }
+ ],
+ "setting": [
+  {
+   "operator": ">",
+   "term": "135",
+   "color": "#CC00CC",
+   "knots_text": ">135",
+   "mph_text": ">155",
+   "kmh_text": ">250",
+   "category": "Cat 5",
+   "strength": "Typhoon Cat 5",
+   "scale_text": "รุนแรงมาก",
+   "level": 7
+  },
+  {
+   "operator": ">=",
+   "term": "114",
+   "color": "#FF0000",
+   "knots_text": "114-135",
+   "mph_text": "131-155",
+   "kmh_text": "211-250",
+   "category": "Cat 4",
+   "strength": "Typhoon Cat 4",
+   "level": 6
+  },
+  {
+   "operator": ">=",
+   "term": "96",
+   "color": "#FF6600",
+   "knots_text": "96-113",
+   "mph_text": "111-130",
+   "kmh_text": "178-210",
+   "category": "Cat 3",
+   "strength": "Typhoon Cat 3",
+   "level": 5
+  },
+  {
+   "operator": ">=",
+   "term": "83",
+   "color": "#FFCC00",
+   "knots_text": "83-95",
+   "mph_text": "96-110",
+   "kmh_text": "154-177",
+   "category": "Cat 2",
+   "strength": "Typhoon Cat 2",
+   "level": 4
+  },
+  {
+   "operator": ">=",
+   "term": "64",
+   "color": "#FFFF00",
+   "knots_text": "64-82",
+   "mph_text": "74-95",
+   "kmh_text": "119-153",
+   "category": "Cat 1",
+   "strength": "Typhoon Cat 1",
+   "level": 3
+  },
+  {
+   "operator": ">=",
+   "term": "34",
+   "color": "#00FF00",
+   "knots_text": "34-63",
+   "mph_text": "39-73",
+   "kmh_text": "63-118",
+   "category": "TS",
+   "strength": "Tropical Storm",
+   "level": 2
+  },
+  {
+   "operator": "<",
+   "term": "34",
+   "color": "#00CCFF",
+   "knots_text": "<34",
+   "mph_text": "<39",
+   "kmh_text": "<63",
+   "category": "TD",
+   "strength": "Tropical Depression",
+   "scale_text": "รุนแรงน้อย",
+   "level": 1
+  }
+ ]
+}

@@ -8,7 +8,7 @@ from datetime import datetime, time, timedelta
 
 LEVELS = {"NORMAL": 0, "WATCH": 1, "WARNING": 2, "CRITICAL": 3}
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต"}
-HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า"}
+HAZARD_TH = {"flood": "น้ำท่วม", "rain_storm": "ฝนหนัก/พายุ", "drought": "ภัยแล้ง", "fire": "ไฟป่า/ไฟหญ้า", "air_quality": "ฝุ่น PM2.5", "heat": "ความร้อนจัด", "earthquake": "แผ่นดินไหว", "marine": "คลื่นลมแรง", "tropical_cyclone": "พายุหมุนเขตร้อน", "landslide": "ดินถล่ม"}
 
 
 @dataclass(frozen=True)

@@ -36,9 +36,13 @@ class FireModel:
     amphoe_codes: list[str] = field(default_factory=list)
     clim: np.ndarray | None = None
     metrics: dict = field(default_factory=dict)
+    feature_names: list[str] = field(default_factory=lambda: list(FEATURES))
 
     def predict_proba(self, table: pd.DataFrame) -> np.ndarray:
-        return self.estimator.predict_proba(table[FEATURES])[:, 1]
+        # joblib/pickle unpickling does not run __init__, and fields using default_factory
+        # have no class attribute fallback on older saved instances, so getattr fallback is required.
+        names = getattr(self, "feature_names", FEATURES)
+        return self.estimator.predict_proba(table[names])[:, 1]
 
     def level(self, p: float) -> str:
         if p >= self.warning_threshold:
@@ -55,10 +59,11 @@ class FireModel:
         return joblib.load(path)
 
 
-def fit(train: pd.DataFrame) -> HistGradientBoostingClassifier:
+def fit(train: pd.DataFrame, feature_names: list[str] | None = None) -> HistGradientBoostingClassifier:
+    feats = feature_names if feature_names is not None else FEATURES
     model = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.08, max_leaf_nodes=31,
                                            l2_regularization=1.0, random_state=0)
-    return model.fit(train[FEATURES], train["y"])
+    return model.fit(train[feats], train["y"])
 
 
 def thresholds(y: np.ndarray, p: np.ndarray) -> tuple[float, float]:

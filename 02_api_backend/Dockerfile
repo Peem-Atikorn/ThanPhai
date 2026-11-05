@@ -14,7 +14,7 @@ COPY 03_hazard_ai_agent /src/03
 COPY 02_api_backend /src/02
 RUN pip install --no-cache-dir /src/shared /src/04 /src/05 /src/06 /src/07 /src/03 /src/02
 
-RUN useradd --create-home app
+RUN useradd --create-home app && mkdir -p /data/state && chown app /data/state
 USER app
 
 EXPOSE 8002

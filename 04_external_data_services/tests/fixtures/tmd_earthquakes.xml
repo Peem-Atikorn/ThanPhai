@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<rss version="2.0"  xmlns:geo="http://www.w3.org/2003/01/geo/" xmlns:tmd="http://www.earthquake.tmd.go.th" >
+
+<channel>
+<title>แผ่นดินไหว</title>
+<link>https://earthquake.tmd.go.th</link>
+<description>กองเฝ้าระวังแผ่นดินไหว</description>
+
+<item>
+	<title>ประเทศเวียดนาม (Vietnam)</title>
+	<link>https://earthquake.tmd.go.th/inside-info.html?earthquake=17270</link>
+	<geo:lat>14.936</geo:lat>
+	<geo:long>107.593</geo:long>
+	<tmd:depth>10</tmd:depth>
+	<tmd:magnitude>3.3</tmd:magnitude>
+	<tmd:time>2026-10-21 13:57:50 UTC</tmd:time>
+	<comments>ทางทิศตะวันออกเฉียงใต้ของ อ. โขงเจียม จ.อุบลราชธานี ประมาณ 229 กม. </comments>
+	<pubDate>Wed, 21 Oct 2026 21:25:42 +0700</pubDate>
+	<description><![CDATA[ แผ่นดินไหว ประเทศเวียดนาม <br>2026-10-21 20:57:50 น.<br>Lat. 14.936 , Long. 107.593<br>ขนาด 3.3 <br><br> ]]></description>
+</item>
+<item>
+	<title>ประเทศเมียนมา (Myanmar)</title>
+	<link>https://earthquake.tmd.go.th/inside-info.html?earthquake=17269</link>
+	<geo:lat>20.567</geo:lat>
+	<geo:long>99.845</geo:long>
+	<tmd:depth>5</tmd:depth>
+	<tmd:magnitude>1.8</tmd:magnitude>
+	<tmd:time>2026-10-21 12:10:32 UTC</tmd:time>
+	<comments>ทางทิศตะวันตกเฉียงเหนือของ อ.แม่สาย จ.เชียงราย ประมาณ 15 กม. </comments>
+	<pubDate>Wed, 21 Oct 2026 19:20:17 +0700</pubDate>
+	<description><![CDATA[ แผ่นดินไหว ประเทศเมียนมา <br>2026-10-21 19:10:32 น.<br>Lat. 20.567 , Long. 99.845<br>ขนาด 1.8 <br><br> ]]></description>
+</item>
+<item>
+	<title>ประเทศลาว (Laos)</title>
+	<link>https://earthquake.tmd.go.th/inside-info.html?earthquake=17268</link>
+	<geo:lat>20.539</geo:lat>
+	<geo:long>101.031</geo:long>
+	<tmd:depth>10</tmd:depth>
+	<tmd:magnitude>2.4</tmd:magnitude>
+	<tmd:time>2026-10-21 11:53:07 UTC</tmd:time>
+	<comments>ทางทิศตะวันออกเฉียงเหนือของ อ.เวียงแก่น จ.เชียงราย ประมาณ 72 กม. </comments>
+	<pubDate>Wed, 21 Oct 2026 19:15:27 +0700</pubDate>
+	<description><![CDATA[ แผ่นดินไหว ประเทศลาว <br>2026-10-21 18:53:07 น.<br>Lat. 20.539 , Long. 101.031<br>ขนาด 2.4 <br><br> ]]></description>
+</item>
+</channel>
+</rss>

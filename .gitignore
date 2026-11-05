@@ -10,3 +10,9 @@ data/cache/
 mlruns/
 data/processed/
 .pytest_tmp/
+07_knowledge_decision_llm/training/data/
+07_knowledge_decision_llm/training/models/
+07_knowledge_decision_llm/training/checkpoints/
+07_knowledge_decision_llm/training/**/*.jsonl
+07_knowledge_decision_llm/training/**/*.gguf
+07_knowledge_decision_llm/training/**/*.safetensors

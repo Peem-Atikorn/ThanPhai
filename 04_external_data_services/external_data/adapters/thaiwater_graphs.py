@@ -82,11 +82,21 @@ def parse_dam_year(raw: Any) -> dict:
     }
 
 
-async def fetch_dam_year(client: httpx.AsyncClient, dam_id: int, series: str, years: list[int] | None = None) -> dict:
+def _dam_year_params(dam_id: int, series: str, years: list[int] | None) -> dict:
     if series not in DAM_SERIES:
         raise ValueError(f"unknown series {series}")
     years = years or [datetime.now().year - 1, datetime.now().year]
-    params = {"data_type": DAM_SERIES[series], "dam_id": dam_id, "year": ",".join(map(str, years))}
+    return {"data_type": DAM_SERIES[series], "dam_id": dam_id, "year": ",".join(map(str, years))}
+
+
+def fetch_dam_year_sync(client: httpx.Client, dam_id: int, series: str, years: list[int] | None = None) -> dict:
+    response = client.get(f"{ROOT}/analyst/dam_yearly_graph", params=_dam_year_params(dam_id, series, years), timeout=30)
+    response.raise_for_status()
+    return parse_dam_year(response.json())
+
+
+async def fetch_dam_year(client: httpx.AsyncClient, dam_id: int, series: str, years: list[int] | None = None) -> dict:
+    params = _dam_year_params(dam_id, series, years)
     response = await client.get(f"{ROOT}/analyst/dam_yearly_graph", params=params, timeout=30)
     response.raise_for_status()
     return parse_dam_year(response.json())

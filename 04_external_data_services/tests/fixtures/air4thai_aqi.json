@@ -1,0 +1,254 @@
+{
+ "stations": [
+  {
+   "stationID": "119t",
+   "nameTH": "สวนสาธารณะธารา",
+   "nameEN": "Thara Public Park",
+   "areaTH": "ต.ปากน้ำ อ.เมือง, กระบี่",
+   "areaEN": "Pak Nam Subdistrict, Mueang District, Krabi",
+   "stationType": "GROUND",
+   "lat": "8.0506237",
+   "long": "98.9180489",
+   "forecast": [],
+   "AQILast": {
+    "date": "2026-10-22",
+    "time": "03:00",
+    "PM25": {
+     "color_id": "1",
+     "aqi": "15",
+     "value": "9.0"
+    },
+    "PM10": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "O3": {
+     "color_id": "1",
+     "aqi": "19",
+     "value": "27"
+    },
+    "CO": {
+     "color_id": "1",
+     "aqi": "3",
+     "value": "0.60"
+    },
+    "NO2": {
+     "color_id": "1",
+     "aqi": "0",
+     "value": "0"
+    },
+    "SO2": {
+     "color_id": "1",
+     "aqi": "0",
+     "value": "1"
+    },
+    "AQI": {
+     "color_id": "1",
+     "aqi": "19",
+     "param": "O3"
+    }
+   }
+  },
+  {
+   "stationID": "52t",
+   "nameTH": "การไฟฟ้าย่อยธนบุรี ",
+   "nameEN": "Thonburi Power Sub-Station",
+   "areaTH": "ริมถนนอินทรพิทักษ์ เขตธนบุรี, กรุงเทพฯ",
+   "areaEN": "Intarapitak Rd. Khet Thon Buri, Bangkok",
+   "stationType": "GROUND",
+   "lat": "13.727622",
+   "long": "100.486568",
+   "forecast": [],
+   "AQILast": {
+    "date": "2026-10-22",
+    "time": "03:00",
+    "PM25": {
+     "color_id": "2",
+     "aqi": "31",
+     "value": "17.3"
+    },
+    "PM10": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "O3": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "CO": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "NO2": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "SO2": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "AQI": {
+     "color_id": "2",
+     "aqi": "31",
+     "param": "PM25"
+    }
+   }
+  },
+  {
+   "stationID": "53t",
+   "nameTH": "สถานีตำรวจนครบาลโชคชัย ",
+   "nameEN": "Chokchai Police Station",
+   "areaTH": "ริมถนนลาดพร้าว เขตวังทองหลาง, กรุงเทพฯ",
+   "areaEN": "Lat Phrao Rd. Khet Wang Thonglang, Bangkok",
+   "stationType": "GROUND",
+   "lat": "13.7954248",
+   "long": "100.5930298",
+   "forecast": [],
+   "AQILast": {
+    "date": "2026-10-22",
+    "time": "03:00",
+    "PM25": {
+     "color_id": "2",
+     "aqi": "31",
+     "value": "17.2"
+    },
+    "PM10": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "O3": {
+     "color_id": "0",
+     "aqi": "-999",
+     "value": "-1"
+    },
+    "CO": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "NO2": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "SO2": {
+     "color_id": "0",
+     "aqi": "-999",
+     "value": "-1"
+    },
+    "AQI": {
+     "color_id": "2",
+     "aqi": "31",
+     "param": "PM25"
+    }
+   }
+  },
+  {
+   "stationID": "81t",
+   "nameTH": "อ่างเก็บน้ำประปา",
+   "nameEN": "Water reservoir",
+   "areaTH": "ต.นครปฐม อ.เมือง, นครปฐม",
+   "areaEN": "Mueang, Nakhon Pathom",
+   "stationType": "GROUND",
+   "lat": "13.832076",
+   "long": "100.057961",
+   "forecast": [],
+   "AQILast": {
+    "date": "2026-10-13",
+    "time": "19:00",
+    "PM25": {
+     "color_id": "2",
+     "aqi": "42",
+     "value": "21.9"
+    },
+    "PM10": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "O3": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "CO": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "NO2": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "SO2": {
+     "color_id": "0",
+     "aqi": "-1",
+     "value": "-1"
+    },
+    "AQI": {
+     "color_id": "-2",
+     "aqi": "42",
+     "param": "PM25"
+    }
+   }
+  },
+  {
+   "stationID": "bkp128t",
+   "nameTH": "สวนพระนคร",
+   "nameEN": "Phra Nakhon Park",
+   "areaTH": "สวนพระนคร เขตลาดกระบัง",
+   "areaEN": "Phra Nakhon Park, Lat Krabang, Bangkok",
+   "stationType": "BKK",
+   "lat": "13.7201042",
+   "long": "100.7807077",
+   "forecast": [],
+   "AQILast": {
+    "date": "2026-09-30",
+    "time": "23:00",
+    "PM25": {
+     "color_id": "0",
+     "aqi": "-9999",
+     "value": "-1"
+    },
+    "PM10": {
+     "color_id": "0",
+     "aqi": "-999",
+     "value": "-1"
+    },
+    "O3": {
+     "color_id": "0",
+     "aqi": "-999",
+     "value": "-1"
+    },
+    "CO": {
+     "color_id": "0",
+     "aqi": "-999",
+     "value": "-1"
+    },
+    "NO2": {
+     "color_id": "0",
+     "aqi": "-999",
+     "value": "-1"
+    },
+    "SO2": {
+     "color_id": "0",
+     "aqi": "-999",
+     "value": "-1"
+    },
+    "AQI": {
+     "color_id": "0",
+     "aqi": "-999",
+     "param": "PM10"
+    }
+   }
+  }
+ ]
+}

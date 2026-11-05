@@ -1,0 +1,261 @@
+/* Glass navigation expands beside the map; its children belong to the category. */
+.landscape-shell .journey-header-message { align-self: center; min-width: 0; }
+.landscape-shell .journey-header-message h1,
+.landscape-shell .journey-header-message h1 span { color: var(--cc-accent); }
+.landscape-shell .journey-bottom { grid-template-columns: 76px minmax(0,1fr); gap: 14px; transition: grid-template-columns 380ms cubic-bezier(.22,1,.36,1); }
+.landscape-shell.navigation-expanded .journey-bottom { grid-template-columns: 76px minmax(0,1fr); }
+.landscape-shell .journey-category-bar { position: relative; top: auto; width: 100%; padding: 6px; gap: 4px; max-height: 100%; overscroll-behavior: contain; scrollbar-width: thin; background: linear-gradient(150deg, rgb(49 60 64 / .88), rgb(27 35 39 / .92)); box-shadow: inset 0 1px rgb(255 255 255 / .07), 0 12px 30px rgb(0 0 0 / .12); }
+.landscape-shell .journey-category-entry { width: 100%; min-width: 0; flex-shrink: 0; }
+.landscape-shell .journey-category-button { position: relative; width: 100%; min-height: 60px; }
+.landscape-shell .category-chevron { display: none; }
+.landscape-shell.navigation-expanded .journey-category-button { flex-direction: row; justify-content: flex-start; gap: 10px; min-height: 48px; padding: 8px 10px; text-align: left; }
+.landscape-shell.navigation-expanded .journey-category-button strong { font-size: 12px; }
+.landscape-shell.navigation-expanded .category-chevron { display: block; margin-left: auto; color: var(--muted); transform: rotate(90deg); transition: transform 180ms ease; }
+.landscape-shell .category-chevron svg { width: 13px; height: 13px; }
+.landscape-shell.navigation-expanded [aria-expanded="true"] .category-chevron { transform: rotate(-90deg); }
+.landscape-shell .category-submenu { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; margin-top: 0; transition: grid-template-rows 320ms cubic-bezier(.22,1,.36,1), margin-top 320ms ease, opacity 180ms ease, visibility 0s 320ms; }
+.landscape-shell .category-submenu[data-open="true"] { grid-template-rows: 1fr; opacity: 1; visibility: visible; margin-top: 4px; transition-delay: 0s; }
+.landscape-shell .category-submenu-items { min-height: 0; overflow: hidden; display: grid; gap: 3px; margin-left: 20px; padding-left: 9px; border-left: 1px solid rgb(216 240 151 / .25); }
+.landscape-shell .category-submenu button { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 7px 9px; border: 1px solid transparent; border-radius: 9px; color: var(--muted); font-size: 12px; text-align: left; opacity: 0; transform: translateX(-7px); transition: opacity 160ms ease, transform 260ms cubic-bezier(.22,1,.36,1), background-color 180ms ease, border-color 180ms ease; }
+.landscape-shell .category-submenu[data-open="true"] button { opacity: 1; transform: translateX(0); }
+.landscape-shell .category-submenu button svg { width: 17px; height: 17px; flex-shrink: 0; }
+.landscape-shell .category-submenu button:hover { color: var(--foreground); background: rgb(255 255 255 / .06); }
+.landscape-shell .category-submenu button.is-active { color: var(--cc-accent); background: var(--accent-soft); border-color: rgb(216 240 151 / .4); }
+.landscape-shell .category-submenu button:focus-visible { outline: 2px solid var(--cc-focus); outline-offset: -2px; }
+.landscape-shell .map-chrome { flex: 0 0 76px; height: 76px; display: block; }
+.landscape-shell .journey-dashboard .map-heading { position: static; height: 100%; padding: 10px 16px; }
+.landscape-shell .journey-dashboard .map-heading-copy { display: block; }
+.landscape-shell .map-supplement .map-controls { padding: 8px 6px; }
+.landscape-shell .map-supplement .layer-toolbar { height: auto; padding: 0; }
+.landscape-shell .map-supplement .layer-toolbar-buttons { flex-wrap: wrap; overflow: visible; }
+.landscape-shell .map-supplement[open] { max-height: 45%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; }
+.landscape-shell .map-supplement > summary { position: sticky; top: 0; z-index: 1; background: var(--cc-panel-deep); }
+.landscape-shell .map-supplement-body { max-height: none; overflow: visible; }
+.landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr) clamp(320px,25vw,390px); }
+@media (min-width: 1051px) {
+  .landscape-shell .journey-category-button, .landscape-shell.navigation-expanded .journey-category-button,
+  .landscape-shell .category-submenu button { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 60px; min-height: 60px; padding: 6px 2px; gap: 4px; text-align: center; }
+  .landscape-shell .journey-category-button strong, .landscape-shell.navigation-expanded .journey-category-button strong { font-size: 10px; }
+  .landscape-shell .category-submenu-items { margin-inline: -6px; padding-inline: 6px; border: 0; gap: 4px; }
+  .landscape-shell .category-submenu-items::before, .landscape-shell .category-submenu-items::after { content: ""; display: block; height: 5px; }
+  .landscape-shell .category-submenu button { padding-block: 4px; font-size: 10px; line-height: 1.2; border-radius: 12px; }
+  .landscape-shell .category-submenu button svg { width: 21px; height: 21px; }
+  .landscape-shell .category-submenu button > span { overflow-wrap: anywhere; }
+  .landscape-shell .journey-category-button .category-chevron, .landscape-shell.navigation-expanded .journey-category-button .category-chevron { position: absolute; top: 3px; right: 2px; display: block; margin: 0; opacity: .6; transform: rotate(90deg); }
+  .landscape-shell .journey-category-button .category-chevron svg { width: 9px; height: 9px; }
+  .landscape-shell .journey-category-button[aria-expanded="true"] .category-chevron { transform: rotate(-90deg); }
+}
+@media (max-width: 1050px) {
+  .landscape-shell .journey-bottom, .landscape-shell.navigation-expanded .journey-bottom { grid-template-columns: minmax(0,1fr); }
+  .landscape-shell .journey-category-bar { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 4px; overflow-x: hidden; }
+  .landscape-shell .journey-category-entry { display: contents; }
+  .landscape-shell .journey-category-button, .landscape-shell.navigation-expanded .journey-category-button { grid-row: 1; flex-direction: column; justify-content: center; min-height: 48px; padding: 5px 1px; gap: 3px; text-align: center; }
+  .landscape-shell.navigation-expanded .journey-category-button strong { font-size: 10px; }
+  .landscape-shell.navigation-expanded .category-chevron { display: none; }
+  .landscape-shell .category-submenu { grid-row: 2; grid-column: 1 / -1; min-width: 0; }
+  .landscape-shell .category-submenu[data-open="true"] { margin-top: 6px; }
+  .landscape-shell .category-submenu-items { display: flex; gap: 5px; margin: 0; padding: 0; border: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }
+  .landscape-shell .category-submenu button { flex: 1 0 auto; justify-content: center; padding: 6px 9px; min-height: 40px; font-size: 11px; white-space: nowrap; }
+  .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr); }
+  .landscape-shell .map-chrome { height: 64px; flex-basis: 64px; }
+}
+@media (max-width: 600px) {
+  .landscape-shell .journey-category-button strong { font-size: 9px; }
+  .landscape-shell .journey-category-button > svg { width: 18px; height: 18px; }
+  .landscape-shell .journey-dashboard .map-heading { padding: 6px 10px; }
+}
+@media (max-width: 1050px) and (max-height: 700px) {
+  .landscape-shell .journey-category-button, .landscape-shell.navigation-expanded .journey-category-button { min-height: 42px; padding-block: 3px; }
+  .landscape-shell .map-chrome { height: 48px; flex-basis: 48px; }
+}
+
+/* Loading follows the real initial request; it never adds a fixed waiting period. */
+.rain-skeleton { color: #d8ed9c; background: #242c30; display: grid; place-items: center; overflow: hidden; }
+.rain-skeleton--page { position: fixed; inset: 0; z-index: 100; height: 100dvh; background: radial-gradient(ellipse at 50% 35%, #38433b 0, #252e32 45%, #1c2429 100%); }
+.rain-skeleton-layout { position: absolute; inset: 24px; opacity: .5; display: grid; grid-template-rows: 72px minmax(0,1fr); gap: 18px; }
+.rain-skeleton-layout i { display: block; border: 1px solid rgb(226 236 224 / .08); border-radius: 14px; background: rgb(227 237 223 / .035); }
+.rain-skeleton-header { display: grid; grid-template-columns: 1fr repeat(3,110px); gap: 10px; }
+.rain-skeleton-body { display: grid; grid-template-columns: 76px minmax(0,1fr) 300px; gap: 16px; }
+.rain-skeleton-body > div { display: grid; grid-template-rows: 110px 1fr 80px; gap: 12px; }
+.rain-skeleton-message { position: relative; z-index: 1; display: grid; justify-items: center; padding: 20px; text-align: center; }
+.rain-cloud { width: 170px; height: 152px; filter: drop-shadow(0 10px 24px rgb(0 0 0 / .2)); }
+.rain-cloud-shape { animation: cloud-float 3s ease-in-out infinite; }
+.rain-cloud-drops path { animation: cloud-rain 1.4s ease-in-out infinite; }
+.rain-cloud-drops path:nth-child(2) { animation-delay: .3s; }
+.rain-cloud-drops path:nth-child(3) { animation-delay: .6s; }
+.rain-skeleton-message strong { color: #e8eee4; font-size: 18px; font-weight: 500; }
+.rain-skeleton-message p { color: #b7c2b8; font-size: 12px; margin-top: 7px; }
+.rain-skeleton-message button { color: #d8ed9c; font-size: 12px; min-height: 44px; margin-top: 16px; padding: 8px 14px; border: 1px solid rgb(216 237 156 / .25); border-radius: 10px; }
+.rain-skeleton-message button:hover { background: rgb(216 237 156 / .1); }
+.rain-skeleton-message button:focus-visible { outline: 2px solid #d8ed9c; outline-offset: 3px; }
+.rain-skeleton--inline { position: absolute; inset: 0; z-index: 2; }
+.rain-skeleton--inline .rain-cloud { width: 120px; height: 110px; }
+.rain-skeleton--inline strong { font-size: 14px; }
+@keyframes cloud-float { 50% { transform: translateY(-4px); } }
+@keyframes cloud-rain { 0% { opacity: 0; transform: translateY(-3px); } 35% { opacity: .8; } 100% { opacity: 0; transform: translateY(15px); } }
+@media (max-width: 600px) {
+  .rain-skeleton-layout { inset: 12px; grid-template-rows: 100px minmax(0,1fr); gap: 12px; }
+  .rain-skeleton-header { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .rain-skeleton-body { grid-template-columns: minmax(0,1fr); grid-template-rows: 44px minmax(0,1.3fr) minmax(0,1fr); gap: 10px; }
+  .rain-skeleton-body > div { grid-template-rows: 1fr 1fr; }
+  .rain-skeleton-body > div > i:last-child { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landscape-shell .journey-bottom, .landscape-shell .category-chevron, .landscape-shell .journey-category-button > svg, .landscape-shell .journey-category-button > span, .landscape-shell .category-submenu, .landscape-shell .category-submenu button { transition: none !important; transition-delay: 0s !important; }
+  .rain-cloud-shape, .rain-cloud-drops path { animation: none; }
+}
+
+/* One neutral focus border replaces the nested green outline in area search. */
+.landscape-shell .journey-search-dialog #area-search:focus { outline: none; box-shadow: none; }
+.landscape-shell .journey-search-dialog .input-wrap:focus-within { border-color: #afc3c9; box-shadow: 0 0 0 1px rgb(175 195 201 / .25); }
+.landscape-shell .location-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--foreground); font-size: 13px; background: rgb(255 255 255 / .04); }
+.landscape-shell .location-button:hover { background: rgb(255 255 255 / .09); }
+.landscape-shell .location-button svg { width: 18px; height: 18px; color: var(--cc-accent); }
+.landscape-shell .location-error { margin-top: 10px; line-height: 1.8; }
+.landscape-shell .search-results [aria-selected="true"] { background: rgb(175 195 201 / .14); outline: 1px solid rgb(175 195 201 / .4); outline-offset: -1px; }
+.landscape-shell .header-location-controls { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.landscape-shell .journey-search-icon.has-location { max-width: 265px; }
+.landscape-shell .journey-search-icon.has-location > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.landscape-shell .clear-location-button { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); background: var(--cc-glass); }
+.landscape-shell .clear-location-button:hover { color: var(--foreground); background: var(--cc-panel-deep); }
+.landscape-shell .clear-location-button svg { width: 17px; height: 17px; }
+@media (max-width: 600px) {
+  .landscape-shell .journey-header-actions:has(.has-location) { grid-column: 1 / -1; grid-row: 3; justify-self: stretch; }
+  .landscape-shell .journey-header-actions:has(.has-location) .header-location-controls { width: 100%; }
+  .landscape-shell .journey-search-icon.has-location { flex: 1; max-width: none; justify-content: flex-start; }
+  .landscape-shell .journey-search-icon.has-location > span { position: static; width: auto; height: auto; clip-path: none; font-size: 12px; }
+}
+
+/* Compact glass summary cards double as national risk filters. */
+.landscape-shell .header-snapshot { min-height: 60px; }
+.landscape-shell .header-snapshot .situation-strip article { position: relative; z-index: 0; padding: 0; min-height: 60px; border-radius: 10px; background: var(--cc-glass); backdrop-filter: blur(16px); transform: translateY(0) scale(1); transform-origin: center; transition: transform 420ms cubic-bezier(.22,1,.36,1), box-shadow 420ms cubic-bezier(.22,1,.36,1); overflow: visible; }
+.landscape-shell .header-snapshot .situation-strip article button { display: grid; grid-template-columns: 26px minmax(0,1fr); grid-template-rows: auto auto; align-items: center; column-gap: 8px; width: 100%; height: 100%; min-height: 60px; padding: 9px; border-radius: inherit; text-align: left; transition: transform 160ms cubic-bezier(.22,1,.36,1); }
+.landscape-shell .header-snapshot .snapshot-icon { grid-column: 1; grid-row: 1 / 3; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; color: var(--metric-color, var(--cc-accent)); background: color-mix(in srgb, var(--metric-color, var(--cc-accent)) 15%, transparent); }
+.landscape-shell .header-snapshot .snapshot-icon svg { width: 16px; height: 16px; }
+.landscape-shell .header-snapshot .snapshot-label { grid-column: 2; grid-row: 1; font-size: 9px; line-height: 1.4; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.landscape-shell .header-snapshot .situation-strip strong { grid-column: 2; grid-row: 2; margin: 2px 0 0; font-size: 23px; line-height: 1.1; }
+.landscape-shell .header-snapshot .situation-strip article small { display: none; }
+.landscape-shell .header-snapshot button[aria-pressed="true"] { box-shadow: inset 0 0 0 1px rgb(216 237 156 / .45); }
+.landscape-shell .header-snapshot button:focus-visible { outline: 2px solid var(--cc-focus); outline-offset: 3px; }
+.landscape-shell .header-snapshot button:active { transform: scale(.98); }
+.landscape-shell .header-snapshot article[data-hovered="true"] { z-index: 2; transform: translateY(-5px) scale(1.12); box-shadow: 0 14px 32px rgb(0 0 0 / .3), inset 0 1px rgb(255 255 255 / .1); transition-duration: 480ms; }
+.landscape-shell .risk-alert-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.landscape-shell .risk-alert-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 19px; margin-top: 4px; }
+.landscape-shell .risk-alert-heading h2 > span { width: 8px; height: 8px; border-radius: 50%; }
+.landscape-shell .risk-alert-eyebrow { color: var(--muted); font-size: 10px; }
+.landscape-shell .risk-alert-heading button { font-size: 11px; flex-shrink: 0; }
+.landscape-shell .risk-alert-panel > .section-description { font-size: 12px; margin-top: 8px; }
+.landscape-shell .risk-alert-panel > .source-note { font-size: 10px; line-height: 1.7; }
+.landscape-shell .risk-alert-list { margin-top: 12px; list-style: none; padding: 0; }
+.landscape-shell .risk-alert-list > li + li { border-top: 1px solid var(--line); }
+.landscape-shell .risk-alert-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 4px; text-align: left; border-radius: 9px; }
+.landscape-shell .risk-alert-row > span:nth-child(2) { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.landscape-shell .risk-alert-row strong { font-size: 14px; }
+.landscape-shell .risk-alert-row span > span { font-size: 13px; }
+.landscape-shell .risk-alert-row small { font-size: 11px; line-height: 1.7; color: var(--muted); }
+.landscape-shell .risk-alert-icon { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 36px; border: 1px solid var(--line); border-radius: 10px; background: rgb(255 255 255 / .03); }
+.landscape-shell .risk-alert-icon svg { width: 20px; height: 20px; }
+.landscape-shell .risk-alert-row > svg { width: 15px; height: 15px; color: var(--muted); }
+.landscape-shell .risk-alert-row:hover, .landscape-shell .risk-alert-row.is-active { background: rgb(216 237 156 / .07); }
+.landscape-shell .risk-alert-detail { padding: 10px; margin-bottom: 8px; border-radius: 9px; background: var(--cc-panel-deep); font-size: 12px; line-height: 1.8; }
+.landscape-shell .risk-alert-detail small { color: var(--muted); }
+.landscape-shell .risk-alert-detail > div + div { margin-top: 10px; }
+@media (max-width: 600px) {
+  .landscape-shell .header-snapshot { min-height: 56px; }
+  .landscape-shell .header-snapshot .situation-strip article, .landscape-shell .header-snapshot .situation-strip article button { min-height: 56px; }
+  .landscape-shell .header-snapshot .situation-strip article button { grid-template-columns: 19px minmax(0,1fr); column-gap: 5px; padding: 6px; }
+  .landscape-shell .header-snapshot .snapshot-icon { width: 19px; height: 23px; border-radius: 7px; }
+  .landscape-shell .header-snapshot .snapshot-icon svg { width: 13px; height: 13px; }
+  .landscape-shell .header-snapshot .snapshot-label { font-size: 8px; }
+  .landscape-shell .header-snapshot .situation-strip strong { font-size: 20px; }
+  .landscape-shell[data-risk-level] .journey-hero-dashboard { grid-template-rows: minmax(0,1fr) minmax(0,1.25fr); }
+  .landscape-shell .risk-alert-panel { padding: 10px; }
+  .landscape-shell .risk-alert-eyebrow { display: none; }
+  .landscape-shell .risk-alert-heading h2 { font-size: 16px; margin-top: 0; }
+  .landscape-shell .risk-alert-heading button { min-height: 30px; padding: 0; }
+  .landscape-shell .risk-alert-panel > .section-description { margin-top: 4px; font-size: 11px; }
+  .landscape-shell .risk-alert-panel > .source-note { margin-top: 4px; font-size: 9px; }
+  .landscape-shell .risk-alert-list { margin-top: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landscape-shell .header-snapshot article { transition: none !important; }
+}
+
+/* Match the search button's glass tint across the workspace surfaces. */
+.landscape-shell.command-shell :is(.journey-category-bar, .map-panel, .area-panel, .assistant-panel, .dam-panel, .journey-search-dialog, .journey-guide-dialog) {
+  background: var(--cc-glass);
+  border-color: var(--scene-stroke);
+  backdrop-filter: blur(16px);
+}
+/* Performance: a backdrop blur is recomputed whenever anything behind or inside it repaints. The map redraws on
+   every pan, zoom and radar frame, and the side panels scroll, so blurring these large surfaces made the page
+   stutter. They get an opaque tint instead; small chrome (category bar, buttons, dialogs) keeps its glass. */
+.landscape-shell.command-shell :is(.map-panel, .area-panel, .assistant-panel, .dam-panel, .map-supplement, .risk-alert-detail, .dam-sort) {
+  background: var(--cc-solid);
+  backdrop-filter: none;
+}
+.landscape-shell.command-shell .map-supplement > summary { background: transparent; backdrop-filter: none; }
+
+/* Match the summary-card hover, while keeping the accordion inside the rail. */
+.landscape-shell .journey-category-bar .journey-category-button { position: relative; z-index: 0; transform: translateY(0) scale(1); transition: transform 420ms cubic-bezier(.22,1,.36,1), background-color 180ms ease, box-shadow 420ms ease; }
+.landscape-shell .category-submenu button { position: relative; z-index: 0; transition: opacity 160ms ease, transform 420ms cubic-bezier(.22,1,.36,1), background-color 180ms ease, border-color 180ms ease; }
+.landscape-shell .journey-category-bar button[data-hovered="true"] { z-index: 2; transform: translateY(-2px) scale(1.12); box-shadow: 0 7px 16px rgb(0 0 0 / .22), inset 0 1px rgb(255 255 255 / .08); transition-duration: 480ms; }
+@media (max-width: 1050px) {
+  .landscape-shell .category-submenu-items { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 4px; }
+  .landscape-shell .category-submenu button { flex-direction: column; width: 100%; min-width: 0; height: 48px; min-height: 48px; padding: 5px 1px; gap: 3px; font-size: 9px; line-height: 1.25; white-space: normal; }
+  .landscape-shell .category-submenu button svg { width: 18px; height: 18px; }
+}
+@media (max-width: 1050px) and (max-height: 700px) {
+  .landscape-shell .category-submenu button { height: 42px; min-height: 42px; padding-block: 3px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landscape-shell .journey-category-bar button { transition: none !important; transition-delay: 0s !important; }
+}
+
+/* Topic tabs stay above the map, leaving the main rail compact. */
+.landscape-shell .map-panel > .hazard-subtabs { flex: 0 0 auto; flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px; background: var(--cc-glass); scrollbar-width: thin; }
+.landscape-shell .map-panel > .hazard-subtabs button { flex-shrink: 0; min-height: 38px; transition: background-color 180ms ease, border-color 180ms ease, transform 320ms cubic-bezier(.22,1,.36,1); }
+.landscape-shell .map-panel > .hazard-subtabs button:hover { transform: translateY(-1px) scale(1.04); }
+@media (max-width: 600px) { .landscape-shell .map-panel > .hazard-subtabs { padding: 5px 8px; gap: 5px; } .landscape-shell .map-panel > .hazard-subtabs button { min-height: 36px; padding: 5px 9px; font-size: 11px; } }
+
+/* Flyouts follow the selected main topic without changing the map's width. */
+.landscape-shell .journey-category-bar { z-index: 30; overflow: visible; }
+.landscape-shell .journey-category-entry { position: relative; }
+.landscape-shell .category-flyout { position: absolute; top: 50%; left: calc(100% + 18px); display: flex; align-items: center; gap: 5px; width: max-content; max-width: calc(100vw - 160px); padding: 6px; border: 1px solid var(--scene-stroke); border-radius: 12px; background: rgb(50 59 60 / .94); backdrop-filter: blur(20px); box-shadow: 0 14px 35px rgb(0 0 0 / .26); opacity: 0; visibility: hidden; pointer-events: none; transform: translate(-10px,-50%) scale(.96); transform-origin: left center; transition: opacity 200ms ease, transform 420ms cubic-bezier(.22,1,.36,1), visibility 0s 420ms; }
+.landscape-shell .category-flyout[data-open="true"] { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(0,-50%) scale(1); transition-delay: 0s; }
+.landscape-shell .category-flyout button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--foreground); background: rgb(255 255 255 / .06); font-size: 11px; white-space: nowrap; transform: scale(1); transition: transform 420ms cubic-bezier(.22,1,.36,1), background-color 180ms ease, box-shadow 420ms ease; }
+.landscape-shell .category-flyout button svg { width: 15px; height: 15px; flex-shrink: 0; }
+.landscape-shell .category-flyout button.is-active { color: var(--cc-accent); border-color: var(--cc-accent); background: var(--accent-soft); }
+.landscape-shell .category-flyout button:focus-visible { outline: 2px solid var(--cc-focus); outline-offset: 3px; }
+.landscape-shell .map-options { width: auto; max-width: calc(100% - 24px); left: 12px; bottom: 28px; display: flex; gap: 6px; }
+.landscape-shell .map-options button { min-height: 34px; padding: 6px 11px; border-radius: 9px; font-size: 11px; }
+.landscape-shell .map-options button svg { width: 15px; height: 15px; }
+.landscape-shell .map-hint { top: 12px; left: 12px; padding: 6px 9px; gap: 5px; font-size: 10px; border-radius: 7px; }
+.landscape-shell .map-hint svg { width: 15px; height: 15px; }
+@media (max-width: 1050px) {
+  .landscape-shell .category-flyout { left: 0; top: calc(100% + 8px); width: 100%; max-width: 100%; flex-wrap: wrap; justify-content: center; gap: 5px; padding: 6px; transform: translateY(-8px) scale(.98); transform-origin: top center; }
+  .landscape-shell .category-flyout[data-open="true"] { transform: translateY(0) scale(1); }
+  .landscape-shell .category-flyout button { min-height: 38px; padding: 6px 10px; font-size: 11px; }
+}
+@media (max-width: 600px) { .landscape-shell .map-options button { min-height: 32px; padding: 5px 8px; font-size: 10px; } }
+@media (prefers-reduced-motion: reduce) { .landscape-shell .category-flyout { transition: none; } }
+
+/* Small language controls share the footer's existing help area. */
+.landscape-shell .footer-utilities { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.landscape-shell .language-switch { display: inline-flex; align-items: center; padding: 3px; gap: 2px; border: 1px solid var(--scene-stroke); border-radius: 9px; background: var(--cc-glass); backdrop-filter: blur(16px); }
+.landscape-shell .language-switch button { min-width: 31px; min-height: 27px; padding: 3px 6px; border-radius: 6px; color: var(--foreground); font-size: 10px; font-weight: 600; transition: transform 420ms cubic-bezier(.22,1,.36,1), background-color 180ms ease; }
+.landscape-shell .language-switch button[aria-pressed="true"] { color: var(--cc-accent); background: var(--accent-soft); }
+.landscape-shell .language-switch button:hover { transform: scale(1.1); }
+.landscape-shell .language-switch button:focus-visible { outline: 2px solid var(--cc-focus); outline-offset: 2px; }
+html[lang="en"] .landscape-shell .journey-category-button strong { font-size: 9px; line-height: 1.25; white-space: normal; }
+html[lang="en"] .landscape-shell .journey-brand > span:last-child { font-size: 16px; }
+@media (max-width: 1050px) { .landscape-shell .footer-utilities { gap: 8px; } html[lang="en"] .landscape-shell .journey-brand > span:last-child { font-size: 10px; } }
+@media (max-width: 600px) { .landscape-shell .footer-utilities { grid-column: 1; grid-row: 2; justify-self: start; } .landscape-shell .language-switch button { min-width: 34px; min-height: 30px; } html[lang="en"] .landscape-shell .journey-category-button strong { font-size: 8px; } }
+@media (prefers-reduced-motion: reduce) { .landscape-shell .language-switch button { transition: none; } }
+
+
+@media (min-width: 601px) and (max-width: 1050px) { .landscape-shell .footer-utilities { grid-column: 1; grid-row: 2; } }
+
+.landscape-shell .back-location-button { min-width: 44px; min-height: 44px; cursor: pointer; }
+.landscape-shell .back-location-button svg { transform: rotate(180deg); }
+.landscape-shell .back-location-button:focus-visible { outline: 2px solid var(--cc-accent); outline-offset: 3px; }

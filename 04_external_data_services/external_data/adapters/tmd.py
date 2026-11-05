@@ -1,11 +1,16 @@
+import asyncio
+import logging
 import os
-from datetime import datetime, timezone
+import re
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
 
-from external_data.adapters.base import Adapter, parse_local, to_float
-from thanphai_shared import HazardType, OfficialWarning, SourceRecord
+from external_data.adapters.base import BANGKOK, Adapter, parse_local, to_float
+from thanphai_shared import HazardType, OfficialWarning, RainDay, SourceRecord
+
+log = logging.getLogger(__name__)
 
 BASE_URL = "https://data.tmd.go.th/api"
 ATTRIBUTION = "ที่มา: กรมอุตุนิยมวิทยา (TMD)"
@@ -16,6 +21,7 @@ HAZARD_KEYWORDS = {
     HazardType.FLOOD: ("น้ำท่วม", "น้ำป่า", "น้ำล้นตลิ่ง", "ฝนตกหนักถึงหนักมาก"),
     HazardType.DROUGHT: ("ภัยแล้ง", "ฝนทิ้งช่วง"),
     HazardType.FIRE: ("ไฟป่า", "หมอกควัน"),
+    HazardType.AIR_QUALITY: ("หมอกควัน", "ฝุ่นละออง", "PM2.5"),
 }
 
 
@@ -26,6 +32,153 @@ def _credentials() -> dict[str, str]:
 
 def classify_hazards(text: str) -> list[HazardType]:
     return [hazard for hazard, words in HAZARD_KEYWORDS.items() if any(word in text for word in words)]
+
+
+# "… ฉบับที่ 3 (286/2569)": issues of one warning differ only in this tail.
+ISSUE_TAIL = re.compile(r"\s*ฉบับที่\s*\d+\s*(?:\(\s*\d+\s*/\s*\d+\s*\))?\s*$")
+
+
+THAI_MONTHS = {name: i for i, name in enumerate(
+    ("มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม",
+     "พฤศจิกายน", "ธันวาคม"), start=1)}
+# Headlines use short forms: "ในช่วงวันที่ 18-20 ต.ค. 69".
+SHORT_MONTHS = {name: i for i, name in enumerate(
+    ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."), start=1)}
+MONTHS = THAI_MONTHS | SHORT_MONTHS
+_MONTH = "|".join(re.escape(name) for name in sorted(MONTHS, key=len, reverse=True))
+_YEAR = r"(?:พ\.ศ\.\s*)?(\d{4}|\d{2}(?!\d))"
+# In the title's "(มีผลกระทบ …)": "ในช่วงวันที่ 5-9 พฤศจิกายน 2569", "30 ตุลาคม - 2 พฤศจิกายน 2569", "จนถึงวันที่ 25 ตุลาคม 2569".
+IMPACT_NOTE = re.compile(r"มีผลกระทบ([^)]*)")
+DAY_RANGE = re.compile(rf"(\d{{1,2}})\s*(?:({_MONTH})\s*{_YEAR}?)?\s*[-–]\s*(\d{{1,2}})\s*({_MONTH})\s*{_YEAR}?")
+ONE_DAY = re.compile(rf"(\d{{1,2}})\s*({_MONTH})\s*{_YEAR}?")
+
+
+def _date(day: str, month: int, year: str | None, announced: date) -> date:
+    """A Thai date: Buddhist year "2569" or "69"; with no year, the one closest to the issue day. A warning issued
+    on 30 Dec 2026 that says "2 ม.ค." means 2 Jan 2027, not 2 Jan 2026 (which would already be over)."""
+    if year:
+        return date((int(year) + 2500 if len(year) == 2 else int(year)) - 543, month, int(day))
+    candidates = []
+    for y in (announced.year - 1, announced.year, announced.year + 1):
+        try:
+            candidates.append(date(y, month, int(day)))
+        except ValueError:  # 29 February in a common year
+            pass
+    best = min(candidates, key=lambda d: abs(d - announced), default=None)
+    # Warnings speak of the days around their issue; half a year off means no such day ("29 ก.พ." in 2027).
+    if best is None or abs(best - announced) > timedelta(days=183):
+        raise ValueError(f"no such day near {announced}: {day}/{month}")
+    return best
+
+
+def read_days(text: str, announced: date) -> tuple[date, date] | None:
+    """First and last day of the first date or date range in a warning text (Thai dates, Buddhist years); None if none."""
+    try:
+        if m := DAY_RANGE.search(text):
+            d1, m1, y1, d2, m2, y2 = m.groups()
+            end = _date(d2, MONTHS[m2], y2, announced)
+            month = MONTHS[m1] if m1 else end.month
+            # The first day takes its year from the last one: "30 ธันวาคม - 2 มกราคม 2570" starts in 2569.
+            year = _date(d1, month, y1, announced).year if y1 else end.year - (month > end.month)
+            return date(year, month, int(d1)), end
+        if m := ONE_DAY.search(text):
+            day = _date(m.group(1), MONTHS[m.group(2)], m.group(3), announced)
+            return (min(announced, day), day) if "จนถึง" in text[:m.start()] else (day, day)
+    except ValueError:  # an impossible date ("31 พฤศจิกายน")
+        return None
+    return None
+
+
+def impact_window(title: str, announced: date) -> tuple[date, date] | None:
+    """First and last impact day of the whole warning, from the title's "(มีผลกระทบ …)"; None when it gives none.
+
+    EffectStartDate/EffectEndDate cannot be used: EffectEndDate is when the next issue is due.
+    """
+    note = IMPACT_NOTE.search(title)
+    return read_days(note.group(1), announced) if note else None
+
+
+def bulletin_text(pages: list[str]) -> str:
+    """Every page of a bulletin PDF as one text, without the forecaster block that heads each page.
+
+    Each page of issue 288/2569 starts with the forecaster's name, the 1182 line, the fax line and
+    "https://www.metalarm.tmd.go.th/service"; a statement or table that runs onto the next page must not take them in.
+    """
+    kept = []
+    for page in pages:
+        lines = page.splitlines()
+        end = next((i for i, line in enumerate(lines[:12]) if "metalarm.tmd.go.th" in line), None)
+        kept.append("\n".join(lines[end + 1:] if end is not None else lines))
+    return "\n".join(kept)
+
+
+def bulletin_body(text: str) -> str | None:
+    """The statements of a TMD bulletin from its PDF text, or None when it is not laid out as one.
+
+    The API's HeadlineThai is the first paragraph only: issue 288/2569 said "ส่วนในช่วงวันที่ 7–9 … ภาคใต้" only in the
+    PDF. The statements sit between the "-----" rule under the title and "ประกาศ ณ วันที่"; text from "ทั้งนี้" on is
+    the cause ("ทั้งนี้เนื่องจาก … ประเทศไทยตอนบน") and general advice, which name areas without warning them.
+    Lines are joined without a space, as Thai breaks lines inside sentences ("ประเทศไทย" / "ตอนบน").
+    """
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip().startswith("---")), None)
+    end = next((i for i, line in enumerate(lines) if line.strip().startswith("ประกาศ ณ")), None)
+    if start is None or end is None or end <= start:
+        return None
+    body = "".join(line.rstrip() for line in lines[start + 1:end]).split("ทั้งนี้")[0].strip()
+    return body or None
+
+
+# "วันที่ จังหวัดที่คาดว่าจะได้รับผลกระทบจากฝนตกหนัก" / "…ฝนตกหนักมาก": TMD's heavy (35.1-90 mm) and very heavy (> 90 mm)
+# rain, the same thresholds as rules.yaml RAIN_FORECAST_HEAVY and RAIN_FORECAST_VERY_HEAVY.
+RAIN_TABLE = re.compile(r"จังหวัดที่คาดว่าจะได้รับผลกระทบจากฝนตกหนัก(มาก)?")
+TABLE_ROW = re.compile(r"^\s*(\d{1,2}\s+[ก-๙]+\s+\d{4})\s*(.*)$")
+# The day label printed on each page's map ("8 พ.ย. 69").
+MAP_LABEL = re.compile(r"^\s*\d{1,2}\s*[ก-๙]+\.\s*[ก-๙]+\.\s*\d{2}\s*$")
+
+
+def rain_days(text: str, announced: date) -> list[RainDay]:
+    """The rows of a bulletin's daily heavy-rain tables: day, heavy or very heavy, and the province text."""
+    headers = list(RAIN_TABLE.finditer(text))
+    found = []
+    for i, header in enumerate(headers):
+        section = text[header.end():headers[i + 1].start() if i + 1 < len(headers) else len(text)]
+        rows: list[list[str]] = []
+        for line in section.splitlines():
+            if MAP_LABEL.match(line) or line.strip().startswith("วันที่"):
+                continue
+            if m := TABLE_ROW.match(line):
+                rows.append([m.group(1), m.group(2)])
+            elif rows and line.strip():
+                rows[-1].append(line.strip())  # a province list runs onto the next line
+        for day_text, *parts in rows:
+            days = read_days(day_text, announced)
+            if days:
+                found.append(RainDay(day=days[0], very_heavy=bool(header.group(1)), areas=" ".join(p.strip() for p in parts if p.strip())))
+    return found
+
+
+def read_bulletin(pdf: bytes, announced: date) -> tuple[str | None, list[RainDay]]:
+    """(statements, daily tables) from every page of a bulletin PDF."""
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    text = bulletin_text([page.extract_text() for page in PdfReader(BytesIO(pdf)).pages])
+    return bulletin_body(text), rain_days(text, announced)
+
+
+def latest_issues(warnings: list[OfficialWarning]) -> list[OfficialWarning]:
+    """The newest issue of each warning, newest first. TMD's feed keeps earlier issues next to the one that replaced
+    them (2026-11-02: issues 2 and 3 of the same warning)."""
+    seen: set[str] = set()
+    kept = []
+    for w in sorted(warnings, key=lambda w: w.announced_at, reverse=True):
+        subject = ISSUE_TAIL.sub("", w.title)
+        if subject not in seen:
+            seen.add(subject)
+            kept.append(w)
+    return kept
 
 
 def as_list(value: Any) -> list:
@@ -78,7 +231,30 @@ class TmdWarnings(Adapter):
 
     async def run_warnings(self, client: httpx.AsyncClient) -> list[OfficialWarning]:
         fetched_at = datetime.now(timezone.utc)
-        return self.parse_warnings(await self.fetch(client), fetched_at)
+        warnings = self.parse_warnings(await self.fetch(client), fetched_at)
+        # Only the newest issue of each warning is used; older issues in the feed keep the headline alone.
+        latest = {id(w) for w in latest_issues(warnings)}
+        read = await asyncio.gather(*(self.bulletin(client, w.url if id(w) in latest else None, w.announced_at.astimezone(BANGKOK).date())
+                                      for w in warnings))
+        return [w.model_copy(update={"body": body, "rain_days": days}) for w, (body, days) in zip(warnings, read)]
+
+    # PDF url -> (statements, daily tables). An issue's PDF never changes; a new issue has a new url.
+    _bulletins: dict[str, tuple[str | None, list[RainDay]]] = {}
+
+    async def bulletin(self, client: httpx.AsyncClient, url: str | None, announced: date) -> tuple[str | None, list[RainDay]]:
+        """The bulletin's statements and daily tables from its PDF; (None, []) (use the headline) when there is no PDF
+        or it cannot be read."""
+        if not url:
+            return None, []
+        if url not in self._bulletins:
+            try:
+                response = await client.get(url, timeout=self.timeout_seconds)
+                response.raise_for_status()
+                TmdWarnings._bulletins[url] = await asyncio.to_thread(read_bulletin, response.content, announced)
+            except Exception as exc:  # a PDF that fails now is tried again on the next refresh
+                log.warning("TMD bulletin %s unreadable: %s", url, exc)
+                return None, []
+        return self._bulletins[url]
 
 
 class TmdWeather3Hours(Adapter):

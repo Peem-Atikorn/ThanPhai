@@ -34,6 +34,34 @@ def test_model_can_raise_above_official():
     assert decide(official_warning_active=True, model_level=L.CRITICAL).level == L.CRITICAL
 
 
+def test_upcoming_official_warning_is_a_watch_and_rules_can_raise_it():
+    d = decide(official_warning_upcoming=True)
+    assert d.level == L.WATCH and d.rule_ids == ["OFFICIAL_WARNING_UPCOMING"]
+    assert decide(official_warning_upcoming=True, observations={"above_bank_m": 0.5}).level == L.CRITICAL
+    # Active wins when both hold (another warning for the same hazard is already in force).
+    assert decide(official_warning_active=True, official_warning_upcoming=True).rule_ids == ["OFFICIAL_WARNING"]
+
+
+def test_regional_official_warning_is_a_watch_and_rules_can_raise_it():
+    d = decide(official_warning_active=True, official_warning_kinds=["regional"])
+    assert d.level == L.WATCH and d.rule_ids == ["OFFICIAL_WARNING_REGIONAL"]
+    assert decide(official_warning_active=True, official_warning_kinds=["regional"], observations={"above_bank_m": 0.1}).level == L.WARNING
+    # Kinds mean nothing without an active warning.
+    assert decide(official_warning_kinds=["regional"], official_warning_upcoming=True).rule_ids == ["OFFICIAL_WARNING_UPCOMING"]
+
+
+@pytest.mark.parametrize(("kinds", "level", "rule"), [
+    ([], L.WARNING, "OFFICIAL_WARNING"),  # no kind given: as before kinds existed
+    (["heavy_rain"], L.WATCH, "OFFICIAL_WARNING_HEAVY_RAIN"),
+    (["regional", "heavy_rain"], L.WATCH, "OFFICIAL_WARNING_HEAVY_RAIN"),  # same level: the more specific kind
+    (["very_heavy_rain"], L.WARNING, "OFFICIAL_WARNING_VERY_HEAVY_RAIN"),
+    (["heavy_rain", "named"], L.WARNING, "OFFICIAL_WARNING"),  # two warnings: the higher level
+])
+def test_official_warning_kind_sets_the_level(kinds, level, rule):
+    d = decide(hazard=HazardType.RAIN_STORM, official_warning_active=True, official_warning_kinds=kinds)
+    assert d.level == level and d.rule_ids == [rule]
+
+
 @pytest.mark.parametrize(
     ("above_bank_m", "expected"),
     [(-1.0, L.NORMAL), (-0.3, L.WATCH), (0.0, L.WATCH), (0.01, L.WARNING), (0.5, L.CRITICAL), (1.21, L.CRITICAL)],
@@ -110,3 +138,47 @@ def test_none_observation_is_ignored():
 
 def test_rules_version_is_reported():
     assert decide(model_level=L.WATCH).rules_version == engine.version
+
+
+@pytest.mark.parametrize(("pm25", "expected"), [(15.0, L.NORMAL), (37.5, L.NORMAL), (37.6, L.WATCH), (75.0, L.WATCH), (75.1, L.WARNING), (300.0, L.WARNING)])
+def test_pm25_pcd_bands(pm25, expected):
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_24h": pm25}).level == expected
+
+
+def test_pm25_model_alone_gives_at_most_watch():
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_model_24h": 120.0}).level == L.WATCH
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_model_24h": 20.0}).level == L.NORMAL
+
+
+def test_pm25_without_any_value_is_no_data():
+    assert decide(HazardType.AIR_QUALITY, observations={"pm25_24h": None, "pm25_model_24h": None}).level is None
+
+
+@pytest.mark.parametrize(("hi", "expected"), [(30.0, L.NORMAL), (33.0, L.NORMAL), (39.3, L.NORMAL), (39.4, L.WATCH), (41.9, L.WATCH),
+                                              (42.0, L.WARNING), (51.9, L.WARNING), (52.0, L.CRITICAL)])
+def test_heat_index_bands(hi, expected):
+    assert decide(HazardType.HEAT, observations={"heat_index_max_24h": hi}).level == expected
+
+
+@pytest.mark.parametrize(("mmi", "expected"), [(1.0, L.NORMAL), (3.9, L.NORMAL), (4.0, L.WATCH), (6.0, L.WARNING), (7.2, L.CRITICAL)])
+def test_earthquake_shaking_levels(mmi, expected):
+    assert decide(HazardType.EARTHQUAKE, observations={"quake_mmi_24h": mmi}).level == expected
+
+
+@pytest.mark.parametrize(("wave", "expected"), [(0.5, L.NORMAL), (1.9, L.NORMAL), (2.0, L.WATCH), (3.0, L.WARNING), (4.5, L.CRITICAL)])
+def test_wave_height_levels(wave, expected):
+    assert decide(HazardType.MARINE, observations={"wave_height_max_24h": wave}).level == expected
+
+
+@pytest.mark.parametrize(("wind", "expected"), [(0.0, L.NORMAL), (63.0, L.WATCH), (93.0, L.WARNING), (119.0, L.CRITICAL)])
+def test_cyclone_wind_levels(wind, expected):
+    assert decide(HazardType.TROPICAL_CYCLONE, observations={"cyclone_wind_kmh": wind}).level == expected
+
+
+@pytest.mark.parametrize(("obs", "expected"), [
+    ({"landslide_rain_24h": 80.0}, L.NORMAL), ({"landslide_rain_24h": 100.0}, L.NORMAL), ({"landslide_rain_24h": 100.5}, L.WARNING),
+    ({"landslide_rain_24h": 151.0}, L.CRITICAL), ({"landslide_rain_24h": 20.0, "landslide_forecast_rain_24h": 120.0}, L.WATCH),
+    ({"landslide_rain_24h": None, "landslide_forecast_rain_24h": None}, None),
+])
+def test_landslide_rain_levels(obs, expected):
+    assert decide(HazardType.LANDSLIDE, observations=obs).level == expected

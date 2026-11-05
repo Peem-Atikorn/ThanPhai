@@ -7,7 +7,7 @@ import pytest
 from shapely.geometry import box
 
 from geo_integration.area_mapper import AreaMapper
-from geo_integration.features import fire_features, flood_features, rain_features
+from geo_integration.features import fire_features, flood_features, pm25_features, rain_features
 from thanphai_shared import SourceRecord
 
 REAL_GPKG = Path(__file__).resolve().parents[2] / "data" / "processed" / "admin_areas.gpkg"
@@ -105,3 +105,10 @@ def test_real_boundaries_known_points():
     out = real.assign_points([14.15657, 18.7883], [100.12744, 98.9853])
     assert out.loc[0, "province_code"] == "TH72"
     assert out.loc[1, "province_code"] == "TH50"
+
+
+def test_pm25_features_take_worst_station():
+    rows = mapper.assign_records([record("pm25_24h", 20.0, 13.05, 100.05, "a"), record("pm25_24h", 41.5, 13.06, 100.05, "b")])
+    f = pm25_features(rows).set_index("area_code")
+    assert f.loc["TH1001", "pm25_24h"] == 41.5 and f.loc["TH1001", "stations"] == 2
+    assert pm25_features(mapper.assign_records([])).empty

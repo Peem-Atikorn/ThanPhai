@@ -1,12 +1,81 @@
-export type Hazard = "flood" | "rain_storm" | "fire" | "drought";
+export type Hazard = "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone" | "landslide";
 export type Level = "NORMAL" | "WATCH" | "WARNING" | "CRITICAL" | null;
+export type RadarFrame = {
+  tiles: string | null;
+  time: number;
+  kind?: "observed" | "forecast";
+  horizonMin?: number;
+  /** Forecast frames show the latest real image; this is its time. */
+  imageTime?: number;
+  /** Forecast frames: how far the latest real image is moved (pixels of zoom-4 tile 12/7, from the nowcast). */
+  shift?: { dx: number; dy: number };
+};
+export type RadarNowcast = {
+  enabled: boolean;
+  status: "ok" | "unavailable";
+  past_frames: { tile_url: string; time: number }[];
+  /** `cells` are the backend's projected positions of each rain cell at this lead time. */
+  forecast_frames: { time: number; horizon_min: number; dx_pixels: number; dy_pixels: number; cells?: { id: number | string; lat: number; lon: number }[] }[];
+  motion: { speed_kmh: number; direction_deg: number; direction_th: string; is_moving?: boolean } | null;
+  rain_cells: { id: number | string; centroid_lat: number; centroid_lon: number; peak_intensity_dbz: number }[];
+  explanation: string;
+  explanation_source: "qwen" | "template";
+  /** Qwen was still writing when the backend answered; asking again later returns its text. */
+  explanation_pending?: boolean;
+};
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [
   { id: "flood", th: "น้ำท่วม", ready: true },
   { id: "rain_storm", th: "ฝนหนัก/พายุ", ready: true },
   { id: "fire", th: "ไฟป่า/ไฟหญ้า", ready: true },
   { id: "drought", th: "ภัยแล้ง", ready: true },
+  { id: "air_quality", th: "ฝุ่น PM2.5", ready: true },
+  { id: "heat", th: "ความร้อนจัด", ready: true },
+  { id: "earthquake", th: "แผ่นดินไหว", ready: true },
+  { id: "marine", th: "คลื่นลมแรง", ready: true },
+  { id: "tropical_cyclone", th: "พายุหมุนเขตร้อน", ready: true },
+  { id: "landslide", th: "ดินถล่ม", ready: true },
 ];
+
+/** A map layer: one hazard, or "overview" (each district's worst level over all hazards). */
+export type MapLayerId = Hazard | "overview";
+/** Everything the toolbar can show: hazard layers plus the dam and river views. */
+export type MapView = "hazard" | "dams" | "rivers" | "water-quality";
+export type MapItem = MapLayerId | Exclude<MapView, "hazard">;
+
+/** Toolbar groups: one button each; groups with several items show them as sub-tabs. */
+export const GROUPS: { id: string; th: string; icon: "shield" | "flood" | "rain_storm" | "fire" | "heat" | "landslide"; items: MapItem[] }[] = [
+  { id: "overview", th: "ภาพรวม", icon: "shield", items: ["overview"] },
+  { id: "water", th: "น้ำ", icon: "flood", items: ["flood", "dams", "rivers", "water-quality"] },
+  { id: "weather", th: "ฝนและพายุ", icon: "rain_storm", items: ["rain_storm", "tropical_cyclone", "marine"] },
+  { id: "smoke", th: "ไฟและฝุ่น", icon: "fire", items: ["air_quality", "fire"] },
+  { id: "hot", th: "ร้อนและแล้ง", icon: "heat", items: ["heat", "drought"] },
+  { id: "geo", th: "ธรณีภัย", icon: "landslide", items: ["landslide", "earthquake"] },
+];
+export const groupOf = (item: MapItem) => GROUPS.find((g) => g.items.includes(item))!;
+export const itemTh = (item: MapItem) =>
+  item === "water-quality" ? "คุณภาพน้ำ" : item === "overview" ? "ทุกภัย" : item === "dams" ? "เขื่อน" : item === "rivers" ? "แม่น้ำ" : HAZARDS.find((h) => h.id === item)!.th;
+
+/** Pollution Control Department PM2.5 bands (24-hour average, since 2023-06-01), with Air4Thai's colours. */
+export const PM25_BANDS: { max: number; th: string; color: string; text: string }[] = [
+  { max: 15, th: "ดีมาก", color: "#3bccff", text: "#06364a" },
+  { max: 25, th: "ดี", color: "#92d050", text: "#1f3a08" },
+  { max: 37.5, th: "ปานกลาง", color: "#ffe600", text: "#3d3500" },
+  { max: 75, th: "เริ่มมีผลต่อสุขภาพ", color: "#ffa200", text: "#3d2400" },
+  { max: Infinity, th: "มีผลต่อสุขภาพ", color: "#f04646", text: "#ffffff" },
+];
+export const pm25Band = (value: number) => PM25_BANDS.find((b) => value <= b.max)!;
+
+export interface AirStation {
+  id: string | null;
+  name_th: string | null;
+  area_th: string | null;
+  lat: number;
+  lon: number;
+  pm25: number; // 24-hour average, µg/m³
+  aqi: number | null;
+  time: string;
+}
 
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
   { id: "CRITICAL", th: "วิกฤต", color: "#d7263d" },
@@ -71,6 +140,27 @@ export function damColor(d: Dam): string {
   return d.status === "NORMAL" ? "#2f7fb5" : "#8a97a3";
 }
 
+export interface WaterQualityStation {
+  id: string | null;
+  name_th: string | null;
+  river_th: string | null;
+  province_code: string | null;
+  province_th: string | null;
+  amphoe_th: string | null;
+  agency_th: string | null;
+  lat: number | null;
+  lon: number | null;
+  time: string | null;
+  salinity_gl: number | null;
+  do_mgl: number | null;
+  ph: number | null;
+  turbidity_ntu: number | null;
+  tds_mgl: number | null;
+  conductivity_uscm: number | null;
+  temp_c: number | null;
+  exceeds: Record<string, { text: string | null; color: string | null }>;
+}
+
 export interface River {
   id: string | null;
   code: string;
@@ -113,6 +203,21 @@ export interface StationGraph {
   qmax_m3s: number | null;
 }
 
+/** Model forecast of a river station's level (display only: never an alert level or river status). */
+export interface RiverForecast {
+  station_id: string;
+  available: boolean;
+  /** Why there is no forecast: no model, the model did not beat "no change" here, no bank, or no recent reading. */
+  reason?: "no_model" | "not_chosen" | "no_bank" | "no_recent_readings";
+  /** The hour the forecast starts from ("YYYY-MM-DD HH:MM", Thai time) and its level. */
+  from_time?: string;
+  level_msl?: number;
+  bank_msl?: number;
+  points?: { hours: number; time: string; level_msl: number; change_m: number; above_bank_m: number; test_mae_m: number | null }[];
+  model_version?: string;
+  source?: string;
+}
+
 export interface DamHistory {
   series: { year: number; values: [string, number][] }[];
   upper_rule_curve: [string, number][]; // "MM-DD", million m³
@@ -131,6 +236,38 @@ export interface Media {
   data_updated_at: string | null;
 }
 
+export interface Earthquake {
+  id: string | null;
+  time: string;
+  magnitude: number;
+  lat: number;
+  lon: number;
+  depth_km: number | null;
+  place_th: string | null; // TMD: country or province
+  where_th: string | null; // TMD: direction and distance from a Thai district
+  place: string | null; // USGS, English
+  url: string | null;
+  tsunami: boolean;
+  source: string;
+}
+
+export interface RegionalEvent {
+  id: string;
+  type: string;
+  type_th: string;
+  name: string | null;
+  alert: "Green" | "Orange" | "Red" | null;
+  alert_th: string | null;
+  countries: string | null;
+  severity_text: string | null;
+  from: string | null;
+  to: string;
+  current: boolean;
+  lat: number;
+  lon: number;
+  url: string | null;
+}
+
 export interface AreaHazards {
   area: { code: string; level: string; name_th: string; name_en: string; parents: string[] };
   assessments: Assessment[];
@@ -138,9 +275,43 @@ export interface AreaHazards {
   forecast_updated_at: string | null;
   dams: Dam[];
   rivers: River[];
-  official_warnings: { title: string; headline?: string; url?: string; hazards: Hazard[] }[];
+  official_warnings: OfficialWarning[];
   data_updated_at: string | null;
   degraded_services: string[];
+}
+
+/** A TMD bulletin. `by_region`: one line per days and level, with the regions (or "จ.X") it names. */
+export interface OfficialWarning {
+  title: string;
+  headline?: string;
+  url?: string;
+  hazards: Hazard[];
+  provinces?: string[];
+  provinces_by_hazard?: Partial<Record<Hazard, string[]>>;
+  impact_from?: string | null;
+  impact_to?: string | null;
+  impact_by_hazard?: Partial<Record<Hazard, Record<string, [string | null, string | null]>>>;
+  periods_by_hazard?: Partial<Record<Hazard, Record<string, [string | null, string | null, string | boolean][]>>>;
+  by_region?: { from: string | null; to: string | null; level: Exclude<Level, null>; hazards: Hazard[]; areas: string[] }[];
+  /** The bulletin's daily tables: provinces TMD expects heavy (35.1-90 mm) or very heavy (> 90 mm) rain that day. */
+  rain_days?: { day: string; very_heavy: boolean; provinces: string[] }[];
+}
+
+export interface Storm {
+  name: string;
+  time: string;
+  lat: number | null;
+  lon: number | null;
+  wind_kmh: number | null;
+  category: { category?: string | null; strength?: string | null } | null;
+}
+
+export interface StormsResponse {
+  storms: Storm[];
+  source: string;
+  data_updated_at?: string | null;
+  degraded_services?: string[];
+  inputs_pending?: string[];
 }
 
 export type AreaBoundary = Omit<GeoJSON.Feature, "bbox"> & { bbox: [number, number, number, number] };
@@ -151,6 +322,7 @@ export interface AskAnswer {
   area: { code: string; level: string; label: string; lat: number; lon: number } | null;
   sources: string[];
   llm_used?: boolean;
+  llm_model?: string | null;
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -159,26 +331,63 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+export type OverlayId = "flood" | "cyclones" | "waves";
+export type MapOverlay = GeoJSON.FeatureCollection & {
+  overlay: { status: "ok" | "pending" | "error" | "unavailable"; source: string; updated_at: string | null };
+  degraded_services: string[];
+};
+
 export const api = {
-  layer: (hazard: Hazard) => get<GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } }>(`/v1/map/layers/${hazard}`),
+  overlay: (id: OverlayId) => get<MapOverlay>(`/v1/map/overlays/${id}`),
+  layer: (hazard: MapLayerId) => get<GeoJSON.FeatureCollection & { meta: { data_updated_at: string; degraded_services: string[]; inputs_pending?: string[] } }>(`/v1/map/layers/${hazard}`),
   area: (code: string) => get<AreaHazards>(`/v1/areas/${code}/hazards`),
   dams: () => get<{ dams: Dam[]; data_updated_at: string | null }>(`/v1/dams`),
   damHistory: (id: string, series: "storage" | "released" | "inflow") => get<DamHistory>(`/v1/dams/${encodeURIComponent(id)}/history?series=${series}`),
   rivers: () => get<{ rivers: River[]; data_updated_at: string | null }>(`/v1/rivers`),
+  waterQuality: () => get<{ stations: WaterQualityStation[]; source: string; data_updated_at: string | null; degraded_services: string[] }>(`/v1/water-quality`),
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
+  riverForecast: (id: string) => get<RiverForecast>(`/v1/rivers/${encodeURIComponent(id)}/forecast`),
   media: () => get<Media>(`/v1/media`),
+  airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
+  /** Seven recent RainViewer frames. `enabled` is false when the team-only backend switch is off. */
+  radar: async (): Promise<{ enabled: boolean; frames: RadarFrame[] }> => {
+    const res = await fetch("/api/v1/radar", { cache: "no-store" });
+    if (res.status === 404) return { enabled: false, frames: [] };
+    if (!res.ok) throw new Error(`${res.status}`);
+    return { enabled: true, frames: (await res.json()).frames.map((frame: { tiles: string; time: number }) => ({ ...frame, kind: "observed" as const })) };
+  },
+  radarNowcast: async (): Promise<RadarNowcast> => {
+    const res = await fetch("/api/v1/radar/nowcast", { cache: "no-store" });
+    if (res.status === 404) return { enabled: false, status: "unavailable", past_frames: [], forecast_frames: [], motion: null, rain_cells: [], explanation: "", explanation_source: "template" };
+    if (!res.ok) throw new Error(`${res.status}`);
+    return { enabled: true, ...(await res.json()) };
+  },
+  warnings: () => get<{ warnings: OfficialWarning[] }>(`/v1/warnings`),
+  storms: () => get<StormsResponse>(`/v1/storms`),
+  earthquakes: () => get<{ earthquakes: Earthquake[] }>(`/v1/earthquakes`),
+  regionalEvents: () => get<{ events: RegionalEvent[] }>(`/v1/regional-events`),
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),
   search: (q: string) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }[]>(`/v1/areas/search?q=${encodeURIComponent(q)}`),
-  ask: async (question: string): Promise<AskAnswer> => {
+  locate: (lat: number, lon: number) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }>(`/v1/areas/locate?lat=${lat}&lon=${lon}`),
+  /** areaCode: the area open on the page; the backend uses it only when the question names no place. */
+  ask: async (question: string, areaCode: string | null = null): Promise<AskAnswer> => {
     const res = await fetch("/api/v1/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, area_code: areaCode }),
     });
     if (!res.ok) throw new Error(`${res.status}`);
     return res.json();
   },
 };
+
+/** TMD/BMA heat-index band, shown next to the value (alert levels come from the backend rules). */
+export function tmdHeatLabel(heatIndex: number): string {
+  if (heatIndex >= 52) return "อันตรายมาก";
+  if (heatIndex >= 42) return "อันตราย";
+  if (heatIndex >= 33) return "เตือนภัย";
+  return heatIndex >= 27 ? "เฝ้าระวัง" : "ปกติ";
+}
 
 export function describeObservation(key: string, value: number | null): string | null {
   if (value === null || value === undefined) return null;
@@ -191,6 +400,12 @@ export function describeObservation(key: string, value: number | null): string |
       return value > 0 ? `ดาวเทียมพบน้ำท่วมกระจายในพื้นที่ราว ${Math.round(value * 0.1245)} ตร.กม. (7 วัน)` : "ดาวเทียมไม่พบน้ำท่วมใน 7 วัน";
     case "rain_24h":
       return `ฝน 24 ชม. สูงสุด ${value.toFixed(1)} มม.`;
+    case "rain_chance_now":
+      return `โอกาสฝนตกชั่วโมงนี้ ${value.toFixed(0)}%`;
+    case "rain_chance_peak_hour":
+      return null;  // shown with the peak on the card and in the notice
+    case "rain_chance_max_24h":
+      return `โอกาสฝนตกสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(0)}% (แบบจำลอง)`;
     case "hotspots_24h":
       return `จุดความร้อน 24 ชม. ${value} จุด`;
     case "fire_probability_7d":
@@ -200,6 +415,34 @@ export function describeObservation(key: string, value: number | null): string |
       return `ดัชนีความสมบูรณ์ของพืช (VCI) ${value.toFixed(0)} จาก 100`;
     case "ndvi_deficit":
       return value < 0.05 ? "พืชพรรณเขียวใกล้เคียงปกติของเดือนนี้ (NDVI)" : `NDVI ต่ำกว่าปกติ ${value.toFixed(2)}`;
+    case "pm25_24h":
+      return `PM2.5 เฉลี่ย 24 ชม. ${value.toFixed(1)} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)`;
+    case "pm25_model_24h":
+      return `แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า ${value.toFixed(1)} มคก./ลบ.ม.`;
+    case "heat_index_max_24h":
+      return `ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(1)}°C (เกณฑ์กรมอุตุฯ: ${tmdHeatLabel(value)})`;
+    case "heat_index_now":
+      return `ตอนนี้ร้อนเหมือน ${value.toFixed(1)}°C (ค่าคาดการณ์ชั่วโมงนี้)`;
+    case "quake_mmi_24h":
+      return value <= 1 ? "ไม่มีแผ่นดินไหวที่รู้สึกได้ใน 24 ชม." : `ประเมินแรงสั่นระดับ ${value.toFixed(0)} (มาตราเมอร์คัลลี)`;
+    case "quake_magnitude":
+      return `แผ่นดินไหวขนาด ${value.toFixed(1)}`;
+    case "quake_distance_km":
+      return `ห่างราว ${value.toFixed(0)} กม.`;
+    case "wave_height_max_24h":
+      return `คลื่นสูงสุดใน 24 ชม. ข้างหน้าราว ${value.toFixed(1)} ม.`;
+    case "cyclone_wind_kmh":
+      return value > 0 ? `อยู่ในรัศมีลมแรงของพายุ ${value.toFixed(0)} กม./ชม. ขึ้นไป (รวมเส้นทางคาดการณ์)` : "ไม่อยู่ในรัศมีลมแรงของพายุ";
+    case "cyclone_distance_km":
+      return `พายุเข้าใกล้ที่สุดราว ${value.toFixed(0)} กม.`;
+    case "landslide_traces":
+      return `พื้นที่เคยเกิดดินถล่ม (พบร่องรอย ${value.toFixed(0)} จุด)`;
+    case "landslide_rain_24h":
+      return `ฝน 24 ชม. สูงสุด ${value.toFixed(1)} มม.`;
+    case "landslide_forecast_rain_24h":
+      return `พยากรณ์ฝนรายวันสูงสุด ${value.toFixed(1)} มม.`;
+    case "cross_border_hotspots_24h":
+      return value > 0 ? `จุดความร้อนในประเทศเพื่อนบ้านในรัศมี 100 กม. ${value} จุด (24 ชม.)` : null;
     case "spi_3":
       return `SPI-3 ${value.toFixed(2)}`;
     default:

@@ -3,6 +3,7 @@ import gzip
 import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -16,7 +17,9 @@ from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
 from api_backend.hazard_service import HazardService
-from decision_engine.explainer import GeminiExplainer
+from external_data.adapters.rainviewer import RADAR_FRAME_LIMIT, fetch_radar_maps, recent_radar_frames
+from geo_integration.gazetteer import LEVEL_RANK, normalize, split_prefix
+from decision_engine.explainer import create_explainer_from_env
 from hazard_agent import HazardAgent
 from thanphai_shared import HazardType, redact
 
@@ -31,15 +34,17 @@ agent: HazardAgent | None = None
 async def lifespan(app: FastAPI):
     global service, agent
     service = HazardService(DATA_DIR)
-    # Gemini rewrites answers only when GEMINI_API_KEY is set; otherwise answers stay rule-based.
-    explainer = GeminiExplainer.from_env()
-    logging.getLogger("api").info("LLM explainer: %s", explainer.config.model if explainer else "off (no GEMINI_API_KEY)")
+    # Explainer rewrites answers when GEMINI_API_KEY is present or LLM_PROVIDER=qwen is configured; otherwise answers stay rule-based.
+    explainer = create_explainer_from_env()
+    logging.getLogger("api").info("LLM explainer: %s", explainer.config.model if explainer else "off (no LLM provider configured)")
     agent = HazardAgent(service.gazetteer, service, explainer=explainer)
     # Warm the cache in the background so startup does not wait for the providers.
     service.refresh_in_background()
     service.refresh_forecast_in_background()
     service.refresh_satellite_in_background()
     service.refresh_fire_in_background()
+    # Open-Meteo district forecasts are paced (~2-3 min for all three); start now, not on the first page view.
+    service.refresh_grids_in_background()
     yield
 
 
@@ -81,6 +86,8 @@ async def fresh_service() -> HazardService:
         service.refresh_satellite_in_background()
     if service.fire_stale:
         service.refresh_fire_in_background()
+    service.refresh_grids_in_background()
+    service.refresh_waves_in_background()
     return service
 
 
@@ -113,8 +120,30 @@ def search_areas(q: str = Query(..., min_length=1, max_length=100)) -> list[dict
         raise HTTPException(503, "starting")
     gaz = service.gazetteer
     found = gaz.resolve_phrase(q) or gaz.find_in_text(q)
+    level, term = split_prefix(q)
+    needle = normalize(term)
+    if len(needle) >= 2:
+        candidates = [a for a in gaz.areas if (level is None or a.level == level)
+                      and any(needle in normalize(name) for name in (a.name_th, a.name_en))]
+        candidates.sort(key=lambda a: (not any(normalize(name).startswith(needle) for name in (a.name_th, a.name_en)),
+                                       LEVEL_RANK[a.level], a.name_th, a.code))
+        seen = {a.code for a in found}
+        found = [*found, *(a for a in candidates if a.code not in seen)]
     return [{"code": a.code, "level": a.level, "name_th": a.name_th, "name_en": a.name_en,
              "parents": [p.name_th for p in gaz.parents(a)], "lat": a.lat, "lon": a.lon} for a in found[:20]]
+
+
+@app.get("/v1/areas/locate")
+async def locate_area(lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180)) -> dict:
+    if service is None:
+        raise HTTPException(503, "starting")
+    svc = service
+    matched = await asyncio.to_thread(svc.mapper.assign_points, [lat], [lon], nearest=True)
+    area = svc.gazetteer.by_code.get(matched.iloc[0]["tambon_code"])
+    if area is None:
+        raise HTTPException(404, "location outside covered administrative boundaries")
+    return {"code": area.code, "level": area.level, "name_th": area.name_th, "name_en": area.name_en,
+            "parents": [p.name_th for p in svc.gazetteer.parents(area)], "lat": lat, "lon": lon}
 
 
 @app.get("/v1/areas/{code}/hazards")
@@ -150,22 +179,25 @@ _layer_cache: dict[tuple, tuple[bytes, bytes]] = {}
 
 
 @app.get("/v1/map/layers/{hazard}")
-async def map_layer(hazard: HazardType, request: Request) -> Response:
+async def map_layer(hazard: str, request: Request) -> Response:
+    """One hazard's level per district, or "overview": each district's worst level over all hazards."""
+    if hazard != "overview" and hazard not in {h.value for h in HazardType}:
+        raise HTTPException(404, "unknown hazard")
     svc = await fresh_service()
     m = meta(svc)
-    key = (hazard.value, m["data_updated_at"], tuple(m["degraded_services"]), tuple(m["inputs_pending"]))
+    key = (hazard, m["data_updated_at"], tuple(m["degraded_services"]), tuple(m["inputs_pending"]))
     cached = _layer_cache.get(key)
     if cached is None:
         # ~1.2 MB of GeoJSON. FastAPI's encoder took ~285 ms and GZipMiddleware another ~140 ms on the
         # event loop for every request. Encode and compress once per data version, in a thread.
-        layer = {**svc.map_layer(hazard.value), "meta": m}
+        layer = {**(svc.overview_layer() if hazard == "overview" else svc.map_layer(hazard)), "meta": m}
 
         def encode() -> tuple[bytes, bytes]:
             raw = json.dumps(layer, ensure_ascii=False).encode()
             return raw, gzip.compress(raw, compresslevel=6)
 
         cached = await asyncio.to_thread(encode)
-        if len(_layer_cache) >= 8:  # old data versions are never asked for again
+        if len(_layer_cache) >= 24:  # 11 layers per data version; old versions are never asked for again
             _layer_cache.clear()
         _layer_cache[key] = cached
     raw, compressed = cached
@@ -176,11 +208,49 @@ async def map_layer(hazard: HazardType, request: Request) -> Response:
     return Response(content=raw, media_type="application/json")
 
 
+@app.get("/v1/map/overlays/flood")
+async def flood_overlay() -> dict:
+    """Districts with satellite-detected flood water in the last 7 days (GISTDA), largest flooded area first."""
+    svc = await fresh_service()
+    return {**svc.flood_overlay(), **meta(svc)}
+
+
+@app.get("/v1/map/overlays/cyclones")
+async def cyclone_overlay() -> dict:
+    """Tropical cyclones near Thailand (GDACS): wind areas, analysed track, forecast track and positions."""
+    svc = await fresh_service()
+    return {**svc.cyclone_overlay(), **meta(svc)}
+
+
+@app.get("/v1/map/overlays/waves")
+async def wave_overlay() -> dict:
+    """Wave arrows over the Andaman Sea and the Gulf: highest wave in the next 24 h, direction and rules level."""
+    svc = await fresh_service()
+    return {**svc.wave_overlay(), **meta(svc)}
+
+
 @app.get("/v1/dams")
 async def dams() -> dict:
     """Thailand's 35 large dams, fullest first (ThaiWater; storage % of the normal storage level)."""
     svc = await fresh_service()
     return {"dams": svc.get_dams(), **meta(svc)}
+
+
+@app.get("/v1/water-quality")
+async def water_quality() -> dict:
+    """Automatic water-quality stations (PCD, MWA via ThaiWater) with a reading in the last 6 h, saltiest first.
+
+    `exceeds` holds the parameters past ThaiWater's own limits (salinity > 0.25 / 0.5 / 2 g/L, dissolved oxygen < 3 mg/L).
+    """
+    svc = await fresh_service()
+    return {"stations": svc.water_quality, "source": "คลังข้อมูลน้ำแห่งชาติ (สสน.): กรมควบคุมมลพิษ, การประปานครหลวง", **meta(svc)}
+
+
+@app.get("/v1/storms")
+async def storms() -> dict:
+    """Active tropical storms tracked by HII (ThaiWater), strongest first; empty when there is none. Times are UTC."""
+    svc = await fresh_service()
+    return {"storms": svc.storms, "source": "คลังข้อมูลน้ำแห่งชาติ (สสน.)", **meta(svc)}
 
 
 @app.get("/v1/dams/{dam_id}/history")
@@ -216,12 +286,104 @@ async def river_graph(station_id: str, days: int = Query(3, ge=1, le=7)) -> dict
     return {"station_id": station_id, **graph}
 
 
+@app.get("/v1/rivers/{station_id}/forecast")
+async def river_forecast(station_id: str) -> dict:
+    """Model forecast of the water level at +6/+12/+24 h (display only, never an alert level or river status).
+
+    `available` is false with a `reason` when there is no model, the station was not chosen (the model did not beat
+    "no change" there in the validation year), it has no bank level, or its latest reading is over 3 hours old.
+    """
+    svc = await fresh_service()
+    try:
+        forecast = await svc.river_forecast(station_id)
+    except httpx.HTTPError:
+        raise HTTPException(502, "ThaiWater did not answer; try again later")
+    if forecast is None:
+        raise HTTPException(404, f"unknown station {station_id}")
+    return forecast
+
+
+@app.get("/v1/air/stations")
+async def air_stations() -> dict:
+    """Air4Thai stations with a current PM2.5 reading (24-hour average), worst first."""
+    svc = await fresh_service()
+    return {"stations": svc.pm25_stations, **meta(svc)}
+
+
+@app.get("/v1/earthquakes")
+async def earthquakes() -> dict:
+    """Earthquakes of the last 7 days around Thailand (TMD, plus USGS for events TMD does not list), newest first."""
+    svc = await fresh_service()
+    return {"earthquakes": svc.get_earthquakes(days=7), **meta(svc)}
+
+
+@app.get("/v1/regional-events")
+async def regional_events() -> dict:
+    """GDACS earthquakes, tropical cyclones and floods around South-East Asia (last 7 days), current and red first."""
+    svc = await fresh_service()
+    return {"events": svc.regional_events, **meta(svc)}
+
+
 @app.get("/v1/media")
 async def media() -> dict:
     """Latest rain radar, HII rain forecast, storm track and SWAN wave images (URLs on ThaiWater)."""
     svc = await fresh_service()
     empty = {"radar": [], "rain_forecast": {}, "storm": [], "wave": []}
     return {**(svc.media or empty), **meta(svc)}
+
+
+RADAR_TTL_S = 300
+RADAR_RETRY_S = 30
+_radar_lock = asyncio.Lock()
+_radar_retry_at = 0.0
+_radar_cache: tuple[float, list[dict] | None] | None = None  # (monotonic time fetched, recent frames)
+
+
+@app.get("/v1/radar")
+async def radar() -> dict:
+    """Recent RainViewer radar frames as tile URL templates (`frames` is empty when none are available).
+
+    RainViewer's free tier is for personal/educational use and allows 100 requests/min per IP, so the layer is
+    for the team only: it answers 404 unless RADAR_LAYER=internal, and the frame list is fetched once per 5 minutes
+    for everyone through the module 04 adapter, which the nowcast shares. Failed refreshes wait 30 seconds before
+    retrying; frames older than 1 hour are omitted.
+    Concurrent readers can use the cached images while one request refreshes them.
+    Login (admin/user) replaces the env flag later.
+    """
+    global _radar_cache, _radar_retry_at
+    if os.getenv("RADAR_LAYER", "off") != "internal":
+        raise HTTPException(404, "radar layer is off")
+    # Readers with a cached image need not wait for the request refreshing it.
+    if _radar_cache is None or _radar_cache[1] is None or not _radar_lock.locked():
+        async with _radar_lock:
+            # Recheck after waiting: another request may already have refreshed or failed.
+            now = time.monotonic()
+            if (_radar_cache is None or now - _radar_cache[0] >= RADAR_TTL_S) and now >= _radar_retry_at:
+                try:
+                    frames = await fetch_radar_maps()
+                    recent = [{"tiles": frame["tile_url"], "time": frame["time"]}
+                              for frame in recent_radar_frames(frames, now=time.time(), limit=RADAR_FRAME_LIMIT)]
+                    _radar_cache = (time.monotonic(), recent)
+                    _radar_retry_at = 0.0
+                except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+                    logging.getLogger("api").warning("RainViewer frame list failed", exc_info=True)
+                    _radar_retry_at = time.monotonic() + RADAR_RETRY_S
+    if _radar_cache is None:
+        raise HTTPException(502, "RainViewer did not answer; try again later")
+    return {"frames": recent_radar_frames(_radar_cache[1] or [], now=time.time())}
+
+
+@app.get("/v1/radar/nowcast")
+async def radar_nowcast() -> dict:
+    """1-hour radar nowcast with extrapolated frame timestamps and Qwen explanation."""
+    if os.getenv("RADAR_LAYER", "off") != "internal":
+        raise HTTPException(404, "radar layer is off")
+    # Radar needs only the gazetteer, so it does not wait for the first hazard refresh after a restart.
+    svc = service
+    if svc is None:
+        raise HTTPException(503, "starting")
+    data = await svc.get_radar_nowcast()
+    return {**data, **meta(svc)}
 
 
 @app.get("/v1/warnings")
@@ -233,16 +395,46 @@ async def warnings() -> dict:
 @app.get("/v1/sources")
 async def sources() -> dict:
     svc = await fresh_service()
-    return {"sources": svc.source_status, **meta(svc)}
+    return {"sources": svc.get_sources(), **meta(svc)}
 
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500)
+    # The area open on the page (map selection or the last answer's area); used when the question names none.
+    area_code: str | None = Field(None, pattern=r"^TH\d{2,8}$")
+
+
+# Each question may call the LLM; on a public site, cap how many one visitor can ask.
+ASK_LIMIT_PER_MINUTE = int(os.getenv("ASK_LIMIT_PER_MINUTE", "10"))
+_ask_times: dict[str, list[float]] = {}
+
+
+def client_ip(request: Request) -> str:
+    """The visitor's address. Behind Cloudflare Tunnel and the Next proxy, request.client is the web container;
+    Cloudflare sets CF-Connecting-IP and Next passes it on. The web port is reachable only through the tunnel."""
+    forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0]
+    return forwarded.strip() or (request.client.host if request.client else "unknown")
+
+
+def check_ask_limit(ip: str, now: float | None = None) -> None:
+    if ASK_LIMIT_PER_MINUTE <= 0:
+        return
+    now = time.monotonic() if now is None else now
+    recent = [t for t in _ask_times.get(ip, []) if now - t < 60]
+    if len(recent) >= ASK_LIMIT_PER_MINUTE:
+        _ask_times[ip] = recent
+        raise HTTPException(429, "ถามถี่เกินไป กรุณารอสักครู่แล้วถามใหม่ครับ", headers={"Retry-After": "60"})
+    recent.append(now)
+    _ask_times[ip] = recent
+    if len(_ask_times) > 10_000:  # drop visitors with nothing in the last minute
+        for key in [k for k, v in _ask_times.items() if not v or now - v[-1] >= 60]:
+            del _ask_times[key]
 
 
 @app.post("/v1/ask")
-async def ask(body: AskRequest) -> dict:
+async def ask(body: AskRequest, request: Request) -> dict:
+    check_ask_limit(client_ip(request))
     svc = await fresh_service()
     # ask() may call Gemini (seconds, blocking SDK call); run it in a thread so other requests keep flowing.
-    answer = await asyncio.to_thread(agent.ask, body.question, datetime.now(timezone.utc))
+    answer = await asyncio.to_thread(agent.ask, body.question, datetime.now(timezone.utc), body.area_code)
     return {**answer.__dict__, **meta(svc)}

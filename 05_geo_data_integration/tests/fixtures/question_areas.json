@@ -1,0 +1,22 @@
+[
+  ["TH12", "province", "นนทบุรี", "Nonthaburi", null],
+  ["TH1204", "amphoe", "บางบัวทอง", "Bang Bua Thong", "TH12"],
+  ["TH120401", "tambon", "นา", "Na", "TH1204"],
+  ["TH120402", "tambon", "โสนลอย", "Sano Loi", "TH1204"],
+  ["TH14", "province", "พระนครศรีอยุธยา", "Phra Nakhon Si Ayutthaya", null],
+  ["TH1412", "amphoe", "เสนา", "Sena", "TH14"],
+  ["TH141201", "tambon", "ภูมิ", "Phum", "TH1412"],
+  ["TH141202", "tambon", "ท่าไห", "Tha Hai", "TH1412"],
+  ["TH141203", "tambon", "เมือง", "Mueang", "TH1412"],
+  ["TH50", "province", "เชียงใหม่", "Chiang Mai", null],
+  ["TH5001", "amphoe", "เมืองเชียงใหม่", "Mueang Chiang Mai", "TH50"],
+  ["TH500101", "tambon", "เหนือ", "Nuea", "TH5001"],
+  ["TH500102", "tambon", "สถาน", "Sathan", "TH5001"],
+  ["TH57", "province", "เชียงราย", "Chiang Rai", null],
+  ["TH63", "province", "ตาก", "Tak", null],
+  ["TH26", "province", "นครนายก", "Nakhon Nayok", null],
+  ["TH20", "province", "ชลบุรี", "Chon Buri", null],
+  ["TH40", "province", "ขอนแก่น", "Khon Kaen", null],
+  ["TH38", "province", "บึงกาฬ", "Bueng Kan", null],
+  ["TH80", "province", "นครศรีธรรมราช", "Nakhon Si Thammarat", null]
+]

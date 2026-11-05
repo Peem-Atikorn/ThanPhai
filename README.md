@@ -100,18 +100,19 @@ Every assessment must include its hazard, area, time window, alert level, confid
 
 # Team Assignment
 
-7 people, 8 modules. Module 06 is the largest, so it may be split between two people (for example rain/storm + flood, and drought + fire).
+3 people, 8 modules. Each module has one owner; changes that span several modules use `all` in the branch name
+(for example `feature/peem/all-public-site`). Branches are the ones merged into `develop` through pull requests.
 
 | # | Module | Main work | Owner | Branch |
 |---|---|---|---|---|
-| 01 | `01_web_app` | Next.js, map layers, area subscription | | |
-| 02 | `02_api_backend` | FastAPI gateway, auth, cache | | |
-| 03 | `03_hazard_ai_agent` | LLM planner, tool routing | | |
-| 04 | `04_external_data_services` | Data source adapters | | |
-| 05 | `05_geo_data_integration` | PostGIS, canonical schema, features | | |
-| 06 | `06_hazard_risk_models` | Four hazard risk models | | |
-| 07 | `07_knowledge_decision_llm` | RAG, alert rules, explanation | | |
-| 08 | `08_alert_feedback_monitoring` | Alerts, feedback, monitoring | | |
+| 01 | `01_web_app` | Next.js, map layers, radar playback, assistant chat | mahawongsupawit125-coder | `feature/supawit/01-web-app`<br>`feature/supawit/01-overview-pm25-heat`<br>`feature/supawit/01-storms-area-warnings`<br>`feature/supawit/01-radar-playback`<br>`feature/supawit/01-radar-nowcast`<br>`fix/supawit/01-compact-map-header`<br>`feature/supawit/all-dashboard-update` |
+| 02 | `02_api_backend` | FastAPI gateway, cache, rate limit | Peem-Atikorn | `feature/peem/02-map-overlays`<br>`feature/peem/02-radar-access`<br>`refactor/peem/02-radar-adapter` |
+| 03 | `03_hazard_ai_agent` | Question understanding, tool routing, answers | mahawongsupawit125-coder | `feature/supawit/03-answer-templates`<br>`feature/supawit/03-overview-ranking`<br>`feature/supawit/03-agent-data-tools`<br>`fix/supawit/03-ambiguous-district`<br>`fix/supawit/03-warning-scope` |
+| 04 | `04_external_data_services` | Data source adapters | Peem-Atikorn | `feature/peem/04-water-quality-storms`<br>`feature/titleww/04-radar-nowcast` |
+| 05 | `05_geo_data_integration` | Gazetteer, area mapping, features | Peem-Atikorn | `feature/peem/05-tmd-warning-provinces`<br>`feature/peem/05-tmd-warning-region-days`<br>`feature/supawit/05-area-names` |
+| 06 | `06_hazard_risk_models` | Fire, drought and water-level models | cheewakorn (titleww) | `feature/cheewakorn/06-fire-ndvi-humidity-v2`<br>`feature/peem/06-water-level-forecast` |
+| 07 | `07_knowledge_decision_llm` | RAG, alert rules, Qwen explainer and warning audit | cheewakorn (titleww) | `feature/cheewakorn/07-ddpm-rag`<br>`feature/titleww/07-qwen-model`<br>`feature/titleww/07-qwen-warning-audit` |
+| 08 | `08_alert_feedback_monitoring` | Alerts, feedback, monitoring | mahawongsupawit125-coder | |
 
 ----
 
@@ -186,6 +187,9 @@ docker compose up -d
 
 Examples: `feature/supawit/08-line-alerts`, `fix/peem/04-tmd-empty-stations`, `docs/peem/all-setup-guide`, `chore/supawit/00-docker-compose`.
 Pull requests into `main` may come only from `develop` or `hotfix/*`; `main` and `develop` accept changes only through pull requests.
+
+**Notifications:** `.github/CODEOWNERS` asks every team member to review each pull request. To also get comments and pushes,
+open the repository on GitHub, click **Watch → All Activity**, and turn on push notifications in the GitHub mobile app.
 
 ```bash
 git clone https://github.com/Peem-Atikorn/ThanPhai.git

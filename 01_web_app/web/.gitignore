@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 public/maplibre-gl-worker.mjs
+# Generated PR captures and notes are kept out of source control
+/docs/pr-screenshots/
+/docs/PR-6.md

@@ -1,0 +1,623 @@
+/* Hallmark · landscape-first glass workspace · photographic reference adaptation
+ * pre-emit critique: P4 H5 E4 S5 R4 V4 */
+:root {
+  --scene-shade: #101a25cc;
+  --scene-bottom-shade: #0c141b8c;
+  --scene-stroke: #eef0e63d;
+  --scene-shadow: 0 16px 50px #0b101b29;
+  --background: #192126;
+  --surface: #2c3033;
+  --foreground: #f5f3ed;
+  --muted: #d4d2c8;
+  --line: #e4e8e02e;
+  --brand: #d5ed86;
+  --brand-hover: #e7f6b8;
+  --accent-soft: #414b2ad9;
+  --warning-text: #f8d293;
+  --warning-bg: #342d21;
+  --floating-shadow: 0 12px 32px #0005;
+  --cc-outer: #20282d;
+  --cc-panel: #252b30b3;
+  --cc-panel-raised: #c8cfcb17;
+  --cc-panel-deep: #182127a6;
+  --cc-glass: #bac5c21c;
+  --cc-solid: #273034eb; /* large panels: close to the blurred glass over the dark scene, without the blur cost */
+  --cc-accent: #d5ed86;
+  --cc-on-accent: #262e20;
+  --cc-focus: #e0f6a4;
+  --cc-blue: #8fc8ef;
+  --cc-violet: #c7b6f3;
+  --cc-coral: #ffaf93;
+  --cc-amber: #f5d390;
+  --cc-danger: #ffadb7;
+  --cc-danger-bg: #3b222c;
+  --cc-warm-bg: #372c1e;
+  --cc-good: #9de1b9;
+  --cc-good-bg: #17372d;
+  --cc-photo-shade: #19212666;
+  --cc-photo-shadow: #16212b80;
+  --cc-photo-glow: #00000010;
+  --cc-clear: transparent;
+}
+html { color-scheme: dark; }
+body { background: var(--cc-outer); }
+.command-shell.journey-shell {
+  --background: #192126;
+  --foreground: #f5f3ed;
+  --brand: #d5ed86;
+  --brand-hover: #e7f6b8;
+  --muted: #d4d2c8;
+  --line: #e4e8e02e;
+  --category-color: #d5ed86;
+  --category-tint: #414b2ad9;
+  max-width: 1800px;
+  width: 100%;
+  margin-inline: auto;
+  min-height: 100dvh;
+  background: var(--background);
+}
+.command-shell .journey-hero {
+  margin: 0;
+  padding: 28px clamp(14px, 2.4vw, 44px) 20px;
+  border: 0;
+  border-radius: 0;
+  --hero-photo-height: clamp(640px, 86svh, 960px);
+}
+.command-shell .journey-hero::before { opacity: .28; filter: saturate(.65); }
+.command-shell .journey-hero::after { background: linear-gradient(180deg, var(--cc-photo-shadow), var(--cc-photo-shade) 24%, var(--background) 100%); }
+.command-shell .journey-header { max-width: 1640px; gap: 28px; padding-bottom: 25px; border-bottom: 1px solid var(--line); }
+.command-shell .journey-brand { color: var(--foreground); font-size: 25px; gap: 12px; }
+.command-shell .journey-brand-mark { width: 48px; height: 52px; border-color: var(--brand); color: var(--brand); background: var(--accent-soft); }
+.command-shell .journey-brand small { color: var(--muted); font-size: 10px; letter-spacing: .26em; }
+.command-shell .journey-header-message { padding: 0; }
+.command-eyebrow { display: block; color: var(--cc-accent); font-size: 10px; font-weight: 600; letter-spacing: .2em; margin-bottom: 6px; }
+.command-shell .journey-header-message h1 { color: var(--foreground); font-size: clamp(24px, 2.3vw, 34px); line-height: 1.4; margin: 0; font-weight: 650; letter-spacing: -.025em; }
+.command-shell .journey-header-message h1 span { color: var(--cc-accent); }
+.command-shell .journey-header-message p { color: var(--muted); font-size: 12px; margin-top: 7px; }
+.command-shell .journey-header-actions { gap: 10px; }
+.command-shell .journey-search-icon { min-height: 46px; border-radius: 12px; background: var(--cc-accent); border-color: var(--cc-accent); color: var(--cc-on-accent); padding-inline: 20px; }
+.command-shell .journey-search-icon:hover { background: var(--brand-hover); }
+.command-shell .journey-top-cta { min-height: 46px; background: var(--cc-glass); border: 1px solid var(--line); color: var(--foreground); border-radius: 12px; padding: 8px 12px; gap: 12px; }
+.command-shell .journey-top-cta > span { width: 24px; height: 24px; background: var(--cc-clear); color: var(--cc-accent); }
+.command-shell .journey-bottom { max-width: 1640px; margin-top: 22px; }
+.command-shell .journey-category-bar { max-width: none; margin-bottom: 20px; padding: 5px; border: 1px solid var(--line); border-radius: 16px; background: var(--cc-glass); box-shadow: none; gap: 5px; }
+.command-shell .journey-category-button { min-height: 66px; border-radius: 11px; color: var(--muted); padding: 10px 14px; justify-content: flex-start; gap: 12px; }
+.command-shell .journey-category-button > svg { width: 23px; height: 23px; color: var(--category-color); }
+.command-shell .journey-category-button strong { color: var(--foreground); font-size: 13px; font-weight: 600; }
+.command-shell .journey-category-button small { color: var(--muted); font-size: 10px; }
+.command-shell .journey-category-button:hover:not(.is-active) { background: var(--cc-panel-raised); }
+.command-shell .journey-category-button.is-active { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--cc-accent); }
+.command-shell .journey-category-button.is-active strong, .command-shell .journey-category-button.is-active > svg { color: var(--cc-accent); }
+.command-shell .journey-category-button.is-active small { color: var(--foreground); }
+.command-shell .journey-dashboard { --foreground: #f5f3ed; --muted: #d4d2c8; --brand: #d5ed86; }
+.command-shell .dashboard-grid { grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
+.command-shell .journey-dashboard :is(.map-panel, .search-panel, .area-panel, .assistant-panel) {
+  --surface: #2c3033;
+  --foreground: #f5f3ed;
+  --muted: #d4d2c8;
+  --brand: #d5ed86;
+  --line: #e4e8e02e;
+  background: var(--cc-panel);
+  color: var(--foreground);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 8px 24px var(--cc-photo-glow);
+}
+.command-shell .journey-dashboard .map-panel { position: static; }
+.command-shell .journey-dashboard :is(.area-panel, .assistant-panel, .dam-panel) { padding: 22px; }
+.command-shell .journey-dashboard .area-panel { border-top: 2px solid var(--cc-accent); }
+.command-shell .journey-dashboard .assistant-panel { background: var(--cc-panel-deep); }
+.command-shell .journey-dashboard .map-heading { min-height: 82px; padding: 19px 22px; background: var(--cc-clear); border-bottom: 1px solid var(--line); color: var(--foreground); }
+.command-shell .journey-dashboard .map-heading h2 { color: var(--foreground); font-size: 18px; }
+.command-shell .journey-dashboard .map-heading p { color: var(--muted); font-size: 12px; }
+.command-shell .journey-dashboard .map-heading .icon-button { color: var(--cc-accent); }
+.command-shell .map-canvas { --map-height: clamp(440px, 56svh, 660px); background: var(--cc-panel-deep); }
+.command-shell .map-heading-actions { gap: 8px; }
+.command-shell :is(.map-hint, .map-reset, .map-options button, .overlay-controls, .map-notice) { color: var(--foreground); background: var(--cc-panel); border: 1px solid var(--line); box-shadow: var(--floating-shadow); }
+.command-shell .map-options button.is-active { background: var(--accent-soft); color: var(--cc-accent); border-color: var(--cc-accent); }
+.command-shell :is(.map-reset, .map-options button):hover { background: var(--cc-panel-raised); }
+.command-shell .overlay-controls summary { font-size: 13px; color: var(--cc-accent); }
+.command-shell .overlay-controls button[aria-pressed="true"] { background: var(--accent-soft); }
+.command-shell .overlay-controls button { color: var(--foreground); }
+.command-shell .map-loading { background: var(--cc-panel-deep); color: var(--muted); }
+.command-shell .error-notice { color: var(--cc-danger); background: var(--cc-danger-bg); }
+.command-shell .hazard-subtabs { padding: 10px 14px; background: var(--cc-panel-deep); }
+.command-shell :is(.hazard-subtabs button, .images-link) { border-color: var(--line); background: var(--cc-panel-raised); color: var(--foreground); }
+.command-shell .journey-dashboard .map-heading .images-link { color: var(--foreground); }
+.command-shell[data-active-category] .hazard-subtabs button.is-active, .command-shell .images-link.is-on { background: var(--accent-soft); color: var(--cc-accent); border-color: var(--cc-accent); }
+.command-shell .layer-toolbar { background: var(--cc-panel-deep); padding: 10px 14px; }
+.command-shell .layer-toolbar-buttons button { min-height: 38px; background: var(--cc-panel-raised); color: var(--muted); border-color: var(--line); border-radius: 9px; font-size: 12px; }
+.command-shell .layer-toolbar-buttons button[aria-pressed="true"] { background: var(--accent-soft); color: var(--cc-accent); border-color: var(--cc-accent); }
+.command-shell .layer-toolbar-buttons button:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--cc-accent); }
+.command-shell .layer-toolbar-buttons button[aria-pressed="true"] .layer-toggle { background: var(--cc-accent); box-shadow: none; }
+.command-shell .journey-dashboard .map-summary { padding: 18px 22px; border-top: 1px solid var(--line); }
+.command-shell .journey-dashboard .risk-legend { gap: 8px; }
+.command-shell .journey-dashboard .risk-legend li { background: var(--cc-panel-deep); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 12px; }
+.command-shell .journey-dashboard .risk-legend strong { color: var(--foreground); font-size: 24px; }
+.command-shell .legend-heading { color: var(--foreground); }
+.command-shell .overview-overlay-summary { background: var(--cc-panel-deep); }
+.command-shell :is(.data-timestamp, .source-note, .section-description, .assessment-list p, .assistant-heading p, .dam-storage p, .dam-totals p, .dam-total-release, .dam-value small, .dam-name small, .flow-unit, .chart-empty) { color: var(--muted); }
+.command-shell .journey-dashboard :is(.area-intro h2, .area-title h2, .dam-total-release strong) { color: var(--foreground); }
+.command-shell .journey-dashboard :is(.assistant-icon, .area-icon, .empty-map-icon) { color: var(--cc-accent); background: var(--accent-soft); border-color: var(--line); }
+.command-shell .journey-dashboard :is(.ask-input, .input-wrap) { background: var(--cc-panel-deep); border-color: var(--line); }
+.command-shell :is(input, select) { color: var(--foreground); }
+.command-shell input::placeholder { color: var(--muted); }
+.command-shell .journey-dashboard .ask-input input { background: var(--cc-clear); }
+.command-shell .assistant-panel label { color: var(--muted); }
+.command-shell .primary-button, .command-shell .journey-primary { background: var(--cc-accent); color: var(--cc-on-accent); }
+.command-shell .primary-button:hover:not(:disabled), .command-shell .journey-primary:hover { background: var(--brand-hover); }
+.command-shell :is(.text-button, .filter-chip button, .data-timestamp a, .media-figure figcaption a, .event-list a) { color: var(--cc-accent); }
+.command-shell .journey-dashboard .question-suggestions button { color: var(--muted); background: var(--cc-panel-raised); border-color: var(--line); }
+.command-shell .journey-dashboard .question-suggestions button:hover { color: var(--foreground); background: var(--accent-soft); }
+.command-shell :is(.dam-sort, .forecast-grid li, .dam-flows li, .media-select, .media-steps button, .filter-chip) { background: var(--cc-panel-deep); color: var(--muted); border-color: var(--line); }
+.command-shell .dam-flows li:first-child { background: var(--accent-soft); }
+.command-shell .dam-sort button { min-height: 44px; color: var(--muted); }
+.command-shell .dam-sort button.is-active, .command-shell .media-steps button.is-active { background: var(--accent-soft); color: var(--cc-accent); box-shadow: none; }
+.command-shell .dam-bar { background: var(--cc-panel-raised); }
+.command-shell .chart-grid { stroke: var(--line); }
+.command-shell :is(.official-warning, .journey-guide-notice) { background: var(--warning-bg); color: var(--warning-text); }
+/* Radar forecast badge and note in the dark theme's amber instead of globals.css's light-theme colours. */
+.command-shell .radar-frame-badge.is-forecast { background: var(--warning-bg); color: var(--cc-amber); }
+.command-shell .radar-forecast-copy { background: var(--warning-bg); color: var(--warning-text); border-left-color: var(--cc-amber); }
+.command-shell .radar-forecast-copy small { color: var(--muted); }
+.command-shell .river-callout { background: var(--cc-danger-bg); color: var(--cc-danger); }
+.command-shell .river-callout small { color: var(--cc-danger); }
+.command-shell .river-callout.is-calm { background: var(--accent-soft); color: var(--cc-accent); }
+.command-shell .river-callout.is-calm small { color: var(--muted); }
+.command-shell .level-CRITICAL { color: var(--cc-danger); background: var(--cc-danger-bg); }
+.command-shell .level-WARNING { color: var(--cc-coral); background: var(--cc-warm-bg); }
+.command-shell .level-WATCH { color: var(--cc-amber); background: var(--warning-bg); }
+.command-shell .level-NORMAL { color: var(--cc-good); background: var(--cc-good-bg); }
+.command-shell .level-NONE { color: var(--muted); background: var(--cc-panel-raised); }
+.command-shell .event-mag { background: var(--cc-panel-raised); }
+.command-shell :is(.event-list li, .overview-breakdown button, .assessment-list > li) { border-color: var(--line); }
+.command-shell .media-figure img { background: var(--cc-panel-raised); border-color: var(--line); }
+.command-shell .journey-footer { max-width: 1640px; margin: 8px auto 0; padding: 20px clamp(14px, 2.4vw, 44px) 26px; background: var(--cc-clear); border-color: var(--line); }
+.command-shell .journey-footer-brand { color: var(--foreground); }
+.command-shell .journey-footer-brand svg { color: var(--cc-accent); }
+.command-shell .emergency-numbers { color: var(--cc-coral); }
+.command-shell .disclaimer { line-height: 1.8; }
+.command-shell.journey-live-shell[data-active-category] .journey-photo-note { color: var(--muted); background: var(--cc-clear); border: 0; padding: 0; margin-block: 16px 0; }
+.command-shell :is(.journey-search-dialog, .journey-guide-dialog) { background: var(--cc-panel); color: var(--foreground); border-color: var(--line); }
+.command-shell :is(.journey-search-dialog, .journey-guide-dialog)::backdrop { background: var(--cc-photo-shadow); }
+.command-shell .journey-search-dialog .search-panel { background: var(--cc-clear); color: var(--foreground); }
+.command-shell .journey-dialog-close { background: var(--cc-panel-raised); color: var(--foreground); border-color: var(--line); }
+.command-shell :is(.journey-guide-dialog > p, .journey-guide-dialog li p, .journey-section-label) { color: var(--muted); }
+.command-shell :is(button, a, input, summary, select):focus-visible { outline-color: var(--cc-focus); }
+.command-shell .journey-search-icon:focus-visible { outline-offset: 4px; }
+.command-shell .skip-link { background: var(--surface); color: var(--foreground); }
+.command-shell .maplibregl-popup-content { background: var(--surface); color: var(--foreground); border: 1px solid var(--line); }
+.command-shell .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--surface); }
+.command-shell .maplibregl-popup-close-button { min-width: 32px; min-height: 32px; color: var(--foreground); }
+
+.situation-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.situation-strip article { min-width: 0; padding: 16px 20px; background: var(--cc-panel); border: 1px solid var(--line); border-radius: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; }
+.situation-strip article > span { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.situation-strip i { width: 7px; height: 7px; border-radius: 50%; background: var(--metric-color); flex-shrink: 0; }
+.situation-strip strong { grid-column: 2; grid-row: 1 / 3; color: var(--foreground); font-size: clamp(28px, 2.7vw, 40px); line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+.situation-strip article > small { color: var(--muted); font-size: 10px; margin-top: 5px; }
+.situation-strip .situation-total { border-color: var(--cc-accent); background: var(--accent-soft); }
+.situation-strip .situation-total strong { color: var(--cc-accent); }
+
+@media (min-width: 1500px) { .command-shell .dashboard-grid { grid-template-columns: minmax(0, 1fr) 380px; } }
+@media (max-width: 1200px) {
+  .command-shell .journey-header { gap: 18px; }
+  .command-shell .journey-category-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .command-shell .journey-category-button { min-height: 62px; }
+  .command-shell .dashboard-grid { grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; }
+  .situation-strip article { grid-template-columns: minmax(0, 1fr); padding: 15px; }
+  .situation-strip strong { grid-column: 1; grid-row: 2; margin-top: 8px; }
+}
+@media (max-width: 1100px) {
+  .command-shell .journey-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .command-shell .journey-header-message { grid-row: 2; }
+  .command-shell .journey-header-actions { grid-row: 1; }
+  .command-shell .journey-header-message h1 { font-size: 30px; }
+}
+@media (max-width: 950px) {
+  .command-shell .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .command-shell .detail-sidebar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .command-shell .detail-sidebar > :only-child { grid-column: 1 / -1; }
+  .command-shell .map-canvas { --map-height: clamp(430px, 60svh, 600px); }
+}
+@media (max-width: 600px) {
+  .command-shell .journey-hero { padding: 18px 12px 14px; }
+  .command-shell .journey-header { padding-bottom: 18px; gap: 17px; }
+  .command-shell .journey-brand { font-size: 22px; }
+  .command-shell .journey-brand-mark { width: 39px; height: 44px; }
+  .command-shell .journey-header-message h1 { font-size: clamp(24px, 7vw, 30px); }
+  .command-shell .journey-header-message p { font-size: 12px; line-height: 1.8; }
+  .command-shell .journey-header-actions { grid-row: 3; width: 100%; }
+  .command-shell .journey-search-icon { flex: 1; font-size: 12px; padding-inline: 10px; }
+  .command-shell .journey-top-cta { font-size: 11px; padding-inline: 10px; }
+  .command-shell .journey-bottom { margin-top: 16px; }
+  .command-shell .journey-category-bar { gap: 4px; margin-bottom: 14px; border-radius: 14px; }
+  .command-shell .journey-category-button { flex-direction: column; justify-content: center; padding: 10px 2px; gap: 5px; min-height: 68px; border-radius: 9px; }
+  .command-shell .journey-category-button strong { font-size: 11px; }
+  .situation-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .situation-strip article { padding: 13px; border-radius: 12px; }
+  .situation-strip article > span { font-size: 12px; }
+  .situation-strip article > small { font-size: 10px; }
+  .situation-strip strong { font-size: 32px; }
+  .command-shell .detail-sidebar { display: flex; flex-direction: column; }
+  .command-shell .journey-dashboard :is(.map-heading, .map-summary, .area-panel, .assistant-panel, .dam-panel) { padding: 16px; }
+  .command-shell .journey-dashboard .map-heading h2 { font-size: 16px; }
+  .command-shell .journey-dashboard :is(.map-panel, .area-panel, .assistant-panel, .dam-panel) { border-radius: 14px; }
+  .command-shell .map-canvas { --map-height: clamp(360px, 60svh, 480px); }
+  .command-shell .journey-dashboard .risk-legend li { padding: 8px; font-size: 11px; }
+  .command-shell .journey-dashboard .risk-legend strong { font-size: 21px; }
+  .command-shell .journey-header-actions .journey-top-cta { flex: 0 0 auto; }
+  .command-shell .layer-toolbar-buttons button { min-height: 44px; }
+  .command-shell .journey-footer { padding-inline: 16px; }
+}
+
+/* The landscape is the canvas; real map data remains a separate, expandable panel. */
+.landscape-shell.command-shell { max-width: none; background: var(--cc-clear); }
+.landscape-shell .journey-hero { min-height: calc(100svh - 16px); margin: 8px; padding: 18px 24px 20px; border: 1px solid var(--scene-stroke); border-radius: 24px; background: var(--cc-clear); }
+.landscape-shell .journey-hero::before { position: fixed; inset: 0; height: 100svh; background-image: url('/images/thanphai-scenic-valley.webp'); background-position: center 45%; background-size: cover; opacity: 1; filter: saturate(.8) brightness(.92); }
+.landscape-shell .journey-hero::after { position: fixed; inset: 0; height: 100svh; background: linear-gradient(180deg, var(--scene-shade), var(--cc-clear) 38%, var(--scene-bottom-shade)); }
+.landscape-shell .journey-header { max-width: 1740px; padding: 0 0 17px; gap: 34px; border-color: var(--scene-stroke); }
+.landscape-shell .journey-brand { font-size: 23px; }
+.landscape-shell .journey-brand-mark { border: 0; background: var(--cc-glass); width: 40px; height: 44px; border-radius: 12px; }
+.landscape-shell .journey-header-message h1 { font-size: 24px; font-weight: 500; }
+.landscape-shell .journey-header-message h1 span { color: var(--foreground); }
+.landscape-shell .command-eyebrow { color: var(--cc-accent); font-size: 9px; }
+.landscape-shell .journey-header-message p { font-size: 11px; }
+.landscape-shell .journey-search-icon { color: var(--foreground); background: var(--cc-glass); border: 1px solid var(--scene-stroke); border-radius: 10px; backdrop-filter: blur(16px); }
+.landscape-shell .journey-search-icon:hover { color: var(--cc-on-accent); background: var(--cc-accent); }
+.landscape-shell .journey-top-cta { color: var(--cc-on-accent); background: var(--cc-accent); border-color: var(--cc-accent); border-radius: 10px; }
+.landscape-shell .journey-top-cta > span { color: var(--cc-on-accent); }
+.landscape-shell .journey-bottom { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 22px; max-width: 1740px; margin-top: 24px; }
+.landscape-shell .journey-category-bar { position: sticky; top: 18px; align-self: start; width: 78px; max-height: calc(100svh - 40px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 8px; background: var(--cc-panel); border-color: var(--scene-stroke); border-radius: 18px; backdrop-filter: blur(20px); }
+.landscape-shell .journey-category-button { width: 100%; min-height: 63px; padding: 8px 2px; flex-direction: column; justify-content: center; gap: 6px; text-align: center; border-radius: 12px; }
+.landscape-shell .journey-category-button strong { font-size: 10px; white-space: nowrap; font-weight: 500; }
+.landscape-shell .journey-category-button small { display: none; }
+.landscape-shell .journey-category-button > svg { color: var(--foreground); width: 21px; height: 21px; }
+.landscape-shell .journey-category-button.is-active { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--scene-stroke); }
+.landscape-shell .journey-category-button.is-active strong, .landscape-shell .journey-category-button.is-active > svg { color: var(--cc-accent); }
+.landscape-shell .journey-hero-dashboard { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; min-height: calc(100svh - 145px); }
+.landscape-shell .dashboard-grid { display: contents; }
+.landscape-shell .situation-strip { position: absolute; top: 8px; left: 0; width: 250px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.landscape-shell .situation-strip article { display: block; padding: 12px 14px; border-radius: 13px; background: var(--cc-panel); border-color: var(--scene-stroke); backdrop-filter: blur(20px); box-shadow: var(--scene-shadow); }
+.landscape-shell .situation-strip .situation-total { background: var(--cc-panel); }
+.landscape-shell .situation-strip strong { display: block; font-size: 31px; margin-top: 4px; font-weight: 500; }
+.landscape-shell .situation-strip article > span { font-size: 11px; }
+.landscape-shell .situation-strip article > small { display: block; font-size: 9px; margin-top: 2px; }
+.landscape-shell .journey-dashboard :is(.map-panel, .area-panel, .assistant-panel) { background: var(--cc-panel); border: 1px solid var(--scene-stroke); border-radius: 16px; backdrop-filter: blur(18px); box-shadow: var(--scene-shadow); }
+.landscape-shell .journey-dashboard .map-panel { grid-column: 1; grid-row: 1; margin-top: 300px; min-width: 0; }
+.landscape-shell .detail-sidebar { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.landscape-shell .journey-dashboard :is(.area-panel, .assistant-panel, .dam-panel) { padding: 20px; }
+.landscape-shell .journey-dashboard .map-heading { min-height: 66px; padding: 14px 18px; background: var(--cc-clear); }
+.landscape-shell .journey-dashboard .map-heading h2 { font-size: 16px; font-weight: 550; }
+.landscape-shell .map-canvas { --map-height: clamp(280px, 32svh, 370px); }
+.landscape-shell .layer-toolbar { background: var(--cc-clear); padding: 9px 12px; }
+.landscape-shell .layer-toolbar-buttons button { background: var(--cc-glass); border-color: var(--scene-stroke); color: var(--foreground); min-height: 36px; }
+.landscape-shell .journey-dashboard .map-summary { padding: 14px 18px; }
+.landscape-shell .journey-dashboard .risk-legend li { background: var(--cc-glass); border-color: var(--scene-stroke); }
+.landscape-shell .overview-overlay-summary { background: var(--cc-clear); }
+.landscape-shell .journey-dashboard .assistant-panel { background: var(--cc-panel); }
+.landscape-shell .dam-flows strong { color: var(--foreground); }
+.landscape-shell .disclaimer { grid-column: 1 / -1; grid-row: 2; padding: 4px 0; color: var(--foreground); }
+.landscape-shell .journey-dashboard > .text-button { grid-column: 1 / -1; grid-row: 3; justify-self: start; background: var(--cc-panel); border: 1px solid var(--scene-stroke); backdrop-filter: blur(12px); }
+.landscape-shell .journey-photo-note { grid-column: 2; }
+.landscape-shell.journey-live-shell[data-active-category] .journey-photo-note { padding: 8px 12px; margin-top: 0; color: var(--foreground); background: var(--cc-panel); border-radius: 10px; justify-self: end; }
+
+@media (min-width: 1650px) {
+  .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0, 1fr) 340px; }
+}
+@media (max-width: 1100px) {
+  .landscape-shell .journey-header { display: flex; flex-wrap: wrap; gap: 16px; }
+  .landscape-shell .journey-header-message { flex: 1; }
+  .landscape-shell .journey-header-actions { margin-left: auto; }
+  .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0, 1fr) 280px; }
+  .landscape-shell .situation-strip { width: 230px; }
+}
+@media (max-width: 950px) {
+  .landscape-shell .journey-hero { padding: 18px; }
+  .landscape-shell .journey-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .landscape-shell .journey-header-message { grid-column: 1 / -1; grid-row: 2; }
+  .landscape-shell .journey-header-actions { grid-column: 2; grid-row: 1; }
+  .landscape-shell .journey-bottom { display: block; margin-top: 18px; }
+  .landscape-shell .journey-category-bar { position: static; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); width: 100%; margin-bottom: 18px; padding: 6px; }
+  .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .landscape-shell .situation-strip { position: static; grid-column: 1; grid-row: 1; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+  .landscape-shell .journey-dashboard .map-panel { grid-row: 3; margin-top: 150px; }
+  .landscape-shell .detail-sidebar { grid-column: 1; grid-row: 4; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landscape-shell .disclaimer { grid-row: 5; }
+  .landscape-shell .journey-dashboard > .text-button { grid-row: 6; }
+  .landscape-shell .map-canvas { --map-height: clamp(380px, 54svh, 520px); }
+}
+@media (max-width: 600px) {
+  .landscape-shell .journey-hero { margin: 5px; padding: 14px 12px; border-radius: 18px; }
+  .landscape-shell .journey-hero::before { background-position: 58% center; }
+  .landscape-shell .journey-header { gap: 16px; }
+  .landscape-shell .journey-header-message h1 { font-size: clamp(23px, 6.4vw, 29px); }
+  .landscape-shell .journey-header-actions { grid-column: 1 / -1; grid-row: 3; margin: 0; }
+  .landscape-shell .journey-header-message p { font-size: 11px; }
+  .landscape-shell .journey-category-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .landscape-shell .journey-category-button { min-height: 62px; }
+  .landscape-shell .journey-category-button strong { font-size: 11px; }
+  .landscape-shell .situation-strip article { padding: 12px; }
+  .landscape-shell .situation-strip article > small { font-size: 10px; }
+  .landscape-shell .journey-dashboard .map-panel { margin-top: 100px; }
+  .landscape-shell .detail-sidebar { display: flex; }
+  .landscape-shell .journey-dashboard :is(.map-heading, .map-summary, .area-panel, .assistant-panel, .dam-panel) { padding: 16px; }
+  .landscape-shell .layer-toolbar-buttons button { min-height: 44px; }
+}
+/* Hallmark · compact map workspace · pre-emit critique: P5 H5 E4 S5 R5 V4 */
+.landscape-shell .journey-hero { padding: 16px 18px 20px; }
+.landscape-shell .journey-header { display: grid; grid-template-columns: 132px minmax(200px, 1fr) minmax(420px, 520px); grid-template-rows: auto auto; gap: 6px 22px; padding-bottom: 14px; align-items: center; }
+.landscape-shell .journey-brand { grid-column: 1; grid-row: 1 / 3; }
+.landscape-shell .journey-header-message { grid-column: 2; grid-row: 1; }
+.landscape-shell .journey-header-message h1 { font-size: 23px; }
+.landscape-shell .journey-header-message p { margin-top: 3px; }
+.landscape-shell .journey-header-actions { grid-column: 2; grid-row: 2; margin: 0; justify-content: flex-start; gap: 8px; }
+.landscape-shell .journey-header-actions :is(.journey-search-icon, .journey-top-cta) { min-height: 32px; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+.landscape-shell .journey-top-cta > span { width: 18px; height: 18px; }
+.landscape-shell .header-snapshot { grid-column: 3; grid-row: 1 / 3; min-width: 0; min-height: 82px; }
+.landscape-shell .header-snapshot .situation-strip { position: static; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; gap: 6px; margin: 0; }
+.landscape-shell .header-snapshot .situation-strip article { min-width: 0; min-height: 82px; padding: 10px 12px; border-radius: 10px; box-shadow: none; }
+.landscape-shell .header-snapshot .situation-strip strong { margin-top: 2px; font-size: 28px; line-height: 1.2; }
+.landscape-shell .header-snapshot .situation-strip article > span { display: block; min-height: 18px; font-size: 10px; }
+.landscape-shell .header-snapshot .situation-strip article > small { display: none; }
+.landscape-shell .header-snapshot .situation-strip .situation-total > small { display: block; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.landscape-shell .journey-bottom { grid-template-columns: 68px minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.landscape-shell .journey-category-bar { width: 68px; padding: 5px; gap: 4px; border-radius: 14px; }
+.landscape-shell .journey-category-button { min-height: 60px; }
+.landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0, 1fr) clamp(280px, 23vw, 340px); gap: 16px; min-height: 0; }
+.landscape-shell .journey-dashboard .map-panel { grid-row: 1; margin-top: 0; border-radius: 12px; }
+.landscape-shell .detail-sidebar { grid-column: 2; grid-row: 1; gap: 12px; }
+.landscape-shell .journey-dashboard :is(.area-panel, .assistant-panel, .dam-panel) { padding: 16px; border-radius: 12px; }
+.landscape-shell .map-chrome { height: 140px; display: grid; grid-template-rows: 54px minmax(0, 1fr); }
+.landscape-shell .map-controls { min-width: 0; overflow: hidden; }
+.landscape-shell .map-controls :is(.layer-toolbar, .hazard-subtabs) { width: 100%; height: 54px; margin: 0; padding: 5px 10px; }
+.landscape-shell .map-controls :is(.layer-toolbar-buttons, .hazard-subtabs) { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+.landscape-shell .map-controls button { min-height: 42px; flex-shrink: 0; white-space: nowrap; }
+.landscape-shell .journey-dashboard .map-heading { display: flex; flex-wrap: nowrap; gap: 12px; min-height: 0; padding: 10px 16px; }
+.landscape-shell .journey-dashboard .map-heading-copy { flex: 1; min-width: 0; }
+.landscape-shell .journey-dashboard .map-heading :is(h2,p) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.landscape-shell .journey-dashboard .map-heading h2 { font-size: 16px; }
+.landscape-shell .journey-dashboard .map-heading p { font-size: 11px; margin-top: 3px; line-height: 1.5; }
+.landscape-shell .map-heading-actions { flex-shrink: 0; width: auto; gap: 4px; flex-wrap: nowrap; }
+.landscape-shell .map-heading-actions :is(.images-link, .icon-button) { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 40px; min-width: 36px; min-height: 40px; padding: 0; font-size: 0; gap: 0; overflow: hidden; }
+.landscape-shell .map-heading-actions svg { width: 18px; height: 18px; }
+.landscape-shell .map-canvas { --map-height: clamp(500px, 66svh, 820px); }
+.landscape-shell .journey-dashboard .map-summary { padding: 12px 16px; }
+.landscape-shell .disclaimer { grid-column: 1 / -1; grid-row: 2; margin-top: 0; }
+.landscape-shell .journey-dashboard > .text-button { grid-row: 3; }
+.quality-guide-label { color: var(--muted); font-size: 11px; margin: 12px 0 6px; }
+.quality-metrics li { display: block; padding: 0; }
+.quality-metrics summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 46px; padding: 10px; cursor: pointer; list-style: none; }
+.quality-metrics summary::-webkit-details-marker { display: none; }
+.quality-metrics summary > span { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; }
+.quality-metrics summary svg { width: 13px; height: 13px; color: var(--cc-blue); flex-shrink: 0; }
+.quality-metrics summary strong { font-size: 16px; }
+.quality-metrics summary:focus-visible { outline: 2px solid var(--cc-focus); outline-offset: -2px; border-radius: 8px; }
+.quality-metrics details[open] summary { border-bottom: 1px solid var(--line); }
+.quality-help { padding: 10px; font-size: 12px; line-height: 1.75; color: var(--muted); }
+.quality-help p + p { margin-top: 8px; }
+.quality-help b { color: var(--foreground); }
+.quality-help a { display: inline-flex; align-items: center; gap: 4px; color: var(--cc-accent); margin-top: 7px; }
+.quality-help a svg { width: 13px; height: 13px; }
+.quality-references { color: var(--muted); font-size: 11px; margin-top: 12px; line-height: 1.8; }
+.quality-references a { color: var(--cc-blue); }
+@media (max-width: 1200px) {
+  .landscape-shell .journey-header { grid-template-columns: 118px minmax(180px,1fr) minmax(360px,440px); gap: 6px 14px; }
+  .landscape-shell .journey-header-message h1 { font-size: 20px; }
+  .landscape-shell .header-snapshot .situation-strip article { padding: 9px; }
+}
+@media (max-width: 1050px) {
+  .landscape-shell .journey-header { grid-template-columns: 120px minmax(0,1fr); }
+  .landscape-shell .header-snapshot { grid-column: 1 / -1; grid-row: 3; margin-top: 8px; }
+  .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr); }
+  .landscape-shell .detail-sidebar { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .landscape-shell .disclaimer { grid-row: 3; }
+  .landscape-shell .journey-dashboard > .text-button { grid-row: 4; }
+}
+@media (max-width: 950px) {
+  .landscape-shell .journey-bottom { display: block; margin-top: 12px; }
+  .landscape-shell .journey-category-bar { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); width: 100%; margin-bottom: 12px; }
+  .landscape-shell .journey-category-button { min-height: 52px; }
+}
+@media (max-width: 600px) {
+  .landscape-shell .journey-hero { margin: 4px; padding: 12px 10px; border-radius: 14px; }
+  .landscape-shell .journey-header { grid-template-columns: 112px minmax(0,1fr); gap: 8px 12px; padding-bottom: 10px; }
+  .landscape-shell .journey-brand { grid-row: 1; font-size: 18px; gap: 8px; }
+  .landscape-shell .journey-brand-mark { width: 32px; height: 36px; }
+  .landscape-shell .journey-header-message { grid-column: 2; grid-row: 1; }
+  .landscape-shell .journey-header-message h1 { font-size: 18px; }
+  .landscape-shell .journey-header-message p { display: none; }
+  .landscape-shell .command-eyebrow { font-size: 7px; }
+  .landscape-shell .header-snapshot { grid-row: 2; min-height: 68px; margin: 0; }
+  .landscape-shell .header-snapshot .situation-strip { gap: 4px; }
+  .landscape-shell .header-snapshot .situation-strip article { min-height: 68px; padding: 7px 6px; border-radius: 8px; }
+  .landscape-shell .header-snapshot .situation-strip article > span { font-size: 9px; }
+  .landscape-shell .header-snapshot .situation-strip strong { font-size: 23px; }
+  .landscape-shell .header-snapshot .situation-strip .situation-total > small { font-size: 8px; }
+  .landscape-shell .journey-header-actions { grid-column: 1 / -1; grid-row: 3; }
+  .landscape-shell .journey-header-actions :is(.journey-search-icon,.journey-top-cta) { min-height: 38px; }
+  .landscape-shell .journey-category-bar { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .landscape-shell .detail-sidebar { display: flex; }
+  .landscape-shell .map-chrome { height: 158px; }
+  .landscape-shell .journey-dashboard .map-heading { padding: 8px 10px; gap: 6px; }
+  .landscape-shell .journey-dashboard .map-heading h2 { font-size: 14px; line-height: 1.5; }
+  .landscape-shell .map-heading-actions :is(.images-link,.icon-button) { width: 32px; min-width: 32px; height: 44px; min-height: 44px; }
+  .landscape-shell .map-controls button { min-height: 44px; font-size: 11px; }
+  .landscape-shell .map-canvas { --map-height: clamp(420px, 64svh, 620px); }
+  .landscape-shell .journey-dashboard :is(.area-panel,.assistant-panel,.dam-panel) { padding: 14px; }
+}
+
+
+.command-shell .quality-metrics li { display: block; padding: 0; }
+.command-shell .quality-metrics details { width: 100%; }
+.command-shell .quality-metrics summary { display: flex; justify-content: space-between; gap: 10px; }
+.command-shell .quality-metrics summary > span { flex: 1; min-width: 0; }
+.command-shell .quality-metrics summary > strong { flex: 0 0 auto; }
+
+.landscape-shell .journey-brand-mark { flex-shrink: 0; }
+
+/* Dam panel: native scrolling stays inside the card, including at its boundaries. */
+.command-shell .dam-panel--dams { max-height: min(820px, calc(100svh - 190px)); min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; overflow-anchor: none; scrollbar-gutter: stable; scrollbar-color: var(--cc-accent) var(--cc-panel-deep); }
+.command-shell .dam-panel--dams:focus-visible { outline: 2px solid var(--cc-focus); outline-offset: 3px; }
+.command-shell .dam-panel--dams .area-intro h2 { font-size: 18px; line-height: 1.5; }
+.command-shell .dam-panel--dams .section-description { font-size: 13px; line-height: 1.75; margin-top: 6px; }
+.command-shell .dam-panel--dams .dam-sort { position: sticky; top: -16px; z-index: 1; padding: 4px; border: 1px solid var(--line); background: var(--cc-panel-deep); backdrop-filter: blur(18px); }
+.command-shell .dam-panel--dams .dam-sort button { min-height: 44px; padding: 8px 6px; font-size: 13px; line-height: 1.5; }
+.command-shell .dam-panel--dams .dam-list-context { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.command-shell .dam-panel--dams .dam-list { margin-top: 6px; }
+.command-shell .dam-panel--dams .dam-row { grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "name value" "meta meta" "status status" "bar bar"; align-items: start; gap: 7px 12px; padding: 14px 8px; }
+.command-shell .dam-panel--dams .dam-name strong { color: var(--foreground); font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.command-shell .dam-panel--dams .dam-value { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.command-shell .dam-panel--dams .dam-value > strong { color: var(--foreground); font-size: 21px; line-height: 1.35; }
+.command-shell .dam-panel--dams .dam-value > small { font-size: 10px; line-height: 1.5; }
+.command-shell .dam-panel--dams .dam-meta { grid-area: meta; display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.command-shell .dam-panel--dams .dam-meta > span { white-space: nowrap; }
+.command-shell .dam-panel--dams .dam-row-status { grid-area: status; justify-self: start; max-width: 100%; padding: 4px 8px; font-size: 12px; line-height: 1.5; white-space: normal; }
+.command-shell .dam-panel--dams .dam-bar { height: 6px; margin-top: 2px; }
+.command-shell .dam-panel--dams .source-note { font-size: 12px; line-height: 1.75; }
+.command-shell .dam-panel--dams .dam-flows span { font-size: 13px; line-height: 1.6; }
+@media (max-width: 1050px) {
+  .command-shell .dam-panel--dams { max-height: min(740px, calc(100svh - 40px)); }
+}
+
+/* Keep the map and reading panes within the viewport; long data scrolls locally. */
+.landscape-shell.command-shell { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: clip; }
+.landscape-shell .journey-hero { flex: 1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 12px 16px; margin: 6px; }
+.landscape-shell .journey-header { padding-bottom: 10px; width: 100%; max-width: none; margin: 0; }
+.landscape-shell .journey-bottom { min-height: 0; grid-template-rows: minmax(0, 1fr); margin: 10px 0 0; width: 100%; max-width: none; }
+.landscape-shell .journey-category-bar { align-self: start; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+.landscape-shell .journey-hero-dashboard { height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; align-items: stretch; gap: 8px 14px; }
+.landscape-shell .journey-dashboard .map-panel { position: relative; top: auto; min-height: 0; height: 100%; display: flex; flex-direction: column; }
+.landscape-shell .map-chrome { flex: 0 0 124px; height: 124px; grid-template-rows: 50px minmax(0, 1fr); }
+.landscape-shell .map-controls :is(.layer-toolbar,.hazard-subtabs) { height: 50px; }
+.landscape-shell .map-canvas { flex: 1; min-height: 0; height: auto; }
+.landscape-shell .map-supplement { flex: 0 0 auto; border-top: 1px solid var(--line); background: var(--cc-panel-deep); }
+.landscape-shell .map-supplement > summary { cursor: pointer; padding: 8px 14px; font-size: 12px; color: var(--cc-accent); }
+.landscape-shell .map-supplement-body { max-height: min(22dvh, 180px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.landscape-shell .detail-sidebar { min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 8px; }
+.landscape-shell .detail-sidebar > :is(.area-panel,.dam-panel) { flex: 1; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-color: var(--cc-accent) var(--cc-panel-deep); }
+.landscape-shell .detail-sidebar > [hidden] { display: none; }
+.landscape-shell .quality-list { max-height: none; overflow: visible; }
+.landscape-shell .journey-dashboard .assistant-panel { flex: 0 0 auto; min-height: 0; max-height: 48%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 10px 14px; }
+.landscape-shell .assistant-heading { min-height: 30px; margin: 0; cursor: pointer; list-style: none; }
+.landscape-shell .assistant-heading::-webkit-details-marker { display: none; }
+.landscape-shell .assistant-heading::after { content: '+'; margin-left: auto; color: var(--cc-accent); font-size: 22px; }
+.landscape-shell .assistant-panel[open] .assistant-heading::after { content: '−'; }
+.landscape-shell .assistant-panel[open] .assistant-heading { margin-bottom: 12px; }
+.landscape-shell .assistant-heading h2 { font-size: 15px; }
+.landscape-shell .assistant-heading p { font-size: 10px; }
+.landscape-shell :is(.map-supplement > summary,.assistant-heading):focus-visible { outline: 2px solid var(--cc-focus); outline-offset: -2px; }
+.landscape-shell .disclaimer { padding: 3px 6px; font-size: 10px; line-height: 1.5; }
+.landscape-shell .journey-photo-note { display: none; }
+.landscape-shell .journey-footer { position: relative; z-index: 1; flex: 0 0 auto; min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 22px 6px; margin: 0; font-size: 11px; }
+.landscape-shell .journey-footer > :is(p,.journey-footer-brand) { display: none; }
+.landscape-shell .journey-footer .text-button { font-size: 11px; padding: 0; }
+.landscape-shell .emergency-numbers { gap: 10px; font-size: 11px; }
+.landscape-shell .journey-search-icon { display: inline-flex; align-items: center; gap: 6px; }
+.landscape-shell .journey-search-icon svg { width: 16px; height: 16px; }
+@media (max-width: 1050px) {
+  .landscape-shell .journey-header { grid-template-columns: 120px minmax(0,1fr) auto; }
+  .landscape-shell .journey-brand { grid-row: 1; }
+  .landscape-shell .journey-header-actions { grid-column: 3; grid-row: 1; }
+  .landscape-shell .header-snapshot { grid-column: 1 / -1; grid-row: 2; margin: 0; }
+  .landscape-shell .journey-bottom { display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); gap: 8px; }
+  .landscape-shell .journey-category-bar { display: flex; flex-direction: row; flex-wrap: nowrap; width: 100%; margin: 0; padding: 3px; overflow-x: auto; }
+  .landscape-shell .journey-category-button { flex: 1 0 64px; min-height: 44px; }
+  .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1.3fr) minmax(0,1fr) auto; }
+  .landscape-shell .detail-sidebar { grid-column: 1; grid-row: 2; }
+  .landscape-shell .disclaimer { grid-row: 3; }
+  .landscape-shell .map-chrome { height: 108px; flex-basis: 108px; }
+}
+@media (max-width: 600px) {
+  .landscape-shell .journey-hero { padding: 8px; margin: 3px; }
+  .landscape-shell .journey-header { grid-template-columns: 92px minmax(0,1fr) 36px; gap: 6px; padding-bottom: 6px; }
+  .landscape-shell .journey-brand { font-size: 16px; gap: 5px; }
+  .landscape-shell .journey-brand small { font-size: 7px; letter-spacing: 2px; }
+  .landscape-shell .journey-header-message h1 { font-size: 14px; }
+  .landscape-shell .command-eyebrow { font-size: 6px; }
+  .landscape-shell .journey-header-actions .journey-search-icon { min-height: 36px; padding: 8px; }
+  .landscape-shell .journey-search-icon > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .landscape-shell .journey-category-button { flex-basis: 60px; }
+  .landscape-shell .journey-category-button svg { width: 18px; height: 18px; }
+  .landscape-shell .journey-category-button strong { font-size: 10px; }
+  .landscape-shell .journey-dashboard .map-heading p { display: none; }
+  .landscape-shell .map-chrome { height: 100px; flex-basis: 100px; }
+  .landscape-shell .journey-dashboard :is(.area-panel,.dam-panel) { padding: 12px; }
+  .landscape-shell .journey-footer { padding: 0 12px 4px; min-height: 26px; gap: 4px; }
+  .landscape-shell .emergency-numbers { gap: 7px; }
+  .landscape-shell .emergency-numbers :is(strong,span,svg) { display: none; }
+}
+@media (max-width: 1050px) and (max-height: 700px) {
+  .landscape-shell .command-eyebrow { display: none; }
+  .landscape-shell .header-snapshot { min-height: 54px; }
+  .landscape-shell .header-snapshot .situation-strip article { min-height: 54px; padding-block: 3px; }
+  .landscape-shell .header-snapshot .situation-strip strong { font-size: 20px; }
+  .landscape-shell .journey-category-button { min-height: 42px; padding: 3px 2px; gap: 2px; }
+  .landscape-shell .journey-hero-dashboard { grid-template-rows: minmax(0,1.7fr) minmax(0,1fr) auto; }
+  .landscape-shell .map-chrome { height: 88px; flex-basis: 88px; grid-template-rows: 44px minmax(0,1fr); }
+  .landscape-shell .map-controls :is(.layer-toolbar,.hazard-subtabs) { height: 44px; padding-block: 0; }
+  .landscape-shell .journey-dashboard .map-heading { padding-block: 0; }
+  .landscape-shell .journey-footer .text-button { min-height: 30px; }
+  .landscape-shell .map-chrome { height: 44px; flex-basis: 44px; grid-template-rows: 44px; }
+  .landscape-shell .journey-dashboard .map-heading { position: absolute; top: 48px; right: 6px; z-index: 3; padding: 0; border: 0; border-radius: 8px; background: var(--cc-panel-deep); }
+  .landscape-shell .journey-dashboard .map-heading-copy { display: none; }
+  .landscape-shell .journey-dashboard .assistant-panel { padding: 6px 10px; }
+  .landscape-shell .assistant-heading { min-height: 24px; gap: 8px; }
+  .landscape-shell .assistant-heading p { display: none; }
+  .landscape-shell .assistant-icon { width: 24px; height: 24px; }
+  .landscape-shell .assistant-icon svg { width: 17px; height: 17px; }
+}
+
+/* A compact heading leaves more vertical space for the aligned map and details. */
+.landscape-shell .journey-header { grid-template-columns: 132px minmax(180px,1fr) auto minmax(360px,480px); grid-template-rows: auto; gap: 16px; padding-bottom: 8px; }
+.landscape-shell .journey-brand { grid-row: 1; }
+.landscape-shell .journey-header-message { grid-column: 2; grid-row: 1; }
+.landscape-shell .journey-header-message h1 { font-size: 21px; }
+.landscape-shell .journey-header-actions { grid-column: 3; grid-row: 1; }
+.landscape-shell .header-snapshot { grid-column: 4; grid-row: 1; min-height: 70px; }
+.landscape-shell .header-snapshot .situation-strip article { min-height: 70px; padding-block: 6px; }
+.landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr) clamp(320px,26vw,390px); grid-template-rows: minmax(0,1fr); }
+.landscape-shell .journey-footer { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; width: 100%; max-width: none; }
+.landscape-shell .journey-footer .disclaimer { grid-row: 1; grid-column: 2; justify-self: center; align-items: center; max-width: 720px; margin: 0; padding: 3px 8px; text-align: center; }
+.landscape-shell .location-scope { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.landscape-shell .location-scope > svg { flex-shrink: 0; color: var(--cc-accent); }
+.landscape-shell .location-scope > div { min-width: 0; flex: 1; }
+.landscape-shell .location-scope strong { display: block; font-size: 15px; }
+.landscape-shell .location-scope small { display: block; font-size: 11px; color: var(--muted); line-height: 1.7; }
+.landscape-shell .location-scope button, .landscape-shell .area-reset { flex-shrink: 0; min-height: 40px; padding: 5px; font-size: 11px; color: var(--cc-accent); }
+@media (max-width: 1200px) {
+  .landscape-shell .journey-header { grid-template-columns: 110px minmax(0,1fr) minmax(360px,420px); gap: 8px 14px; }
+  .landscape-shell .journey-header-message { grid-row: 1; }
+  .landscape-shell .journey-header-actions { grid-column: 2; grid-row: 2; }
+  .landscape-shell .journey-brand { grid-row: 1 / 3; }
+  .landscape-shell .header-snapshot { grid-column: 3; grid-row: 1 / 3; }
+  .landscape-shell .journey-header-message p { display: none; }
+}
+@media (max-width: 1050px) {
+  .landscape-shell .journey-header { grid-template-columns: 110px minmax(0,1fr) auto; gap: 6px 10px; }
+  .landscape-shell .journey-brand { grid-row: 1; }
+  .landscape-shell .journey-header-actions { grid-column: 3; grid-row: 1; }
+  .landscape-shell .header-snapshot { grid-column: 1 / -1; grid-row: 2; }
+  .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1.3fr) minmax(0,1fr); }
+  .landscape-shell .journey-footer { grid-template-columns: auto auto; gap: 0 8px; }
+  .landscape-shell .journey-footer .disclaimer { grid-column: 1 / -1; grid-row: 1; font-size: 9px; }
+  .landscape-shell .journey-footer > .text-button { grid-row: 2; justify-self: start; min-height: 30px; }
+  .landscape-shell .journey-footer .emergency-numbers { grid-row: 2; justify-self: end; }
+}
+@media (max-width: 600px) {
+  .landscape-shell .journey-header { grid-template-columns: 92px minmax(0,1fr) 36px; gap: 6px; padding-bottom: 6px; }
+  .landscape-shell .journey-header-message h1 { font-size: 14px; }
+  .landscape-shell .header-snapshot { min-height: 64px; }
+  .landscape-shell .header-snapshot .situation-strip article { min-height: 64px; padding-block: 4px; }
+}
+@media (max-width: 1050px) and (max-height: 700px) {
+  .landscape-shell .header-snapshot { min-height: 54px; }
+  .landscape-shell .header-snapshot .situation-strip article { min-height: 54px; padding-block: 3px; }
+  .landscape-shell .journey-hero-dashboard { grid-template-rows: minmax(0,1.7fr) minmax(0,1fr); }
+}
+
+/* Footer clock: when the map data was fetched and the time now, in the same accent as the footer links. */
+.data-clock { margin: 0; color: var(--cc-accent, var(--brand)); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.landscape-shell .journey-footer .data-clock { justify-self: end; }
+@media (max-width: 1050px) { .landscape-shell .journey-footer .data-clock { grid-row: 3; grid-column: 1 / -1; } }
+@media (max-width: 600px) { .data-clock { white-space: normal; } }
