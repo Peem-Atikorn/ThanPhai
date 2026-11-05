@@ -102,6 +102,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   load('@/lib/i18n').setLanguage('en');
   metrics = instance(EnvironmentSummary).render(metricProps);
   assert(content(metrics).includes('Feels like now 35') && content(metrics).includes('National maximum'), 'Summary copy translates without changing readings');
+  const rainCardEn = content(nodes(metrics).filter(n => n.type === 'article')[2]);
+  assert(rainCardEn.includes('highest in 24 h, around 18:00') && !/[฀-๿]/.test(rainCardEn.replace(/อำเภอ ก|เชียงใหม่/g, '')), 'Rain card hour and period translate in English');
   load('@/lib/i18n').setLanguage('th');
   const { areaWarnings } = load('@/lib/area-warnings');
   const notice = { title: 'ต้นฉบับประกาศ', hazards: ['rain_storm', 'flood'], provinces: ['TH50', 'TH90'],
