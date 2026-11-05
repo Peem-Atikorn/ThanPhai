@@ -18,6 +18,7 @@ import AreaWarnings from "@/components/AreaWarnings";
 import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
 import RadarPlayback from "@/components/RadarPlayback";
+import AnswerText from "@/components/AnswerText";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
 import { OverlayControls, OverlayLegends, useOverviewLayers } from "@/components/OverviewLayers";
 import { RiverDetail, RiverRow, riverTime, RiverSort, sortRivers } from "@/components/RiverPanel";
@@ -900,7 +901,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     function answerView(a: AskAnswer) {
         // The answer text already ends with its "ที่มา:" line; only add the list when it does not.
         const showSources = a.sources.length > 0 && !a.text.includes("ที่มา:");
-        return <div className={"answer-text " + (a.intent === "error" ? "data-notice" : "")}><p>{tr(a.text)}</p>
+        return <div className={"answer-text " + (a.intent === "error" ? "data-notice" : "")}><AnswerText text={a.text}/>
             {showSources && <p className="source-note">{tr("ที่มา: ")}{tr(a.sources.join(", "))}</p>}
             {a.llm_used && <p className="source-note">{tr("เรียบเรียงโดย AI")}{a.llm_model ? ` (${a.llm_model})` : ""}{" · "}{tr(a.intent === "greeting" || a.intent === "out_of_scope" ? "คำตอบทั่วไป ไม่ใช่ข้อมูลภัย" : "ตัวเลขและระดับเตือนภัยมาจากข้อมูลและกฎของระบบ ไม่ได้ให้ AI ตัดสิน")}</p>}
         </div>;

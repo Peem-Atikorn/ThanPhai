@@ -422,6 +422,15 @@ class HazardAgent:
             return self._dams(question, u)
         if u.intent == "river":
             return self._rivers(question, u)
+        if u.intent == "out_of_scope" and u.area:
+            # Off topic but about a place: say what ThanPhai can tell about that place instead of a hazard report.
+            label = _area_label(u.area, self.gazetteer)
+            text = (f"เรื่องร้านอาหาร ที่เที่ยว หรือที่พัก น้องทันภัยแนะนำไม่ได้ครับ แต่ช่วยดูภัยที่{label}ให้ได้ ลองถามเช่น\n"
+                    f"• {label} วันนี้ฝนตกไหม\n"
+                    f"• {label} ตอนนี้มีภัยอะไรบ้าง\n"
+                    f"เปิด{label}บนแผนที่ให้แล้ว ดูระดับภัยแต่ละเรื่องได้ทันทีครับ")
+            area_info = {"code": u.area.code, "level": u.area.level, "label": label, "lat": u.area.lat, "lon": u.area.lon}
+            return AgentAnswer(text, u.intent, area_info, [])
         if u.intent == "out_of_scope":
             text = (f"ทันภัยตอบได้เฉพาะเรื่อง{' · '.join(HAZARD_TH.values())}ในประเทศไทยครับ "
                     'ลองถามเช่น "น้ำจะท่วมอำเภอบางบัวทองไหม"')

@@ -28,7 +28,7 @@
 .landscape-shell .map-supplement .map-controls { padding: 8px 6px; }
 .landscape-shell .map-supplement .layer-toolbar { height: auto; padding: 0; }
 .landscape-shell .map-supplement .layer-toolbar-buttons { flex-wrap: wrap; overflow: visible; }
-.landscape-shell .map-supplement[open] { max-height: 45%; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.landscape-shell .map-supplement[open] { max-height: 45%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; }
 .landscape-shell .map-supplement > summary { position: sticky; top: 0; z-index: 1; background: var(--cc-panel-deep); }
 .landscape-shell .map-supplement-body { max-height: none; overflow: visible; }
 .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr) clamp(320px,25vw,390px); }
