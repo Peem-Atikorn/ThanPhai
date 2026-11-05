@@ -201,6 +201,21 @@ export interface StationGraph {
   qmax_m3s: number | null;
 }
 
+/** Model forecast of a river station's level (display only: never an alert level or river status). */
+export interface RiverForecast {
+  station_id: string;
+  available: boolean;
+  /** Why there is no forecast: no model, the model did not beat "no change" here, no bank, or no recent reading. */
+  reason?: "no_model" | "not_chosen" | "no_bank" | "no_recent_readings";
+  /** The hour the forecast starts from ("YYYY-MM-DD HH:MM", Thai time) and its level. */
+  from_time?: string;
+  level_msl?: number;
+  bank_msl?: number;
+  points?: { hours: number; time: string; level_msl: number; change_m: number; above_bank_m: number; test_mae_m: number | null }[];
+  model_version?: string;
+  source?: string;
+}
+
 export interface DamHistory {
   series: { year: number; values: [string, number][] }[];
   upper_rule_curve: [string, number][]; // "MM-DD", million m³
@@ -329,6 +344,7 @@ export const api = {
   rivers: () => get<{ rivers: River[]; data_updated_at: string | null }>(`/v1/rivers`),
   waterQuality: () => get<{ stations: WaterQualityStation[]; source: string; data_updated_at: string | null; degraded_services: string[] }>(`/v1/water-quality`),
   riverGraph: (id: string, days = 3) => get<StationGraph>(`/v1/rivers/${encodeURIComponent(id)}/graph?days=${days}`),
+  riverForecast: (id: string) => get<RiverForecast>(`/v1/rivers/${encodeURIComponent(id)}/forecast`),
   media: () => get<Media>(`/v1/media`),
   airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
   /** Seven recent RainViewer frames. `enabled` is false when the team-only backend switch is off. */

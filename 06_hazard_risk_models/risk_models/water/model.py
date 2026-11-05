@@ -26,6 +26,22 @@ class WaterModels:
     dam_scale: dict[int, float]
     version: str
     metrics: dict = field(default_factory=dict)
+    # The live forecast: the same model trained only on what one station's own recent readings give (other stations
+    # and rain are not fetched live), and per horizon the stations where it beat "no change" in the validation year.
+    river_live: dict[int, HistGradientBoostingRegressor] = field(default_factory=dict)
+    river_live_features: list[str] = field(default_factory=list)
+    live_stations: dict[int, list[str]] = field(default_factory=dict)
+
+
+def forecast_change(models: WaterModels, station_id: str, row: pd.Series) -> dict[int, float]:
+    """Predicted level change (m) per horizon for one live feature row, only at horizons this station is chosen for."""
+    live = getattr(models, "river_live", None) or {}
+    features = getattr(models, "river_live_features", None) or []
+    stations = getattr(models, "live_stations", None) or {}
+    if not live or not features:
+        return {}
+    x = pd.DataFrame([row[features].astype(float).to_numpy()], columns=features)
+    return {h: float(model.predict(x)[0]) for h, model in sorted(live.items()) if station_id in set(stations.get(h, ()))}
 
 
 def _estimator(loss: str = "squared_error", learning_rate: float = 0.06, max_iter: int = 2000) -> HistGradientBoostingRegressor:
@@ -65,12 +81,12 @@ def _before(df: pd.DataFrame, end: pd.Timestamp, horizon: pd.Timedelta) -> pd.Da
 
 
 def train_rivers(table: pd.DataFrame, valid_start: pd.Timestamp, test_start: pd.Timestamp, sample_every: int = 3,
-                 **settings) -> tuple:
+                 features: list[str] | None = None, **settings) -> tuple:
     test = table[table["time"] >= test_start]
     # Neighbouring hours are nearly the same row; every 3rd hour keeps the information at a third of the cost.
     sampled = table[table["time"].dt.hour % sample_every == 0]
     # Rain columns are empty when no rain was downloaded; a column with no values cannot be split on.
-    features = [f for f in RIVER_FEATURES if sampled.loc[sampled["time"] < valid_start, f].notna().any()]
+    features = [f for f in (features or RIVER_FEATURES) if sampled.loc[sampled["time"] < valid_start, f].notna().any()]
     models, damping, metrics = {}, {}, {"features": features}
     for h in HORIZONS_H:
         # A row's target is the level h hours later, so a row belongs to a period only when that hour does too.

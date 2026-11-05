@@ -5,7 +5,8 @@
    From that, will water that is below the bank now be **over the bank** by then?
 2. **Dams:** how much water will flow into this dam in the **next 7 days** (million m³)?
 
-Neither model sets an alert level. Levels still come only from `rules.yaml`; nothing in the app uses these models yet.
+Neither model sets an alert level. Levels still come only from `rules.yaml`. The river model is shown on the river
+station page as a labelled model forecast (see "Live forecast"); the dam model is not used by the app yet.
 
 ## Data (ThaiWater, `scripts/download_water_history.py`, 94 min, 75 MB gzip, no failed request)
 - **Rivers:** 311 stations with a trusted bank level and a flow gauge or RID key-station status (289 RID, 15 EGAT,
@@ -113,6 +114,27 @@ A small gain overall; the clearest one is 95 more rises over the bank caught 12 
 24-26 % lower error than the baselines, 19-23 % in the wettest weeks. It aims at the median, so it is a little low on
 average (−4.1 million m³ a week); a big week is still underestimated.
 
+## Live forecast (what the app shows)
+The page fetches one station's last 3 days of readings when someone opens it (the request the chart already makes).
+Other stations would take a request each, and rain would be a second, different source (Open-Meteo forecast instead
+of ERA5), so the app uses a second model trained the same way on the station's own features only
+(`LIVE_RIVER_FEATURES`: past changes, distance to the bank, last day's spread, time of year and day).
+
+| Test year | Error, all features | Error, own readings only | Rises over the bank caught, all → own | Warnings that came true, all → own |
+|---|---|---|---|---|
+| +6 h | 8.0 cm | 8.0 cm (28 % lower than no change) | 24.2 → 23.7 % | 65.8 → 67.9 % |
+| +12 h | 9.4 cm | 9.6 cm (38 % lower) | 40.7 → 36.1 % | 76.6 → 76.0 % |
+| +24 h | 12.1 cm | 12.3 cm (12 % lower) | 15.3 → 13.2 % | 67.0 → 64.6 % |
+
+The error hardly changes; a few rises over the bank 12-24 hours ahead are missed that upstream stations would have
+shown. A horizon is shown only at a station where this model beat "no change" in the validation year (274, 268 and
+259 stations at +6, +12 and +24 h; 286 with at least one), and only when the latest reading is at most 3 hours old.
+Readings are cleaned with the same function as in training (`clean_level`), but live it sees only the past: training
+could judge a run of bad readings with the day after it as well.
+
+The page draws the forecast as a dashed amber line after the level, lists each hour's level and distance to the bank,
+says it is a model and not an alert level, and gives the test-year error. It never changes a river status or level.
+
 ## Limits
 - One year of test data per model. The test year includes the 2026 floods, but more seasons would make the
   numbers firmer.
@@ -126,13 +148,14 @@ average (−4.1 million m³ a week); a big week is still underestimated.
 ## Next steps
 1. **Forecast rain** for +24 h (e.g. Open-Meteo's historical forecast API, so training sees what was forecast
    at the time, not what fell).
-2. **Serving:** before showing anything, add a function that builds today's features from the live 72-hour history,
-   show the forecast only at `stations_better_on_valid`, label it as a model forecast, and keep the alert level from
-   `rules.yaml`.
-3. Retrain yearly with `make water-model`.
+2. **Upstream stations live:** keep a rolling 3-day buffer of every station from the hourly snapshot the app already
+   fetches, so the live model can use the basin signal again (the full model catches 41 % instead of 36 % at +12 h).
+3. **Dams:** show the 7-day inflow forecast on the dam page.
+4. Retrain yearly with `make water-model`.
 
 ## Files
 - `scripts/download_water_history.py`, `scripts/train_water_model.py`, `make water-model`
 - `06_hazard_risk_models/risk_models/water/` (`download.py`, `dataset.py`, `model.py`), tests in `tests/test_water.py`
+- Served by `GET /v1/rivers/{id}/forecast` (`HazardService.river_forecast`), shown in `RiverPanel.tsx` (`ForecastNote`)
 - Not in git: `data/raw/water_history/` (91 MB with rain), `data/processed/models/water_model.joblib` (10 MB)
 - Metrics: `06_hazard_risk_models/reports/water_model_metrics.json`

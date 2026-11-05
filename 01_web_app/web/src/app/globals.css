@@ -341,6 +341,16 @@ h2 { font-size: 17px; font-weight: 650; }
 .dam-flows strong { font-size: 17px; font-variant-numeric: tabular-nums; text-align: right; }
 .dam-flows strong small { font-size: 11px; font-weight: 400; color: var(--muted); }
 .dam-flows > li > small { grid-column: 2; text-align: right; font-size: 11px; color: var(--muted); }
+/* River-level forecast under the station chart: amber like its dashed line, so it never reads as a reading. */
+.river-forecast { margin-top: 10px; padding: 9px 12px; border-left: 3px solid #d97706; border-radius: 0 8px 8px 0; background: color-mix(in srgb, #d97706 9%, transparent); }
+.river-forecast h4 { margin: 0 0 6px; font-size: 12px; font-weight: 650; color: #b45309; }
+.river-forecast ul { display: grid; gap: 4px; margin: 0 0 6px; padding: 0; list-style: none; }
+.river-forecast li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; align-items: baseline; font-size: 12px; }
+.river-forecast li strong { font-size: 15px; font-variant-numeric: tabular-nums; text-align: right; }
+.river-forecast li strong small, .river-forecast li span small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.river-forecast li > small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.river-forecast > small { display: block; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.command-shell .river-forecast h4 { color: #f5b75c; }
 .dam-totals { margin-top: 14px; font-size: 12px; }
 .dam-totals h3 { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 .dam-totals p { color: var(--muted); }

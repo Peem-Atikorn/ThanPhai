@@ -229,6 +229,59 @@ def test_graph_endpoint_uses_cache(client, monkeypatch):
     assert first == second and first["qmax_m3s"] == 2720 and calls == [2744]
 
 
+def test_river_forecast_is_display_only_and_only_where_the_model_was_chosen(client, monkeypatch):
+    from datetime import datetime, timedelta
+
+    from api_backend.hazard_service import BANGKOK
+    from risk_models.water.dataset import LIVE_RIVER_FEATURES
+    from risk_models.water.model import WaterModels
+
+    c, svc, _ = client
+    svc.rivers = [{"id": "2744", "code": "C.13", "province_code": "TH18", "status": "NORMAL", "bank_msl": 16.0},
+                  {"id": "2611", "code": "C.36", "province_code": "TH14", "status": "NORMAL", "bank_msl": 9.0}]
+    now = datetime.now(BANGKOK).replace(minute=0, second=0, microsecond=0, tzinfo=None)
+    points = [{"time": (now - timedelta(hours=k)).strftime("%Y-%m-%d %H:%M"), "level_msl": 14.0 - 0.01 * k,
+               "discharge_m3s": 1800.0} for k in range(80, -1, -1)]  # rising 1 cm an hour, latest reading this hour
+    calls = []
+
+    async def fake(client_, station_id, days, today):
+        calls.append(station_id)
+        return {"points": points, "bank_msl": 16.0, "ground_msl": 2.0, "qmax_m3s": 2720.0}
+
+    monkeypatch.setattr("api_backend.hazard_service.fetch_station_graph", fake)
+    svc._graph_cache.clear()
+
+    class Rise:  # predicts the last hour's change times the horizon, so the answer is known
+        def __init__(self, h):
+            self.h = h
+
+        def predict(self, x):
+            return x["d1h"].to_numpy() * self.h
+
+    svc.water_model = WaterModels(river={}, river_features=[], trend_damping={}, dam=None, dam_features=[], dam_scale={},
+                                  version="test", metrics={"rivers_live": {"6h": {"test": {"model": {"mae_m": 0.08}}}}},
+                                  river_live={6: Rise(6), 24: Rise(24)}, river_live_features=list(LIVE_RIVER_FEATURES),
+                                  live_stations={6: ["2744"], 24: []})
+    f = c.get("/v1/rivers/2744/forecast").json()
+    # Only +6 h: the station was not chosen at +24 h. 14.00 m now, +6 cm in 6 hours, 1.94 m below the bank.
+    assert f["available"] and [p["hours"] for p in f["points"]] == [6]
+    assert f["points"][0]["level_msl"] == pytest.approx(14.06) and f["points"][0]["above_bank_m"] == pytest.approx(-1.94)
+    assert f["points"][0]["test_mae_m"] == pytest.approx(0.08) and f["from_time"] == now.strftime("%Y-%m-%d %H:%M")
+    assert "level" not in f and "status" not in f  # never an alert level or a river status
+    # The graph request is shared with the chart.
+    c.get("/v1/rivers/2744/graph")
+    assert calls == [2744]
+    # A station the model was not chosen for gets no forecast and no upstream request; unknown stations are 404.
+    assert c.get("/v1/rivers/2611/forecast").json() == {"station_id": "2611", "available": False, "reason": "not_chosen"}
+    assert calls == [2744] and c.get("/v1/rivers/999/forecast").status_code == 404
+    # Readings that stopped 5 hours ago are too old to forecast from.
+    points[:] = points[:-5]
+    svc._graph_cache.clear()
+    assert c.get("/v1/rivers/2744/forecast").json()["reason"] == "no_recent_readings"
+    svc.water_model = None
+    assert c.get("/v1/rivers/2744/forecast").json()["reason"] == "no_model"
+
+
 def test_area_boundary_for_highlighting(client):
     c, svc, sena = client
     province = c.get("/v1/areas/TH25/boundary").json()  # ปราจีนบุรี

@@ -105,6 +105,17 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert(content(rainCard).includes('โอกาสฝนตก') && content(rainCard).includes('63') && content(rainCard).includes('ราว 18:00 น.') && content(rainCard).includes('แบบจำลอง'), 'Rain card shows the highest chance, its hour, and says it is a model');
   const rainBadge = nodes(rainCard).find(n => String(n.props.className).startsWith('risk-badge'));
   assert(content(rainBadge).includes('ระดับภัยฝนและพายุ (จากปริมาณฝน): ปกติ'), 'Rain card level says it is the rain/storm level, not a level for the chance of rain');
+  const { ForecastNote, forecastSeries } = load('@/components/RiverPanel');
+  const riverForecast = { station_id: '2744', available: true, from_time: '2026-11-05 12:00', level_msl: 14.0, bank_msl: 16.0,
+    points: [{ hours: 6, time: '2026-11-05 18:00', level_msl: 14.35, change_m: 0.35, above_bank_m: -1.65, test_mae_m: 0.08 },
+             { hours: 24, time: '2026-11-06 12:00', level_msl: 16.2, change_m: 2.2, above_bank_m: 0.2, test_mae_m: 0.123 }] };
+  const note = content(ForecastNote({ forecast: riverForecast }));
+  assert(note.includes('ไม่ใช่ระดับเตือนภัย') && note.includes('14.35') && note.includes('ขึ้น 35') && note.includes('ต่ำกว่าตลิ่ง 1.65') && note.includes('สูงกว่าตลิ่ง 0.20') && note.includes('8–12 ซม.'),
+    'River forecast says it is a model, not a warning level, with each level, change, bank distance and test error');
+  assert.equal(forecastSeries(riverForecast).length, 3, 'The dashed line starts at the latest reading and runs through each forecast hour');
+  assert(content(ForecastNote({ forecast: { station_id: '1', available: false, reason: 'not_chosen' } })).includes('ไม่แม่นกว่า'), 'A station the model was not chosen for says why there is no forecast');
+  assert.equal(ForecastNote({ forecast: { station_id: '1', available: false, reason: 'no_model' } }), null, 'No model: nothing is shown');
+  assert.equal(forecastSeries(null).length, 0, 'No forecast: no dashed line');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: { ...metricArea0(), assessments: [{ hazard: 'rain_storm', level: 'NORMAL', observations: { rain_chance_max_24h: 25, rain_chance_peak_hour: 7 }, sources: [] }] } });
   assert(content(nodes(metrics).filter(n => n.type === 'article')[2]).includes('25') && content(metrics).includes('ราว 07:00 น.') && !content(metrics).includes('63'), 'Selected area shows its own chance of rain and hour');
   const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_now: 27, heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };

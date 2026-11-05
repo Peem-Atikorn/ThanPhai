@@ -201,6 +201,41 @@ def test_splits_leave_out_rows_whose_target_reaches_the_next_period():
     assert kept["time"].max() == pd.Timestamp("2024-12-31 17:00")
 
 
+def test_live_features_match_the_training_rows(raw):
+    # The live forecast must see exactly what training saw for the same hour: same cleaning, same features.
+    from risk_models.water.dataset import LIVE_RIVER_FEATURES, _read, live_features
+
+    table = river_table(raw).query("station_id == '1'").set_index("time")
+    rows = _read(raw / "rivers" / "1" / "2024-01-01.json.gz")["rows"]
+    t = table.index[-1]
+    row = live_features(rows, bank=10.0, now=t + pd.Timedelta(minutes=30))
+    assert row["time"] == t
+    for name in LIVE_RIVER_FEATURES:
+        assert row[name] == pytest.approx(table.loc[t, name]), name
+    assert np.isnan(row["basin_d6h"]) and np.isnan(row["rain_24h"])  # not known live
+    # Readings that stopped more than 3 hours before now give no row.
+    assert live_features(rows, bank=10.0, now=t + pd.Timedelta(hours=4)) is None
+
+
+def test_forecast_change_only_at_chosen_horizons():
+    from risk_models.water.dataset import LIVE_RIVER_FEATURES
+    from risk_models.water.model import WaterModels, forecast_change
+
+    class Const:
+        def __init__(self, v):
+            self.v = v
+
+        def predict(self, x):
+            return np.full(len(x), self.v)
+
+    models = WaterModels(river={}, river_features=[], trend_damping={}, dam=None, dam_features=[], dam_scale={},
+                         version="t", river_live={6: Const(0.1), 12: Const(0.2)},
+                         river_live_features=list(LIVE_RIVER_FEATURES), live_stations={6: ["A"], 12: ["B"]})
+    row = pd.Series({name: 0.0 for name in LIVE_RIVER_FEATURES})
+    assert forecast_change(models, "A", row) == {6: pytest.approx(0.1)}
+    assert forecast_change(models, "C", row) == {}
+
+
 def test_river_targets_are_future_change_and_basin_excludes_itself(raw):
     table = river_table(raw)
     assert set(RIVER_FEATURES) <= set(table.columns)

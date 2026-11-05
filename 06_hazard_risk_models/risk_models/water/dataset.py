@@ -41,6 +41,9 @@ RIVER_FEATURES = [
     "basin_rain_24h", "basin_rain_72h",  # mean rain over the basin's stations: water still on its way
     "doy_sin", "doy_cos", "hour_sin", "hour_cos",
 ]
+# What the live forecast knows: one station's own recent readings. Other stations would take a request each and
+# rain a second source, so the live model is trained on these alone (see the report for what that costs).
+LIVE_RIVER_FEATURES = [*(f"d{k}h" for k in LAGS_H), "to_bank_m", "std24h", "doy_sin", "doy_cos", "hour_sin", "hour_cos"]
 DAM_FEATURES = [
     "inflow_d0", "inflow_d1", "inflow_d2", "inflow_mean7", "inflow_mean30", "inflow_trend7",
     "released_mean7", "storage_pct", "storage_change7", "clim_next7", "doy_sin", "doy_cos",
@@ -80,6 +83,15 @@ def station_series(folder: Path, bank: float | None = None) -> pd.Series:
     rows = []
     for path in sorted(folder.glob("*.json.gz")):
         rows.extend(_read(path)["rows"])
+    return clean_level(rows, bank)
+
+
+def clean_level(rows: list, bank: float | None = None) -> pd.Series:
+    """Hourly level (m MSL) from [time, level, flow] rows in Thai local time, cleaned as described in station_series.
+
+    The live forecast cleans a station's last days of readings with this same function, so it sees what the model
+    was trained on.
+    """
     if not rows:
         return pd.Series(dtype=float)
     df = pd.DataFrame(rows, columns=["time", "level", "flow"])
@@ -155,6 +167,43 @@ def station_rain(raw_dir: Path) -> pd.DataFrame | None:
     return pd.DataFrame(columns) if columns else None
 
 
+def own_features(lv: pd.Series, bank: float) -> pd.DataFrame:
+    """The features a station gives by itself, from its hourly level: past changes, distance to the bank, how much it
+    moved in the last day, and the time of year and day. Shared by training and the live forecast."""
+    df = pd.DataFrame({"level": lv})
+    for k in LAGS_H:
+        df[f"d{k}h"] = lv - lv.shift(k)
+    df["to_bank_m"] = lv - bank
+    df["std24h"] = lv.rolling(24, min_periods=12).std()
+    doy = df.index.dayofyear.to_numpy() * 2 * np.pi / 365.25
+    hour = df.index.hour.to_numpy() * 2 * np.pi / 24
+    df["doy_sin"], df["doy_cos"] = np.sin(doy), np.cos(doy)
+    df["hour_sin"], df["hour_cos"] = np.sin(hour), np.cos(hour)
+    return df
+
+
+def live_features(rows: list, bank: float, now: pd.Timestamp, max_age_h: int = 3) -> pd.Series | None:
+    """The feature row of a station's latest hour, from its recent [time, level, flow] rows (Thai local time).
+
+    None when the latest cleaned hour is older than `max_age_h` before `now` (naive Thai time), or when the 1-hour or
+    24-hour change cannot be computed: training never used such rows either. Other stations and rain are not known
+    live, so their features are left empty.
+    """
+    lv = clean_level(rows, bank)
+    if lv.empty:
+        return None
+    lv = lv.where(plausible(lv, bank))
+    df = own_features(lv, bank)
+    df = df.dropna(subset=["level", "d1h", "d24h"])
+    if df.empty or now - df.index[-1] > pd.Timedelta(hours=max_age_h):
+        return None
+    row = df.iloc[-1].copy()
+    for name in RIVER_FEATURES:
+        row[name] = row.get(name, np.nan)
+    row["time"] = df.index[-1]
+    return row
+
+
 def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame:
     """Rows of (station, hour) with RIVER_FEATURES and targets y{h} = level(t+h) - level(t)."""
     stations = json.loads((raw_dir / "stations.json").read_text(encoding="utf-8"))
@@ -194,11 +243,7 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
                 basin_rain[b] = rain[cols].mean(axis=1)
     for sid, lv in series.items():
         s = meta[sid]
-        df = pd.DataFrame({"level": lv})
-        for k in LAGS_H:
-            df[f"d{k}h"] = lv - lv.shift(k)
-        df["to_bank_m"] = lv - s["bank_msl"]
-        df["std24h"] = lv.rolling(24, min_periods=12).std()
+        df = own_features(lv, s["bank_msl"])
         b, ch = basin_of[sid], changes[sid]
         if b is None:
             df["basin_d6h"] = df["basin_d24h"] = np.nan
@@ -219,10 +264,6 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
                 df["basin_rain_24h"] = df["basin_rain_72h"] = np.nan
         else:
             df["rain_6h"] = df["rain_24h"] = df["rain_72h"] = df["basin_rain_24h"] = df["basin_rain_72h"] = np.nan
-        doy = df.index.dayofyear.to_numpy() * 2 * np.pi / 365.25
-        hour = df.index.hour.to_numpy() * 2 * np.pi / 24
-        df["doy_sin"], df["doy_cos"] = np.sin(doy), np.cos(doy)
-        df["hour_sin"], df["hour_cos"] = np.sin(hour), np.cos(hour)
         for h in HORIZONS_H:
             df[f"y{h}"] = lv.shift(-h) - lv
         df["station_id"] = sid
