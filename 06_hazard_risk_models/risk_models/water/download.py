@@ -138,5 +138,54 @@ def dam_ids(client: httpx.Client) -> list[dict]:
     return dams
 
 
+OPEN_METEO_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
+RAIN_CELL_DEG = 0.5
+
+
+def rain_cell(lat: float, lon: float) -> tuple[float, float]:
+    """The 0.5° cell centre a station's rain is read from (ERA5 itself is 0.25°)."""
+    return round(round(lat / RAIN_CELL_DEG) * RAIN_CELL_DEG, 2), round(round(lon / RAIN_CELL_DEG) * RAIN_CELL_DEG, 2)
+
+
+def download_rain(out: Path, stations: list[dict], start: date, end: date, client: httpx.Client) -> dict:
+    """Hourly rain (mm, ERA5 via the Open-Meteo archive, Thai local time) for every station's 0.5° cell.
+
+    Measured on 2026-11-05: one point, one variable, one year of hours costs 2.6 weighted calls, so five years for
+    ~130 cells is ~1,700 of the free tier's 10,000 a day, which the live app's forecasts also use from this machine.
+    On a 429 the run waits 65 s; on a daily or hourly limit it stops (a later run resumes).
+    """
+    counts = {"fetched": 0, "skipped": 0, "failed": 0, "cost": 0.0}
+    cells = sorted({rain_cell(s["lat"], s["lon"]) for s in stations})
+    for lat, lon in cells:
+        path = out / "rain" / f"{lat:.2f}_{lon:.2f}.json.gz"
+        if path.exists():
+            counts["skipped"] += 1
+            continue
+        params = {"latitude": lat, "longitude": lon, "start_date": start.isoformat(), "end_date": end.isoformat(),
+                  "hourly": "precipitation", "timezone": "Asia/Bangkok"}
+        for attempt in range(3):
+            response = client.get(OPEN_METEO_ARCHIVE, params=params, timeout=120)
+            if response.status_code == 429:
+                reason = response.text
+                if "Daily" in reason or "Hourly" in reason:
+                    log.warning("Open-Meteo limit reached, stopping: %s", reason)
+                    counts["stopped"] = reason
+                    return counts
+                time.sleep(65)
+                continue
+            if response.status_code != 200:
+                log.warning("rain %s,%s: HTTP %s %s", lat, lon, response.status_code, response.text[:200])
+                break
+            hourly = response.json()["hourly"]
+            _write_gz(path, {"lat": lat, "lon": lon, "time": hourly["time"], "precipitation": hourly["precipitation"]})
+            counts["fetched"] += 1
+            counts["cost"] += float(response.headers.get("X-RateLimit-Cost", 0) or 0)
+            break
+        else:
+            counts["failed"] += 1
+        time.sleep(1.0)
+    return counts
+
+
 def client() -> httpx.Client:
     return httpx.Client(headers=USER_AGENT, follow_redirects=True)

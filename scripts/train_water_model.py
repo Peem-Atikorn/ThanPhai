@@ -15,7 +15,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
-from risk_models.water.dataset import DAM_FEATURES, RIVER_FEATURES, add_dam_climatology, dam_table, river_table
+from risk_models.water.dataset import DAM_FEATURES, RIVER_FEATURES, add_dam_climatology, dam_table, river_table, station_rain
 from risk_models.water.model import WaterModels, train_dams, train_rivers
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--part", choices=("rivers", "dams", "all"), default="all")
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
-    parser.add_argument("--rain", type=Path, help="hourly rain per station (parquet: time index, station ids as columns)")
+    parser.add_argument("--no-rain", action="store_true", help="train without rain even if rain was downloaded")
     args = parser.parse_args()
     raw = args.data_dir / "raw" / "water_history"
     out_models = args.data_dir / "processed" / "models"
@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     if args.part in ("rivers", "all"):
         started = time.time()
-        rain = pd.read_parquet(args.rain) if args.rain else None
+        rain = None if args.no_rain else station_rain(raw)
         table = river_table(raw, rain)
         cache = args.data_dir / "processed" / "water_river_table.parquet"
         table.to_parquet(cache, index=False)
@@ -61,7 +61,8 @@ if __name__ == "__main__":
         river_models, damping, m = train_rivers(table, valid_start, test_start)
         m.update({"stations": int(table["station_id"].nunique()), "rows": int(len(table)),
                   "from": str(table["time"].min().date()), "to": str(end.date()), "valid_start": str(valid_start.date()),
-                  "test_start": str(test_start.date()), "rain": bool(args.rain), "seconds": round(time.time() - started)})
+                  "test_start": str(test_start.date()), "rain_stations": 0 if rain is None else int(rain.shape[1]),
+                  "seconds": round(time.time() - started)})
         metrics["rivers_level_change"] = m
         print(json.dumps(m, ensure_ascii=False, indent=1), flush=True)
 

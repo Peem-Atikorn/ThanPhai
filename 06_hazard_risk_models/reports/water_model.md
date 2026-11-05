@@ -14,6 +14,10 @@ Neither model sets an alert level. Levels still come only from `rules.yaml`; not
   295 stations keep at least 60 days after cleaning; 8.2 million station-hours.
 - **Dams:** all 35 large dams, daily inflow, release and storage from `analyst/dam_yearly_graph`.
   Used from 2004 to 2026-11-04 (199,142 dam-days).
+- **Rain:** hourly precipitation (mm, Thai local time) from the Open-Meteo archive (ERA5) for each station's 0.5°
+  cell: 128 cells, 2021-10-30 to 2026-11-05, 16 MB, 4 minutes. **Cost: 1,675.9 weighted calls** of the free tier's
+  10,000 a day, summed from Open-Meteo's `X-RateLimit-Cost` header (one point, one year of hours = 2.6 calls).
+  ThaiWater has no rain history endpoint (`rain_graph` → 404).
 
 ### Cleaning (each found in this data)
 | Problem | Example | Fix |
@@ -31,14 +35,13 @@ Years before 2018 have many missing dam days; rows whose 7-day target has a gap 
 ## Features (data up to hour/day *t* only)
 - **Rivers:** level change over the last 1, 3, 6, 12, 24, 48, 72 h; level minus bank; spread of the last 24 h;
   mean 6-h and 24-h change of the *other* stations in the same basin (upstream water shows up there first);
+  rain at the station's cell in the last 6, 24 and 72 h; mean rain over the basin's stations in the last 24 and 72 h;
   day of year and hour (sin, cos). The target is the change, not the level, so one model serves every station.
 - **Dams:** inflow today, 1 and 2 days ago, 7- and 30-day means, 7-day trend, 7-day mean release, storage %, 7-day
   storage change, the dam's average next-7-day inflow for this time of year (**training years only**), day of year.
   Inflow figures are divided by each dam's mean daily inflow in the training years, so big and small dams share one model.
 
-**No rain yet.** ThaiWater has no rain history endpoint (`rain_graph` → 404), and five years of hourly rain from
-Open-Meteo for the stations' 1° cells would use about 6,800 of the 10,000 weighted calls a day that the live app's
-heat and rain-chance forecasts also use from the same machine. See "Next steps".
+Rain is past rain only: the model does not know tomorrow's forecast rain.
 
 ## Split (by time, no shuffling)
 | | Rivers | Dams |
@@ -55,21 +58,33 @@ dams 8.9 vs 9.9-10.2 million m³), 600 trees for dams (2,000 did no better), and
 ### Rivers: error of the level h hours ahead (MAE, m) and rises over the bank caught
 | Horizon | Model | No change | Model, near the bank* | No change, near the bank* | Rises over the bank | Caught (recall) | Warnings that came true (precision) |
 |---|---|---|---|---|---|---|---|
-| +6 h | **0.076** | 0.105 | **0.113** | 0.151 | 1,741 | 23.5 % | 66.8 % |
-| +12 h | **0.093** | 0.141 | **0.119** | 0.211 | 2,549 | 31.3 % | 75.1 % |
-| +24 h | **0.125** | 0.142 | **0.160** | 0.210 | 2,899 | 15.1 % | 64.7 % |
+| +6 h | **0.075** | 0.105 | **0.113** | 0.151 | 1,741 | 24.9 % | 67.1 % |
+| +12 h | **0.093** | 0.141 | **0.118** | 0.211 | 2,549 | 35.5 % | 76.7 % |
+| +24 h | **0.125** | 0.142 | **0.160** | 0.210 | 2,899 | 15.4 % | 65.7 % |
 
 \* within 1 m below the bank or above it — the hours that matter for a warning.
 
 - Error is **28 % lower** than "no change" at +6 h, **34 %** at +12 h and **12 %** at +24 h; near the bank,
   **25 %**, **44 %** and **24 %**.
 - "No change" and "trend" never warn of a rise over the bank. The model catches a quarter to a third of them
-  6-12 hours ahead, and about two out of three of its warnings come true.
+  6-12 hours ahead, and two out of three to three out of four of its warnings come true.
+
+#### What rain added (same split, same settings; kept because validation MAE fell at every horizon)
+On validation, +24 h recall fell (16.2 → 15.2 %) while precision rose (64.7 → 66.5 %); the test year is shown below.
+| Horizon | MAE without → with rain (test, m) | Rises caught without → with rain (test) | Precision without → with rain (test) |
+|---|---|---|---|
+| +6 h | 0.0760 → 0.0754 | 23.5 % → 24.9 % (409 → 434 of 1,741) | 66.8 % → 67.1 % |
+| +12 h | 0.0933 → 0.0930 | 31.3 % → 35.5 % (798 → 905 of 2,549) | 75.1 % → 76.7 % |
+| +24 h | 0.1251 → 0.1246 | 15.1 % → 15.4 % | 64.7 % → 65.7 % |
+
+A small gain overall; the clearest one is 107 more rises over the bank caught 12 hours ahead, with fewer false
+warnings. Most of the information is already in the river itself and its upstream stations; +24 h would need
+**forecast** rain, which is not in this model.
 - **Trend is worse than no change:** carrying the last 6 hours' rate forward raised the validation error at every
   damping (6 h: 0.125 → 0.174 m at full trend; 24 h: 0.174 → 0.522 m), so its best setting is "no trend". Rivers turn
   too often for a straight line.
-- **Per station** (+6 h): the model beat "no change" at 261 of 279 stations in the validation year; 256 of those
-  261 still beat it in the test year (+12 h: 254 of 263; +24 h: 237 of 247). That list
+- **Per station** (+6 h): the model beat "no change" at 263 of 279 stations in the validation year; 257 of those
+  263 still beat it in the test year (+12 h: 252 of 261; +24 h: 236 of 246). That list
   (`stations_better_on_valid` in the metrics) is where a forecast could be shown.
 
 ### Dams: inflow of the next 7 days (million m³), 35 dams
@@ -85,14 +100,16 @@ average (−4.1 million m³ a week); a big week is still underestimated.
 ## Limits
 - One year of test data per model. The test year includes the 2026 floods, but more seasons would make the
   numbers firmer.
-- Catching 15-31 % of rises over the bank is better than the baselines' 0 %, but most rises still come without
-  a warning. Without rain the model cannot see a storm that has not yet raised any river.
+- Catching 15-36 % of rises over the bank is better than the baselines' 0 %, but most rises still come without
+  a warning. With past rain only, the model cannot see a storm that has not yet fallen.
+- Rain in training is ERA5 (reanalysis). Live, the last few days would come from Open-Meteo's forecast model
+  instead, which is not the same data; check the gap before trusting live forecasts.
 - Station metadata (bank level) is today's; a bank that changed in the five years would shift `to_bank_m` for older rows.
 - Not checked against RID's own forecasts.
 
 ## Next steps
-1. **Rain:** fetch hourly rain once (Open-Meteo archive in batches across two days to leave quota for the live app,
-   or CHIRPS/IMERG files) and set `--rain`; the rain features are already in the dataset code.
+1. **Forecast rain** for +24 h (e.g. Open-Meteo's historical forecast API, so training sees what was forecast
+   at the time, not what fell).
 2. **Serving:** before showing anything, add a function that builds today's features from the live 72-hour history,
    show the forecast only at `stations_better_on_valid`, label it as a model forecast, and keep the alert level from
    `rules.yaml`.
@@ -101,6 +118,6 @@ average (−4.1 million m³ a week); a big week is still underestimated.
 ## Files
 - `scripts/download_water_history.py`, `scripts/train_water_model.py`, `make water-model`
 - `06_hazard_risk_models/risk_models/water/` (`download.py`, `dataset.py`, `model.py`), tests in `tests/test_water.py`
-- Not in git: `data/raw/water_history/` (75 MB), `data/processed/water_river_table.parquet` (363 MB, a cache),
+- Not in git: `data/raw/water_history/` (91 MB with rain), `data/processed/water_river_table.parquet` (a cache),
   `data/processed/models/water_model.joblib` (10 MB)
 - Metrics: `06_hazard_risk_models/reports/water_model_metrics.json`

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from risk_models.water.dataset import RIVER_FEATURES, add_dam_climatology, dam_table, river_table, station_series
+from risk_models.water.dataset import RIVER_FEATURES, add_dam_climatology, dam_table, river_table, station_rain, station_series
 from risk_models.water.model import river_scores, trend_forecast
 
 
@@ -61,6 +61,18 @@ def test_river_targets_are_future_change_and_basin_excludes_itself(raw):
     # Station 2 moves exactly like station 1, so the basin signal seen by 1 is its own change.
     assert one.loc[t0, "basin_d6h"] == pytest.approx(one.loc[t0, "d6h"])
     assert one["to_bank_m"].iloc[0] == pytest.approx(level.iloc[0] - 10.0)
+
+
+def test_rain_features_from_the_station_cell(raw):
+    hours = pd.date_range("2024-01-01", periods=24 * 70, freq="h")
+    rain = [2.0 if t.hour == 0 else 0.0 for t in hours]  # 2 mm at midnight, every day
+    _gz(raw / "rain" / "15.00_100.00.json.gz", {"lat": 15.0, "lon": 100.0,
+                                                 "time": [t.strftime("%Y-%m-%dT%H:%M") for t in hours], "precipitation": rain})
+    table = river_table(raw, station_rain(raw)).set_index(["station_id", "time"])
+    row = table.loc[("1", pd.Timestamp("2024-01-10 12:00"))]
+    assert row["rain_24h"] == pytest.approx(2.0) and row["rain_72h"] == pytest.approx(6.0)
+    # Both stations share the cell, so the basin mean equals the station's own rain.
+    assert row["basin_rain_24h"] == pytest.approx(2.0)
 
 
 def test_scores_count_a_rise_over_the_bank():

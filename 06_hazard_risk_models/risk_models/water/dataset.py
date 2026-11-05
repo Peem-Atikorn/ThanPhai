@@ -33,7 +33,8 @@ RIVER_FEATURES = [
     "to_bank_m",                         # level minus bank (m); > 0 is over the bank
     "std24h",                            # how much the level moved in the last day
     "basin_d6h", "basin_d24h",           # mean change of the other stations in the same basin
-    "rain_6h", "rain_24h", "rain_72h",   # rain at the station (mm, ERA5 cell); NaN when not downloaded
+    "rain_6h", "rain_24h", "rain_72h",   # rain at the station (mm, ERA5 0.5° cell); NaN when not downloaded
+    "basin_rain_24h", "basin_rain_72h",  # mean rain over the basin's stations: water still on its way
     "doy_sin", "doy_cos", "hour_sin", "hour_cos",
 ]
 DAM_FEATURES = [
@@ -81,6 +82,23 @@ def station_series(folder: Path) -> pd.Series:
     return hourly.interpolate(limit=3, limit_area="inside")
 
 
+def station_rain(raw_dir: Path) -> pd.DataFrame | None:
+    """Hourly rain (mm) per station, read from its 0.5° cell file; None when no rain was downloaded."""
+    from risk_models.water.download import rain_cell
+
+    folder = raw_dir / "rain"
+    if not folder.exists():
+        return None
+    cells = {}
+    for path in folder.glob("*.json.gz"):
+        d = _read(path)
+        cells[(d["lat"], d["lon"])] = pd.Series(pd.to_numeric(pd.Series(d["precipitation"]), errors="coerce").to_numpy(),
+                                                index=pd.to_datetime(d["time"]), dtype=float)
+    stations = json.loads((raw_dir / "stations.json").read_text(encoding="utf-8"))
+    columns = {s["id"]: cells[c] for s in stations if (c := rain_cell(s["lat"], s["lon"])) in cells}
+    return pd.DataFrame(columns) if columns else None
+
+
 def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame:
     """Rows of (station, hour) with RIVER_FEATURES and targets y{h} = level(t+h) - level(t)."""
     stations = json.loads((raw_dir / "stations.json").read_text(encoding="utf-8"))
@@ -105,6 +123,13 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
         basin_sum[b] = filled if b not in basin_sum else basin_sum[b].add(filled, fill_value=0.0)
         basin_n[b] = count if b not in basin_n else basin_n[b].add(count, fill_value=0.0)
     meta = {s["id"]: s for s in stations}
+    # Hourly basin rain: the mean over the basin's stations (each station's cell), one series per basin.
+    basin_rain = {}
+    if rain is not None:
+        for b in set(basin_of.values()):
+            cols = [sid for sid in rain.columns if basin_of.get(sid) == b]
+            if cols:
+                basin_rain[b] = rain[cols].mean(axis=1)
     for sid, lv in series.items():
         s = meta[sid]
         df = pd.DataFrame({"level": lv})
@@ -120,8 +145,10 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
         if rain is not None and sid in rain.columns:
             r = rain[sid].reindex(df.index)
             df["rain_6h"], df["rain_24h"], df["rain_72h"] = (r.rolling(n, min_periods=1).sum() for n in (6, 24, 72))
+            basin = basin_rain[b].reindex(df.index)
+            df["basin_rain_24h"], df["basin_rain_72h"] = (basin.rolling(n, min_periods=1).sum() for n in (24, 72))
         else:
-            df["rain_6h"] = df["rain_24h"] = df["rain_72h"] = np.nan
+            df["rain_6h"] = df["rain_24h"] = df["rain_72h"] = df["basin_rain_24h"] = df["basin_rain_72h"] = np.nan
         doy = df.index.dayofyear.to_numpy() * 2 * np.pi / 365.25
         hour = df.index.hour.to_numpy() * 2 * np.pi / 24
         df["doy_sin"], df["doy_cos"] = np.sin(doy), np.cos(doy)
