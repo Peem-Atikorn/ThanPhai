@@ -409,7 +409,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert(content(forecastPlayback).includes('อธิบายโดย AI ที่รันในเครื่องของทันภัย'), 'Qwen is credited with explanation only');
       assert(content(forecastPlayback).includes('ค่าคาดการณ์ +10 นาที'), 'The selected forecast stays visibly labelled in the playback controls');
       assert(content(forecastPlayback).includes('กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก'), 'The validated Qwen explanation accompanies its frame');
-      assert(content(forecastPlayback).includes('ภาพจางคือเรดาร์จริงล่าสุดเวลา') && content(forecastPlayback).includes('ไม่ใช่ภาพฝนคาดการณ์'), 'The retained image is explicitly labelled observed, not predicted');
+      assert(content(forecastPlayback).includes('ภาพคาดการณ์คือภาพเรดาร์จริงเวลา') && content(forecastPlayback).includes('ไม่รวมฝนที่เกิดใหม่หรือสลายไป'), 'The moved image is labelled as an observed image shifted by the motion');
       assert(content(forecastPlayback).includes('ไม่ทำนายฝนที่เกิดใหม่'), 'The forecast limitation stays next to its timeline');
       assert(!content(forecastPlayback).includes('AI กำลังเรียบเรียง'), 'No waiting notice unless the backend says Qwen is still writing');
       const pendingPlayback = instance(RadarPlayback).render({ ...nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props, explanationSource: 'template', explanationPending: true });
@@ -472,7 +472,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       const speedApp = instance(RadarPlayback, undefined, true);
       let speedTree = speedApp.render(currentProps());
       const speedButton = label => nodes(speedTree).find(n => n.type === 'button' && n.props['aria-label'] === label);
-      for (const speed of [1.5, 2, 3, 4, 5]) {
+      for (const speed of [3, 5]) {
         speedButton('เพิ่มความเร็ว').props.onClick(); speedTree = speedApp.render(currentProps());
         assert.equal(content(nodes(speedTree).find(n => n.type === 'output' && n.props['aria-live'])), speed + '×');
       }
@@ -483,7 +483,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       advance(0); advance(600);
       speedTree = speedApp.render(currentProps());
       assert.equal(nodes(speedTree).find(n => n.type === 'input').props.value, 0.25, '5x keeps continuous progress');
-      for (const speed of [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.25, 0.2]) {
+      for (const speed of [3, 1]) {
         speedButton('ลดความเร็ว').props.onClick(); speedTree = speedApp.render(currentProps());
         assert.equal(content(nodes(speedTree).find(n => n.type === 'output' && n.props['aria-live'])), speed + '×');
         assert.equal(nodes(speedTree).find(n => n.type === 'input').props.value, 0.25, 'Speed changes preserve the thumb position');
@@ -492,6 +492,30 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert.equal(speedButton('ลดความเร็ว').props.disabled, true);
       nodes(speedTree).find(n => n.type === 'button').props.onClick(); speedTree = speedApp.render(currentProps());
       assert.equal(animations.size, 0);
+
+      // RainViewer quota: at 5x an image the browser has not loaded yet waits 12 s after the last new one;
+      // an image already shown (here the first, on the second pass) changes at full speed.
+      const quotaFrames = [{ kind: 'observed', time: 0, tiles: 'a' }, { kind: 'observed', time: 600, tiles: 'b' }, { kind: 'observed', time: 1200, tiles: 'c' }];
+      let quotaSelection = 0;
+      const quotaApp = instance(RadarPlayback, undefined, true);
+      const quotaProps = () => ({ frames: quotaFrames, index: quotaSelection, onChange: i => { quotaSelection = i; } });
+      let quotaTree = quotaApp.render(quotaProps());
+      const quotaSpeed = () => nodes(quotaTree).find(n => n.type === 'button' && n.props['aria-label'] === 'เพิ่มความเร็ว');
+      quotaSpeed().props.onClick(); quotaTree = quotaApp.render(quotaProps());
+      quotaSpeed().props.onClick(); quotaTree = quotaApp.render(quotaProps());
+      nodes(quotaTree).find(n => n.type === 'button').props.onClick(); quotaTree = quotaApp.render(quotaProps());
+      const quotaStart = clock;
+      const runUntil = ms => { while (clock - quotaStart < ms) { advance(100); quotaTree = quotaApp.render(quotaProps()); } };
+      advance(0);
+      runUntil(11900);
+      assert.equal(quotaSelection, 0, 'A not-yet-loaded image waits for the 12 s spacing even at 5x');
+      runUntil(12100);
+      assert.equal(quotaSelection, 1, 'It is shown once 12 s have passed');
+      runUntil(24100);
+      assert.equal(quotaSelection, 2);
+      runUntil(26600);
+      assert.equal(quotaSelection, 0, 'An image already shown comes back at full speed (2.4 s a frame at 5x)');
+      nodes(quotaTree).find(n => n.type === 'button').props.onClick(); quotaApp.render(quotaProps());
 
       const markerTree = i => instance(RadarPlayback).render({ ...currentProps(), index: i });
       const markerAt = i => nodes(markerTree(i)).find(n => n.props.className === 'radar-slider-time');

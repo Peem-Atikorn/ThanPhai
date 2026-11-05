@@ -2,7 +2,7 @@
 
 import { t as tr } from "@/lib/i18n";
 import type { ExpressionSpecification, StyleSpecification } from "@maplibre/maplibre-gl-style-spec";
-import { type GeoJSONSource, Map as MapLibreMap, type MapLayerMouseEvent, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
+import { type GeoJSONSource, type ImageSource, Map as MapLibreMap, type MapLayerMouseEvent, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
 import { type AreaBoundary, LEVELS, PM25_BANDS } from "@/lib/api";
@@ -38,6 +38,8 @@ interface Props {
     /** The next frame is loaded invisibly so changing the slider does not flash or fetch at play time. */
     radarNext?: string | null;
     radarDimmed?: boolean;
+    /** Forecast frame: the backend's motion (pixels of zoom-4 tile 12/7) to move the whole `radar` image by. */
+    radarShift?: { dx: number; dy: number } | null;
     /** Amber projected tracks/positions for the selected forecast frame. */
     radarForecast?: GeoJSON.FeatureCollection | null;
     overlays?: {
@@ -172,11 +174,68 @@ function applyRadarSource(m: MapLibreMap, id: string, radar: string | null, opac
     }
     m.addSource(id, { type: "raster", tiles: [radar], tileSize: 256, maxzoom: RADAR_MAX_ZOOM, attribution });
     // The invisible second layer preloads just one frame, keeping tile traffic bounded while playback is running.
-    m.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": opacity } }, "line");
+    // Opacity changes fade, so one frame dissolves into the next instead of jumping.
+    m.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": opacity, "raster-opacity-transition": RADAR_FADE, "raster-resampling": "linear" } }, "line");
 }
-function applyRadar(m: MapLibreMap, radar: string | null, radarNext: string | null, sources: RadarSources, dimmed = false) {
-    // Over district colours, below the lines and markers.
-    const opacity = dimmed ? 0.2 : 0.8;
+const RADAR_FADE = { duration: 500, delay: 0 };
+// The nowcast measures one motion for the whole of zoom-4 tile 12/7 (lon 90–112.5°, lat 0–21.9°, all of Thailand).
+// A forecast frame is the latest real image of that area, moved by that motion: the whole rain area moves, not just
+// the cell centres. It is drawn from the four zoom-5 tiles of the same area (about 5 km a pixel), softened a little.
+const SHIFT_TILE = { z: 4, x: 12, y: 7, size: 256 };
+const SHIFT_IMAGE_ID = "radar-shift";
+const EMPTY_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const shiftImages = new Map<string, Promise<string>>();
+function shiftImageUrl(template: string): Promise<string> {
+    let url = shiftImages.get(template);
+    if (!url) {
+        url = (async () => {
+            const z = SHIFT_TILE.z + 1, size = 256;
+            const tiles = await Promise.all([0, 1].flatMap(row => [0, 1].map(async col => {
+                const src = template.replace("{z}", String(z)).replace("{x}", String(SHIFT_TILE.x * 2 + col)).replace("{y}", String(SHIFT_TILE.y * 2 + row));
+                const res = await fetch(src);
+                if (!res.ok) throw new Error(`radar tile ${res.status}`);
+                return { col, row, image: await createImageBitmap(await res.blob()) };
+            })));
+            const sharp = document.createElement("canvas");
+            sharp.width = sharp.height = size * 2;
+            for (const t of tiles) sharp.getContext("2d")!.drawImage(t.image, t.col * size, t.row * size);
+            // Blur the joined image once, so tile edges leave no seams.
+            const soft = document.createElement("canvas");
+            soft.width = soft.height = size * 2;
+            const ctx = soft.getContext("2d")!;
+            ctx.filter = "blur(1.5px)";
+            ctx.drawImage(sharp, 0, 0);
+            const blob = await new Promise<Blob | null>(done => soft.toBlob(done, "image/png"));
+            if (!blob) throw new Error("radar image");
+            return URL.createObjectURL(blob);
+        })();
+        url.catch(() => shiftImages.delete(template));
+        shiftImages.set(template, url);
+        // Keep the few most recent images; older frames have left the timeline.
+        for (const key of [...shiftImages.keys()].slice(0, -3)) {
+            shiftImages.get(key)?.then(u => URL.revokeObjectURL(u)).catch(() => {});
+            shiftImages.delete(key);
+        }
+    }
+    return url;
+}
+/** Corners of zoom-4 tile 12/7 moved by (dx, dy) of its pixels, as [lon, lat] from top-left clockwise. */
+function shiftedCorners(dx: number, dy: number): [[number, number], [number, number], [number, number], [number, number]] {
+    const world = SHIFT_TILE.size * 2 ** SHIFT_TILE.z;
+    const lon = (px: number) => px / world * 360 - 180;
+    const lat = (py: number) => Math.atan(Math.sinh(Math.PI * (1 - 2 * py / world))) * 180 / Math.PI;
+    const x0 = SHIFT_TILE.x * SHIFT_TILE.size + dx, x1 = x0 + SHIFT_TILE.size;
+    const y0 = SHIFT_TILE.y * SHIFT_TILE.size + dy, y1 = y0 + SHIFT_TILE.size;
+    return [[lon(x0), lat(y0)], [lon(x1), lat(y0)], [lon(x1), lat(y1)], [lon(x0), lat(y1)]];
+}
+function addShiftLayer(m: MapLibreMap) {
+    m.addSource(SHIFT_IMAGE_ID, { type: "image", url: EMPTY_IMAGE, coordinates: shiftedCorners(0, 0) });
+    m.addLayer({ id: SHIFT_IMAGE_ID, type: "raster", source: SHIFT_IMAGE_ID, paint: { "raster-opacity": 0, "raster-opacity-transition": RADAR_FADE, "raster-resampling": "linear" } }, "line");
+}
+function applyRadar(m: MapLibreMap, radar: string | null, radarNext: string | null, sources: RadarSources, dimmed = false, shifted = false) {
+    // Over district colours, below the lines and markers. A forecast hides the real image once its moved copy is shown;
+    // until then (or if that copy cannot be made) the real image stays faint underneath.
+    const opacity = dimmed ? (shifted ? 0 : 0.2) : 0.8;
     if (radar && radar === sources.preloadTiles) {
         [sources.activeId, sources.preloadId] = [sources.preloadId, sources.activeId];
         [sources.activeTiles, sources.preloadTiles] = [sources.preloadTiles, sources.activeTiles];
@@ -199,16 +258,18 @@ function applyMode(m: MapLibreMap, mode: "hazard" | "points" | "risk") {
     for (const id of POINT_LAYERS)
         m.setLayoutProperty(id, "visibility", mode !== "hazard" ? "visible" : "none");
 }
-export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null, radarNext = null, radarDimmed = false, radarForecast = null, dark = false, riskOnly = false, overlays }: Props) {
+export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null, radarNext = null, radarDimmed = false, radarShift = null, radarForecast = null, dark = false, riskOnly = false, overlays }: Props) {
     const container = useRef<HTMLDivElement>(null);
     const map = useRef<MapLibreMap | null>(null);
     const ready = useRef(false);
+    // The radar template whose moved copy the forecast image layer currently holds.
+    const shownShift = useRef<string | null>(null);
     const radarSources = useRef<RadarSources>({ activeId: "radar", activeTiles: null, preloadId: "radar-preload", preloadTiles: null });
     // Latest props, so the map "load" handler can apply whatever arrived before the style was ready.
-    const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarForecast, dark, riskOnly, overlays });
+    const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays });
     useEffect(() => {
-        latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarForecast, dark, riskOnly, overlays };
-    }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarForecast, dark, riskOnly, overlays]);
+        latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays };
+    }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays]);
     useEffect(() => {
         if (!container.current)
             return;
@@ -233,6 +294,7 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
                 filter: ["==", ["get", "code"], ""],
             });
             addOverlays(m);
+            addShiftLayer(m);
             m.addSource("radar-forecast", { type: "geojson", data: EMPTY });
             m.addLayer({ id: "radar-forecast-track", type: "line", source: "radar-forecast", filter: ["==", ["get", "kind"], "track"], paint: { "line-color": "#f59e0b", "line-width": 3, "line-dasharray": [2, 2] } }, "selected");
             addRainCloudIcon(m);
@@ -360,9 +422,30 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
             (map.current.getSource("stations") as GeoJSONSource).setData(stations ?? EMPTY);
     }, [stations]);
     useEffect(() => {
-        if (ready.current && map.current)
-        applyRadar(map.current, radar, radarNext, radarSources.current, radarDimmed);
-    }, [radar, radarNext, radarDimmed]);
+        const m = map.current;
+        if (!ready.current || !m) return;
+        const shift = radarDimmed && radar ? radarShift : null;
+        const hide = () => {
+            m.setPaintProperty(SHIFT_IMAGE_ID, "raster-opacity", 0);
+            applyRadar(m, radar, radarNext, radarSources.current, radarDimmed, false);
+        };
+        if (!shift || !radar) { hide(); return; }
+        let cancelled = false;
+        // Until the moved copy is ready, the real image stays faint (the previous behaviour).
+        applyRadar(m, radar, radarNext, radarSources.current, radarDimmed, shownShift.current === radar);
+        shiftImageUrl(radar).then(url => {
+            if (cancelled || map.current !== m) return;
+            const source = m.getSource(SHIFT_IMAGE_ID) as ImageSource | undefined;
+            if (!source) return;
+            const coordinates = shiftedCorners(shift.dx, shift.dy);
+            if (shownShift.current !== radar) source.updateImage({ url, coordinates });
+            else source.setCoordinates(coordinates);
+            shownShift.current = radar;
+            m.setPaintProperty(SHIFT_IMAGE_ID, "raster-opacity", 0.75);
+            applyRadar(m, radar, radarNext, radarSources.current, radarDimmed, true);
+        }).catch(() => { if (!cancelled) hide(); });
+        return () => { cancelled = true; };
+    }, [radar, radarNext, radarDimmed, radarShift]);
     useEffect(() => {
         if (ready.current && map.current)
             (map.current.getSource("radar-forecast") as GeoJSONSource).setData(radarForecast ?? EMPTY);
