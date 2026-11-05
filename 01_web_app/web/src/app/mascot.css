@@ -65,6 +65,25 @@
 .thanphai-mascot .question-suggestions button:hover { background: #a8b77822; }
 .thanphai-mascot .answer-text { padding-top: 14px; margin-top: 16px; border-top: 1px solid var(--mascot-line); color: var(--mascot-text); font-size: 14px; line-height: 1.9; white-space: pre-line; overflow-wrap: anywhere; }
 .thanphai-mascot .source-note { color: var(--mascot-muted); font-size: 12px; }
+/* Answer layout (AnswerText): short paragraphs, lists and separate blocks, like a chat assistant's reply. */
+.answer-body { white-space: normal; }
+.answer-body > * + * { margin-top: 10px; }
+.answer-body p { margin: 0; }
+.answer-body .answer-lead { font-weight: 600; }
+.answer-body .answer-heading { font-weight: 650; }
+.answer-body ul { margin: 0; padding-left: 20px; }
+.answer-body .answer-list > li + li { margin-top: 8px; }
+.answer-body .answer-details { margin-top: 4px; }
+.answer-body .answer-details li { line-height: 1.7; }
+.answer-body li::marker { color: var(--mascot-accent, #8a9a5b); }
+.answer-body .answer-level { display: inline-block; margin: 0 2px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 650; line-height: 1.7; white-space: nowrap; }
+.answer-body .answer-note { color: var(--mascot-muted, #5b6670); font-size: 12px; line-height: 1.6; }
+.answer-body .answer-callout { display: flex; gap: 8px; padding: 8px 11px; border-radius: 10px; font-size: 13px; line-height: 1.7; }
+.answer-body .answer-warning { border-left: 3px solid #e4a33b; background: #e4a33b1f; }
+.answer-body .answer-emergency { border-left: 3px solid #e2697a; background: #e2697a1f; }
+.answer-body .answer-emergency a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.answer-body .answer-sources { color: var(--mascot-muted, #5b6670); font-size: 12px; line-height: 1.6; }
+.answer-body .answer-sources span { font-weight: 650; }
 /* Conversation: only the log scrolls (it shrinks to fit the panel), so the wheel always moves the messages
    and the heading and input box stay in view. Two nested scrollers sent the wheel to the panel instead. */
 .thanphai-mascot .mascot-chat > * { flex-shrink: 0; }
