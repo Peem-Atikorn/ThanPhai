@@ -517,3 +517,18 @@ def test_storms_endpoint_one_row_per_storm_with_track(client, monkeypatch):
     storm = c.get("/v1/storms").json()["storms"][0]
     assert storm["name"] == "CHAMPI" and storm["wind_kmh"] == 185 and storm["category"]["category"] == "Cat 3"
     assert storm["time"] == "2026-10-22T12:00:00+00:00" and len(storm["track"]) == 1
+
+
+def test_ask_rate_limit_per_visitor(client, monkeypatch):
+    monkeypatch.setattr(main, "ASK_LIMIT_PER_MINUTE", 2)
+    ask = lambda ip: client[0].post("/v1/ask", json={"question": "สวัสดี"}, headers={"cf-connecting-ip": ip})
+    assert [ask("1.1.1.1").status_code for _ in range(3)] == [200, 200, 429]
+    assert ask("2.2.2.2").status_code == 200  # another visitor is not blocked
+
+
+def test_ask_rate_limit_window_expires(monkeypatch):
+    monkeypatch.setattr(main, "ASK_LIMIT_PER_MINUTE", 1)
+    main.check_ask_limit("9.9.9.9", now=100.0)
+    with pytest.raises(main.HTTPException):
+        main.check_ask_limit("9.9.9.9", now=130.0)
+    main.check_ask_limit("9.9.9.9", now=161.0)

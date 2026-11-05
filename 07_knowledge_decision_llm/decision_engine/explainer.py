@@ -455,6 +455,17 @@ class QwenExplainer(BaseExplainer):
     """
 
     CHAT_TEMPERATURE = 0.3  # small talk may vary a little; higher values drift into Chinese. Rewrites stay at 0.
+    # The Qwen machine unreachable (off, asleep, tunnel down): skip it for a while so each question does not
+    # wait for the timeout before the fallback answers.
+    DOWN_PAUSE_SECONDS = 60
+
+    def _handle_error(self, exc: Exception) -> None:
+        if isinstance(exc, (urllib.error.URLError, ConnectionError, TimeoutError)):
+            log.warning("qwen unreachable (%s); skipping it for %ss", exc, self.DOWN_PAUSE_SECONDS)
+            with self._lock:
+                self._paused_until = time.monotonic() + self.DOWN_PAUSE_SECONDS
+        else:
+            super()._handle_error(exc)
 
     def __init__(self, config: QwenConfig | None = None, requester=None, chat_requester=None):
         super().__init__(config or QwenConfig.from_env())
@@ -491,13 +502,43 @@ class QwenExplainer(BaseExplainer):
             timeout_ms=self.config.timeout_ms,
         )
 
+class FallbackExplainer:
+    """Ask each explainer in order; the first safe answer wins. Each one runs its own validate(), so a
+    rejected or failed Qwen answer goes to Gemini, and both failing leaves the template answer."""
+
+    def __init__(self, *explainers: BaseExplainer):
+        self.explainers = explainers
+        self._last = threading.local()  # which explainer answered, per request thread
+
+    @property
+    def config(self):
+        # The agent labels an answer with config.model, read right after the call in the same thread.
+        return getattr(self._last, "config", self.explainers[0].config)
+
+    def _first(self, call) -> str | None:
+        self._last.config = self.explainers[0].config
+        for explainer in self.explainers:
+            answer = call(explainer)
+            if answer:
+                self._last.config = explainer.config
+                return answer
+        return None
+
+    def __call__(self, question: str, facts: str) -> str | None:
+        return self._first(lambda e: e(question, facts))
+
+    def chat(self, question: str) -> str | None:
+        return self._first(lambda e: e.chat(question))
 
 
-def create_explainer_from_env() -> "GeminiExplainer | QwenExplainer | None":
-    """Factory creating the appropriate explainer based on LLM_PROVIDER or environment configuration."""
+def create_explainer_from_env() -> "GeminiExplainer | QwenExplainer | FallbackExplainer | None":
+    """Factory creating the appropriate explainer based on LLM_PROVIDER or environment configuration.
+    LLM_PROVIDER=qwen: Qwen first, then Gemini when a Gemini key is set (LLM_FALLBACK=none turns that off)."""
     provider = os.getenv("LLM_PROVIDER", "").lower()
     if provider == "qwen":
-        return QwenExplainer.from_env()
+        qwen = QwenExplainer.from_env()
+        gemini = GeminiExplainer.from_env() if os.getenv("LLM_FALLBACK", "gemini").lower() == "gemini" else None
+        return FallbackExplainer(qwen, gemini) if gemini else qwen
     if provider == "gemini":
         return GeminiExplainer.from_env()
     # Default: if LLM_PROVIDER is not set, use Gemini only if API key is present

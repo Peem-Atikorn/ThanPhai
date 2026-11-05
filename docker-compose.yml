@@ -60,6 +60,7 @@ services:
       - api-state:/data/state
     ports:
       - "127.0.0.1:8002:8002"
+    restart: unless-stopped
 
   web:                      # module 01
     build:
@@ -67,11 +68,24 @@ services:
       args:
         API_URL: http://api-backend:8002
     ports:
-      # Open on the LAN on purpose, so the map can be tried on a phone. Everything else is 127.0.0.1 only;
-      # the web container reaches the API over the Docker network. Use "127.0.0.1:3000:3000" to close it.
-      - "3000:3000"
+      # Local only: the public site goes through the Cloudflare Tunnel below, never an open port.
+      # WEB_BIND=0.0.0.0 in .env opens it on the LAN again, to try the map on a phone.
+      - "${WEB_BIND:-127.0.0.1}:3000:3000"
     depends_on:
       - api-backend
+    restart: unless-stopped
+
+  cloudflared:              # public site: Cloudflare Tunnel -> web:3000 (no inbound port on this machine)
+    # Start with: docker compose --profile public up -d. Needs CLOUDFLARE_TUNNEL_TOKEN in .env, from
+    # Cloudflare Zero Trust > Networks > Tunnels; set the tunnel's public hostname to http://web:3000.
+    profiles: ["public"]
+    image: cloudflare/cloudflared:2026.10.7
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    restart: unless-stopped
+    depends_on:
+      - web
 
   # hazard-agent:           # module 03 (library inside api-backend for now) — port 8003
   # geo-integration:        # module 05 (library inside api-backend; PostGIS load script exists) — port 8005
