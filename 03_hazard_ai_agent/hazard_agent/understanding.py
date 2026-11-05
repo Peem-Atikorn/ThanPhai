@@ -15,7 +15,8 @@ HAZARD_WORDS = {
     HazardType.FLOOD: ("น้ำท่วม", "ท่วม", "น้ำล้น", "ล้นตลิ่ง", "น้ำป่า", "flood"),
     HazardType.RAIN_STORM: ("ฝนตก", "ฝนหนัก", "ฝน", "พายุ", "ลมแรง", "rain", "storm"),
     HazardType.DROUGHT: ("ภัยแล้ง", "แล้ง", "ขาดน้ำ", "ฝนทิ้งช่วง", "drought"),
-    HazardType.FIRE: ("ไฟป่า", "ไฟไหม้", "เผา", "fire"),
+    # Satellite hotspots (FIRMS) are the fire data, so "มีจุดความร้อนไหม" is a fire question.
+    HazardType.FIRE: ("ไฟป่า", "ไฟไหม้", "เผา", "จุดความร้อน", "hotspot", "hot spot", "fire"),
     # Smoke and haze are what people breathe, so they are air-quality questions.
     HazardType.AIR_QUALITY: ("ฝุ่น", "pm2.5", "pm 2.5", "pm25", "หมอกควัน", "คุณภาพอากาศ", "มลพิษทางอากาศ", "aqi",
                              "air quality", "smoke", "haze"),

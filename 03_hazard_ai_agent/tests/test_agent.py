@@ -459,10 +459,27 @@ def test_temperature_follow_up_uses_the_open_area(question):
     assert understand(question, GAZ, NOW).hazards == [HazardType.HEAT]
 
 
-def test_fire_hotspot_question_is_not_a_heat_question():
-    # "มีจุดความร้อนไหม" contains "ร้อนไหม".
-    assert HazardType.HEAT not in detect_hazards("อำเภอเสนามีจุดความร้อนไหม")
-    assert detect_hazards("อำเภอเสนามีจุดความร้อนไหม และร้อนไหม") == [HazardType.HEAT]
+@pytest.mark.parametrize("question", ["อำเภอเสนามีจุดความร้อนไหม", "any hotspot near Sena?"])
+def test_fire_hotspot_question_is_a_fire_question(question):
+    # "มีจุดความร้อนไหม" contains "ร้อนไหม", but a hotspot is the satellite fire data.
+    assert detect_hazards(question) == [HazardType.FIRE]
+
+
+def test_hotspot_and_heat_in_one_question():
+    assert detect_hazards("อำเภอเสนามีจุดความร้อนไหม และร้อนไหม") == [HazardType.FIRE, HazardType.HEAT]
+
+
+def test_heat_answer_gives_this_hour_before_the_peak():
+    # "ตอนนี้กี่องศา" asks about now, not only about the hottest hour of the next 24 h.
+    class HeatTools(FakeTools):
+        def get_assessments(self, area_code):
+            return [{"hazard": "heat", "level": "WATCH", "rule_ids": ["HEAT_WATCH"], "sources": ["Open-Meteo"],
+                     "observations": {"heat_index_now": 31.4, "heat_index_max_24h": 38.2}}]
+
+    text = HazardAgent(GAZ, HeatTools()).ask("ตอนนี้กี่องศา", NOW, area_code="TH1406").text
+    now = "ตอนนี้ร้อนเหมือน 31.4°C (ดัชนีความร้อน ค่าคาดการณ์ชั่วโมงนี้)"
+    assert now in text and "ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า 38.2°C" in text
+    assert text.index(now) < text.index("38.2")
 
 
 def test_rain_chance_reason_names_the_peak_hour():

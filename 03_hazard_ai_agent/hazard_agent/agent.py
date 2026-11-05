@@ -298,6 +298,9 @@ def _reason(item: dict) -> str:
         parts.append(f"PM2.5 เฉลี่ย 24 ชม. {obs['pm25_24h']:.1f} มคก./ลบ.ม. (สถานีกรมควบคุมมลพิษ)")
     if obs.get("pm25_model_24h") is not None:
         parts.append(f"แบบจำลองคาดการณ์ PM2.5 เฉลี่ย 24 ชม. ข้างหน้า {obs['pm25_model_24h']:.1f} มคก./ลบ.ม.")
+    if obs.get("heat_index_now") is not None:
+        # "ตอนนี้กี่องศา" asks about now: the forecast for this hour comes before the 24-h peak.
+        parts.append(f"ตอนนี้ร้อนเหมือน {obs['heat_index_now']:.1f}°C (ดัชนีความร้อน ค่าคาดการณ์ชั่วโมงนี้)")
     if obs.get("heat_index_max_24h") is not None:
         hi = obs["heat_index_max_24h"]
         parts.append(f"ดัชนีความร้อนสูงสุดใน 24 ชม. ข้างหน้า {hi:.1f}°C (เกณฑ์กรมอุตุฯ: {tmd_heat_label(hi)})")
