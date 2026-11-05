@@ -36,8 +36,8 @@ def _estimator(loss: str = "squared_error", learning_rate: float = 0.06, max_ite
 
 
 def trend_forecast(df: pd.DataFrame, h: int, damping: float) -> np.ndarray:
-    """Carry the last 6 hours' rate forward h hours, scaled by `damping` (0 = no change)."""
-    return damping * df["d6h"].to_numpy() / 6 * h
+    """Carry the last 6 hours' rate forward h hours, scaled by `damping` (0 = no change; also when 6 h ago is missing)."""
+    return damping * np.nan_to_num(df["d6h"].to_numpy(dtype=float)) / 6 * h
 
 
 def river_scores(df: pd.DataFrame, h: int, pred: np.ndarray) -> dict:

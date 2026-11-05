@@ -21,6 +21,7 @@ LAGS_H = (1, 3, 6, 12, 24, 48, 72)
 MAX_JUMP_M = 1.5
 MAX_STEP_M = 3.0
 STEP_WINDOW = np.timedelta64(7, "D")
+FLOW_STEP_RATIO = 2.0
 MAX_RUN_M = 5.0
 RAIN_CELL_DEG = 0.5
 # Some stations report 9999.9 (or similar) for "no reading".
@@ -50,6 +51,19 @@ def _read(path: Path) -> dict:
         return json.load(f)
 
 
+def _flow_follows(before: np.ndarray, after: np.ndarray, level_rose: bool) -> bool:
+    """True when the flow at least doubled with a rise (or halved with a fall) across a level step.
+
+    A datum change moves the level, not the water: in this data flow stays about the same (บ้านนาสีทอง 19.6 -> 18.2
+    m³/s across a 33 m step) or goes the other way, while floods take it up 3-30 times (K.37 456 -> 1,460 m³/s).
+    """
+    before, after = before[~np.isnan(before)], after[~np.isnan(after)]
+    if len(before) < 2 or len(after) < 2:
+        return False
+    ratio = np.median(after) / np.median(before)
+    return ratio >= FLOW_STEP_RATIO if level_rose else ratio <= 1 / FLOW_STEP_RATIO
+
+
 def station_series(folder: Path) -> pd.Series:
     """One station's hourly level (m MSL), indexed by Thai local time, cleaned of spikes."""
     rows = []
@@ -72,20 +86,37 @@ def station_series(folder: Path) -> pd.Series:
     # at stations that report every 10-15 minutes, and a flash flood that stays up for a day is water. Steps across
     # a gap in the readings still count: in this data they are mostly sensors reinstalled on a new datum
     # (อ.นครชัยศรี went from -9.1 to 0.7 m after 15 hours off).
+    flow = pd.to_numeric(df["flow"], errors="coerce").reindex(level.index)
+    flow = flow.where(flow > 0).to_numpy()  # 0 and -9999 mean "no flow reading"
     values, times = level.to_numpy(), level.index.to_numpy()
     for i in reversed(np.flatnonzero(np.abs(np.diff(values)) > MAX_STEP_M) + 1):
-        before = values[times.searchsorted(times[i] - STEP_WINDOW):i]
-        after = values[i:times.searchsorted(times[i] + STEP_WINDOW)]
-        if len(before) and len(after) and abs(np.median(after) - np.median(before)) > MAX_STEP_M:
-            level = level.iloc[i:]
-            break
+        start, stop = times.searchsorted(times[i] - STEP_WINDOW), times.searchsorted(times[i] + STEP_WINDOW)
+        before, after = values[start:i], values[i:stop]
+        if not (len(before) and len(after) and abs(np.median(after) - np.median(before)) > MAX_STEP_M):
+            continue
+        if _flow_follows(flow[start:i], flow[i:stop], np.median(after) > np.median(before)):
+            continue  # the flow moved with the level: a flood (or its end) that rose while the sensor was off
+        level = level.iloc[i:]
+        break
     hourly = level.resample("1h").mean()
-    # Runs of bad readings survive the checks above (Ct.4 sat 20 m low for 12 hours on 2023-04-04); a river does
-    # not move MAX_RUN_M away from the median of the two days around it.
+    # Runs of bad readings survive the checks above (Ct.4 sat 20 m low for 12 hours on 2023-04-04): hours more than
+    # MAX_RUN_M from the median of the two days around them. A run is kept when it is above that median and the level
+    # entered and left it without a jump of more than MAX_STEP_M in an hour: that is a flash flood (a river can rise
+    # 5-8 m in a few hours), while bad runs in this data start or end with a jump of 5 m or more (272 of 283).
     median = hourly.rolling(49, center=True, min_periods=12).median()
-    hourly = hourly.where((hourly - median).abs() <= MAX_RUN_M)
-    # Fill gaps of up to 3 hours only; longer gaps stay missing and their rows are not used.
-    return hourly.interpolate(limit=3, limit_area="inside")
+    far = (hourly - median).abs() > MAX_RUN_M
+    if far.any():
+        jump_in = (hourly - hourly.ffill().shift(1)).abs()
+        jump_out = (hourly - hourly.bfill().shift(-1)).abs()
+        run = (far != far.shift()).cumsum()[far]
+        smooth = pd.concat([jump_in[far].groupby(run).first(), jump_out[far].groupby(run).last()], axis=1).max(axis=1)
+        rising = (hourly - median)[far].groupby(run).first() > 0
+        kept = smooth.index[(smooth.fillna(0) <= MAX_STEP_M) & rising]
+        hourly = hourly.where(~far | run.reindex(hourly.index).isin(kept))
+    # Fill gaps of up to 3 hours only; longer gaps stay missing and their rows are not used. (interpolate(limit=3)
+    # alone would also fill the first 3 hours of every longer gap, e.g. at stations that report once a day.)
+    gap_hours = hourly.isna().groupby(hourly.notna().cumsum()).transform("sum")
+    return hourly.interpolate(limit_area="inside").where(hourly.notna() | (gap_hours <= 3))
 
 
 def rain_cell(lat: float, lon: float) -> tuple[float, float]:
@@ -117,7 +148,8 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
         bank = s.get("bank_msl")
         if lv.empty or bank is None:
             continue
-        lv = lv[(lv > bank - 40) & (lv < bank + 15)]
+        # where(), not a filter: every shift() and rolling() below counts rows as hours, so the index must stay hourly.
+        lv = lv.where((lv > bank - 40) & (lv < bank + 15))
         if lv.count() >= 24 * 60:  # at least ~60 days of readings
             series[s["id"]] = lv
     frames = []

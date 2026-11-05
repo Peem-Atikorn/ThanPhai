@@ -61,6 +61,53 @@ def test_a_flash_flood_that_goes_down_is_water_not_a_datum_change(tmp_path):
     assert s.first_valid_index() == pd.Timestamp(start) and s.max() == pytest.approx(9.0)
 
 
+def test_a_flash_flood_rising_more_than_the_run_limit_is_kept(tmp_path):
+    # 1.5 m an hour up to 7.5 m above the usual level, eight hours there, then back down: water, not a bad run.
+    flood = [5.0 + 1.5 * k for k in range(1, 6)] + [12.5] * 8 + [12.5 - 1.5 * k for k in range(1, 6)]
+    _station(tmp_path, "5", [5.0] * 72 + flood + [5.0] * 72)
+    s = station_series(tmp_path / "rivers" / "5")
+    assert s.max() == pytest.approx(12.5) and s.isna().sum() == 0
+
+
+def test_a_flood_that_returns_after_the_sensor_was_off_is_not_a_datum_change(tmp_path):
+    # 20 hours without readings, then 4 m higher for a week: the flow went up 5 times with it, so it is water.
+    start = datetime(2024, 1, 1)
+    before = [[(start + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M"), 5.0, 100.0] for i in range(24 * 30)]
+    after = [[(start + timedelta(hours=24 * 30 + 20 + i)).strftime("%Y-%m-%d %H:%M"), 9.0, 500.0] for i in range(24 * 8)]
+    _gz(tmp_path / "rivers" / "4" / "2024-01-01.json.gz", {"station_id": "4", "rows": before + after})
+    assert station_series(tmp_path / "rivers" / "4").first_valid_index() == pd.Timestamp(start)
+    # The same step with the flow unchanged is a new datum: only the later part is kept.
+    for row in after:
+        row[2] = 100.0
+    _gz(tmp_path / "rivers" / "3" / "2024-01-01.json.gz", {"station_id": "3", "rows": before + after})
+    assert station_series(tmp_path / "rivers" / "3").first_valid_index() > pd.Timestamp(start) + pd.Timedelta(days=30)
+
+
+def test_targets_and_lags_never_reach_across_a_gap(raw):
+    # Station 1 loses two days in the middle; rows next to the gap must not compare readings two days apart.
+    stations = json.loads((raw / "stations.json").read_text(encoding="utf-8"))
+    levels = (5 + 0.01 * np.arange(24 * 70)).tolist()
+    for i in range(24 * 35, 24 * 37):
+        levels[i] = None
+    stations[0] = _station(raw, "1", levels)
+    (raw / "stations.json").write_text(json.dumps(stations), encoding="utf-8")
+    assert station_series(raw / "rivers" / "1").isna().sum() == 48  # a 2-day gap is not partly filled in
+    one = river_table(raw).query("station_id == '1'").set_index("time")
+    # Every y6 and d24h left is exactly 6 or 24 hours of the 1 cm/hour rise.
+    assert one["y6"].dropna().round(6).eq(0.06).all() and one["d24h"].round(6).eq(0.24).all()
+    assert one["d6h"].dropna().round(6).eq(0.06).all()
+
+
+def test_river_chunks_are_calendar_quarters_whatever_the_start_day():
+    from datetime import date
+
+    from risk_models.water.download import river_chunks
+
+    a, b = river_chunks(date(2021, 11, 5), date(2026, 11, 5)), river_chunks(date(2021, 11, 9), date(2026, 11, 9))
+    assert a[0] == (date(2021, 10, 1), date(2022, 1, 1)) and [c[0] for c in a] == [c[0] for c in b]
+    assert a[-1] == (date(2026, 10, 1), date(2026, 11, 5)) and all(x[1] == y[0] for x, y in zip(a, a[1:]))
+
+
 def test_river_targets_are_future_change_and_basin_excludes_itself(raw):
     table = river_table(raw)
     assert set(RIVER_FEATURES) <= set(table.columns)

@@ -1,7 +1,7 @@
 """Download ThaiWater history for the water-level and dam-inflow models.
 
-- River stations: hourly-ish level (m MSL) from `public/waterlevel_graph`, in 90-day chunks (a year in one request
-  sometimes times out). Each chunk is saved as gzip JSON, so a stopped run resumes where it left off.
+- River stations: hourly-ish level (m MSL) from `public/waterlevel_graph`, in one chunk per calendar quarter (a year
+  in one request sometimes times out). Each chunk is saved as gzip JSON, so a stopped run resumes where it left off.
 - Dams: one value per day for every year ThaiWater has, from `analyst/dam_yearly_graph` (inflow, release, storage).
 
 One request at a time with a short pause: ThaiWater is a public service, and the history is fetched once.
@@ -22,7 +22,6 @@ from risk_models.water.dataset import rain_cell
 
 log = logging.getLogger("water.download")
 USER_AGENT = {"User-Agent": "ThanPhai/0.1 (student project; history for a water-level model)"}
-CHUNK_DAYS = 90
 PAUSE_S = 0.4
 DAM_SERIES = ("dam_inflow", "dam_released", "dam_storage")
 
@@ -64,19 +63,35 @@ def river_stations(client: httpx.Client) -> list[dict]:
     return stations
 
 
+def _saved_end(path: Path) -> str:
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        return json.load(f).get("end") or ""
+
+
+def river_chunks(start: date, end: date) -> list[tuple[date, date]]:
+    """Calendar quarters covering start..end (a year in one request sometimes times out); the last ends at `end`.
+
+    Chunk files are named by the quarter, not by `start`, so a run resumed on another day finds the files of the
+    quarters it already has instead of fetching everything again under new names.
+    """
+    chunks = []
+    cursor = date(start.year, 3 * ((start.month - 1) // 3) + 1, 1)
+    while cursor < end:
+        nxt = date(cursor.year + (cursor.month == 10), (cursor.month + 2) % 12 + 1, 1)
+        chunks.append((cursor, min(nxt, end)))
+        cursor = nxt
+    return chunks
+
+
 def download_rivers(out: Path, stations: list[dict], start: date, end: date, client: httpx.Client) -> dict:
     """Fetch every station's chunks between start and end; returns counts of fetched, skipped and failed chunks."""
     counts = {"fetched": 0, "skipped": 0, "failed": 0}
-    chunks = []
-    cursor = start
-    while cursor < end:
-        chunk_end = min(cursor + timedelta(days=CHUNK_DAYS), end)
-        chunks.append((cursor, chunk_end))
-        cursor = chunk_end
+    chunks = river_chunks(start, end)
     for n, station in enumerate(stations, 1):
         for chunk_start, chunk_end in chunks:
             path = out / "rivers" / station["id"] / f"{chunk_start.isoformat()}.json.gz"
-            if path.exists():
+            # The current quarter is saved only up to the day it was fetched; a later run fetches it again.
+            if path.exists() and _saved_end(path) >= chunk_end.isoformat():
                 counts["skipped"] += 1
                 continue
             params = {"station_type": "tele_waterlevel", "station_id": station["id"],
