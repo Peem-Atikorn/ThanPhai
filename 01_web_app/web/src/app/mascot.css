@@ -71,7 +71,8 @@
 .answer-body p { margin: 0; }
 .answer-body .answer-lead { font-weight: 600; }
 .answer-body .answer-heading { font-weight: 650; }
-.answer-body ul { margin: 0; padding-left: 20px; }
+.answer-body ul { margin: 0; padding-left: 20px; list-style: disc; }
+.answer-body .answer-details { list-style: circle; }
 .answer-body .answer-list > li + li { margin-top: 8px; }
 .answer-body .answer-details { margin-top: 4px; }
 .answer-body .answer-details li { line-height: 1.7; }
