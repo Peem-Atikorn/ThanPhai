@@ -17,7 +17,7 @@ import StormsPanel from "@/components/StormsPanel";
 import AreaWarnings from "@/components/AreaWarnings";
 import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
-import RadarPlayback from "@/components/RadarPlayback";
+import RadarPlayback, { radarImageFailed, radarImageLoaded } from "@/components/RadarPlayback";
 import AnswerText from "@/components/AnswerText";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
 import { OverlayControls, OverlayLegends, useOverviewLayers } from "@/components/OverviewLayers";
@@ -370,7 +370,13 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(false);
-    const [radarPlaying, setRadarPlaying] = useState(false);
+    // The image the map's hidden radar layer is fetching ahead (chosen by RadarPlayback within RainViewer's limit).
+    const [radarPreload, setRadarPreload] = useState<string | null>(null);
+    const radarImage = useCallback((tiles: string, ok: boolean) => {
+        if (ok) { radarImageLoaded(tiles); return; }
+        radarImageFailed(tiles);
+        setRadarPreload((current) => current === tiles ? null : current);  // so the retry fetches it again
+    }, []);
     // Each endpoint's last answer; the timeline and the selected frame are derived from them during render,
     // so the map never draws a frame that is not the selected one.
     const [radarObserved, setRadarObserved] = useState<{ enabled: boolean; frames: RadarFrame[] } | null>(null);
@@ -381,7 +387,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const selectedRadarIndex = radarFrames.findIndex((frame) => frame.time === radarSelection?.time && frame.kind === radarSelection?.kind);
     const radarFrameIndex = selectedRadarIndex >= 0 ? selectedRadarIndex : latestObservedIndex;
     const radarFrame = radarFrames[radarFrameIndex] ?? null;
-    const radarNextFrame = radarPlaying && radarFrames.length > 1 ? radarFrames[(radarFrameIndex + 1) % radarFrames.length] : null;
     const radarForecast = useMemo(() => radarFrame?.kind === "forecast"
         ? forecastCellLayer(radarNowcast, radarFrame.horizonMin)
         : null, [radarFrame, radarNowcast]);
@@ -939,7 +944,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
-            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarShift={radarFrame?.shift ?? null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
+            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarPreload !== radarFrame?.tiles ? radarPreload : null} onRadarImage={radarImage} radarDimmed={radarFrame?.kind === "forecast"} radarShift={radarFrame?.shift ?? null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
               <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>{tr("แผนที่กลางคืน")}</button>
@@ -956,7 +961,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(view === "rivers" && rivers.status === "loading" && <div className="map-notice" role="status"><span className="spinner"/>{tr("กำลังโหลดข้อมูลแม่น้ำ\u2026")}</div>)}
             {tr(view === "rivers" && rivers.status === "error" && !rivers.list.length && <div className="map-notice error-notice" role="alert"><Icon name="info"/><div><strong>{tr("โหลดข้อมูลแม่น้ำไม่สำเร็จ")}</strong><p>{tr("ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง")}</p></div><button className="text-button" onClick={() => setRevision((value) => value + 1)}>{tr("ลองใหม่")}</button></div>)}
           </div>
-          {showRadar && !selectedRiskLevel && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarNowcast?.explanation ?? ""} explanationSource={radarNowcast?.explanation_source ?? "template"} explanationPending={!!radarNowcast?.explanation_pending} onChange={(index) => { const frame = radarFrames[index]; setRadarSelection(frame ? { time: frame.time, kind: frame.kind } : null); }} onPlaybackChange={setRadarPlaying}/>}
+          {showRadar && !selectedRiskLevel && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarNowcast?.explanation ?? ""} explanationSource={radarNowcast?.explanation_source ?? "template"} explanationPending={!!radarNowcast?.explanation_pending} onChange={(index) => { const frame = radarFrames[index]; setRadarSelection(frame ? { time: frame.time, kind: frame.kind } : null); }} onPreload={setRadarPreload}/>}
           {/* The overview shows the legend only while a layer is on; it explains the colours each layer draws. */}
           {(!overview || overviewLegend) && <details className="map-supplement"><summary>{tr(overview ? "ชั้นข้อมูลและคำอธิบายแผนที่" : "คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
           {tr(overviewLegend && <div className="overview-overlay-summary">

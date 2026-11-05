@@ -37,6 +37,8 @@ interface Props {
     radar?: string | null;
     /** The next frame is loaded invisibly so changing the slider does not flash or fetch at play time. */
     radarNext?: string | null;
+    /** Called when every visible tile of a radar template (shown or preloaded) has loaded, or one of them failed. */
+    onRadarImage?: (tiles: string, ok: boolean) => void;
     radarDimmed?: boolean;
     /** Forecast frame: the backend's motion (pixels of zoom-4 tile 12/7) to move the whole `radar` image by. */
     radarShift?: { dx: number; dy: number } | null;
@@ -258,7 +260,7 @@ function applyMode(m: MapLibreMap, mode: "hazard" | "points" | "risk") {
     for (const id of POINT_LAYERS)
         m.setLayoutProperty(id, "visibility", mode !== "hazard" ? "visible" : "none");
 }
-export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null, radarNext = null, radarDimmed = false, radarShift = null, radarForecast = null, dark = false, riskOnly = false, overlays }: Props) {
+export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null, radarNext = null, onRadarImage, radarDimmed = false, radarShift = null, radarForecast = null, dark = false, riskOnly = false, overlays }: Props) {
     const container = useRef<HTMLDivElement>(null);
     const map = useRef<MapLibreMap | null>(null);
     const ready = useRef(false);
@@ -270,6 +272,8 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
     useEffect(() => {
         latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays };
     }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays]);
+    const radarImage = useRef(onRadarImage);
+    useEffect(() => { radarImage.current = onRadarImage; }, [onRadarImage]);
     useEffect(() => {
         if (!container.current)
             return;
@@ -282,6 +286,22 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
             maxBounds: [[94, 4], [108, 22]],
         });
         m.addControl(new NavigationControl({ showCompass: false }), "top-right");
+        // Which radar template a source id holds right now (the two radar sources swap roles).
+        const radarTiles = (id?: string) => {
+            const s = radarSources.current;
+            return id === s.activeId ? s.activeTiles : id === s.preloadId ? s.preloadTiles : null;
+        };
+        m.on("sourcedata", (e) => {
+            const tiles = radarTiles(e.sourceId);
+            // Only after a tile event, so a source that has just been given new tiles is not reported loaded early.
+            if (tiles && e.tile && m.isSourceLoaded(e.sourceId)) radarImage.current?.(tiles, true);
+        });
+        m.on("error", (e: { sourceId?: string; error?: unknown }) => {
+            const tiles = radarTiles(e.sourceId);
+            if (tiles) radarImage.current?.(tiles, false);
+            // A listener replaces MapLibre's own logging, so keep it for everything else.
+            else console.error(e.error ?? e);
+        });
         m.on("load", () => {
             m.addSource("areas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
             m.addLayer({ id: "fill", type: "fill", source: "areas", paint: { "fill-color": fillColor, "fill-opacity": 0.55 } });
