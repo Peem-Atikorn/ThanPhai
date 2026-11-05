@@ -64,3 +64,41 @@ def test_a_dam_name_without_the_word_dam_is_a_dam_question(question):
 
 def test_a_dam_name_with_a_hazard_word_is_not_a_dam_question():
     assert agent.ask("ป่าสักชลสิทธิ์ฝนตกไหม", NOW).intent != "dam"
+
+
+# Review of PR 81: "แม่น้ำน่าน" is the Nan river, not Nan province, so its stations downstream stay in the answer.
+GAZ_NAN = Gazetteer([*GAZ_TH.areas, Area("TH55", "province", "น่าน", "Nan", None, 18.8, 100.8, 11500)])
+NAN_STATION = {"id": "5", "code": "N.64", "name_th": "บ้านผาขวาง", "river_th": "แม่น้ำน่าน", "province_code": "TH55", "province_th": "น่าน",
+               "discharge_m3s": 120.0, "above_bank_m": -4.0, "status": "NORMAL", "agency": "RID", "time": "2026-10-19T17:00:00+07:00", "lat": 18.8, "lon": 100.8}
+
+
+class NanTools(Tools):
+    def get_rivers(self):
+        return [*super().get_rivers(), NAN_STATION]
+
+    def get_dams(self):
+        return [{"id": str(i), **d} for i, d in enumerate(super().get_dams())]
+
+    def get_dam_history(self, dam_id, series="storage"):
+        return {"series": [{"year": 2026, "values": [["2026-10-18", 180], ["2026-10-19", 184]]}], "source": "ThaiWater"}
+
+
+nan_agent = HazardAgent(GAZ_NAN, NanTools())
+
+
+@pytest.mark.parametrize("question", ["แม่น้ำน่าน", "ระดับน้ำแม่น้ำน่าน"])
+def test_a_river_named_like_a_province_is_not_that_province(question):
+    assert understand(question, GAZ_NAN, NOW).area is None
+    a = nan_agent.ask(question, NOW)
+    assert a.intent == "river" and all(code in a.text for code in ("N.64", "N.5A", "N.1"))
+
+
+def test_the_province_written_as_a_place_still_narrows_the_river():
+    a = nan_agent.ask("แม่น้ำน่านที่จังหวัดน่าน", NOW)
+    assert "N.64" in a.text and "N.5A" not in a.text and "N.1 " not in a.text
+    assert understand("แม่น้ำน่านที่พิษณุโลก", GAZ_NAN, NOW).area.code == "TH65"
+
+
+@pytest.mark.parametrize("question", ["หนองปลาไหลเทียบกับเมื่อวาน", "เขื่อนหนองปลาไหลเทียบกับเมื่อวาน"])
+def test_a_dam_comparison_goes_to_the_history_with_or_without_the_word_dam(question):
+    assert nan_agent.ask(question, NOW).intent == "dam_history"

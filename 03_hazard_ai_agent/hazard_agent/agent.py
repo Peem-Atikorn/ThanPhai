@@ -4,7 +4,7 @@ The deterministic path below works without any LLM. An LLM can later replace `un
 questions and `compose` for wording, but it must keep the same evidence and alert levels.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 import re
 from typing import Callable, Protocol
@@ -13,7 +13,7 @@ from decision_engine.rag import get_disaster_guidance
 from decision_engine.rag.models import format_page_ranges
 from geo_integration import Area, Gazetteer
 from geo_integration.regions import REGION_CODES
-from hazard_agent.understanding import BANGKOK, STATION_CODE, Understanding, detect_hazards, understand
+from hazard_agent.understanding import BANGKOK, DAM_HISTORY_WORDS, STATION_CODE, Understanding, detect_hazards, understand
 from thanphai_shared import HazardType
 
 LEVEL_TH = {"NORMAL": "ปกติ", "WATCH": "เฝ้าระวัง", "WARNING": "เตือนภัย", "CRITICAL": "วิกฤต", None: "ไม่มีข้อมูลเพียงพอ"}
@@ -389,7 +389,10 @@ class HazardAgent:
         # "พรุ่งนี้" means tomorrow in Thailand; with a UTC clock it would be wrong between 00:00 and 07:00.
         u = understand(question, self.gazetteer, now.astimezone(BANGKOK))
         if u.intent in ("risk", "out_of_scope", "clarify") and self._names_a_dam(question, u):
-            # "ภูมิพล" or "สิริกิติ์ตอนนี้น้ำเท่าไหร่" without the word "เขื่อน".
+            # "ภูมิพล" or "สิริกิติ์ตอนนี้น้ำเท่าไหร่" without the word "เขื่อน"; a comparison goes to the
+            # history, as it does with "เขื่อน" ("หนองปลาไหลเทียบกับเมื่อวาน").
+            if any(w in question.lower() for w in DAM_HISTORY_WORDS):
+                return self._data_answer(question, replace(u, intent="dam_history"), now.astimezone(BANGKOK))
             return self._dams(question, u)
         context = self.gazetteer.by_code.get(area_code) if area_code else None
         if context is not None and u.intent in ("risk", "explain") and not u.areas and not u.regions:

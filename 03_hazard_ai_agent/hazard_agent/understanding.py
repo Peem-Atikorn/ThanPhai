@@ -33,6 +33,9 @@ HAZARD_WORDS = {
     HazardType.LANDSLIDE: ("ดินถล่ม", "ดินสไลด์", "โคลนถล่ม", "ภูเขาถล่ม", "landslide", "mudslide"),
 }
 DAM_WORDS = ("เขื่อน", "อ่างเก็บน้ำ", "ปริมาณน้ำในอ่าง", "dam", "reservoir")
+DAM_HISTORY_WORDS = ("เทียบ", "เปรียบเทียบ", "เมื่อวาน", "สัปดาห์ก่อน", "อาทิตย์ก่อน", "history", "เทียบกับ")
+# A river is named "แม่น้ำน่าน" / "ลำน้ำน่าน"; the name after these is the river's, not a place's.
+RIVER_PREFIXES = ("แม่น้ำ", "ลำน้ำ")
 # Questions about river flow are always river questions; river and bank words only when no area is named
 # ("อำเภอเสนาน้ำล้นตลิ่งไหม" is better answered by the district's flood assessment).
 FLOW_WORDS = ("อัตราการไหล", "ปริมาณน้ำไหล", "น้ำไหลผ่าน", "ไหลเท่า", "ลบ.ม./วินาที", "ลบ.ม./วิ", "discharge", "flow rate")
@@ -130,12 +133,21 @@ def asks_about_future(text: str, start: datetime, end: datetime, explicit: bool,
     return any(w in lowered for w in FUTURE_WORDS)
 
 
+def only_in_river_name(name: str, text: str) -> bool:
+    """"แม่น้ำน่าน" names the Nan river, not Nan province: true when every mention of the place name is part of a
+    river name and none is written as a place ("จ.น่าน", "จังหวัดน่าน")."""
+    if not name or any(f"{p}{name}" in text for p in ("จ.", "จังหวัด", "อ.", "อำเภอ", "ต.", "ตำบล")):
+        return False
+    total = text.count(name)
+    return total > 0 and total == sum(text.count(p + name) for p in RIVER_PREFIXES)
+
+
 def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     lowered = text.lower()
     language = detect_language(text)
     start, end, explicit = detect_window(text, now)
     future = asks_about_future(text, start, end, explicit, now)
-    areas = gazetteer.find_in_text(text)
+    areas = [a for a in gazetteer.find_in_text(text) if not only_in_river_name(a.name_th, text)]
     regions = find_regions(text)
     if regions and gazetteer.find_in_text(mask_regions(text)):
         regions = []  # A named province or district is more specific than its region.
@@ -146,7 +158,7 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     if any(w in lowered for w in DAM_WORDS):
         # A real tambon is named "เขื่อน" (TH440310, Maha Sarakham); in a dam question the word is not a place.
         places = [a for a in areas if a.name_th not in DAM_WORDS]
-        if any(w in lowered for w in ("เทียบ", "เปรียบเทียบ", "เมื่อวาน", "สัปดาห์ก่อน", "อาทิตย์ก่อน", "history", "เทียบกับ")):
+        if any(w in lowered for w in DAM_HISTORY_WORDS):
             return Understanding("dam_history", [], places, start, end, language, regions=regions)
         return Understanding("dam", [], places, start, end, language, regions=regions)
     if any(w in lowered for w in RIVER_WORDS):
