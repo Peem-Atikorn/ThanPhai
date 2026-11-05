@@ -129,6 +129,10 @@ h2 { font-size: 17px; font-weight: 650; }
 .radar-frame-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 3px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--brand); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .radar-frame-badge.is-forecast { background: #fff0d5; color: #8b4c00; }
 .radar-playback time { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.radar-loading { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.radar-loading.is-waiting { color: var(--brand); animation: radar-loading-pulse 1.2s ease-in-out infinite; }
+@keyframes radar-loading-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .radar-loading.is-waiting { animation: none; } }
 .radar-forecast-copy { grid-column: 1 / -1; padding: 9px 12px; border-left: 3px solid #e4a33b; border-radius: 0 8px 8px 0; background: #fff8eb; color: #5d3a0a; }
 .radar-forecast-copy p { margin: 0 0 4px; font-size: 13px; line-height: 1.5; }
 .radar-forecast-copy small { display: block; color: #75501c; font-size: 11px; line-height: 1.45; }
