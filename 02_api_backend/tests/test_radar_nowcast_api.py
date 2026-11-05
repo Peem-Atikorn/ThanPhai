@@ -141,6 +141,14 @@ def test_get_radar_nowcast_with_real_moving_rain(monkeypatch):
     assert len(result["forecast_frames"]) == 6
     assert result["forecast_frames"][0]["horizon_min"] == 10
     assert result["forecast_frames"][0]["dx_pixels"] > 0
+    # The backend projects every cell for each frame, so the map draws its positions instead of recomputing them.
+    lead = result["rain_cells"][0]
+    first_pos = next(p for p in result["forecast_frames"][0]["cells"] if p["id"] == lead["id"])
+    last_pos = next(p for p in result["forecast_frames"][-1]["cells"] if p["id"] == lead["id"])
+    assert lead["centroid_lon"] < first_pos["lon"] < last_pos["lon"], "South-east motion moves the cell east"
+    assert lead["centroid_lat"] > first_pos["lat"] > last_pos["lat"], "South-east motion moves the cell south"
+    assert result["motion"]["is_moving"] is True
+    assert result["explanation_pending"] is False
 
     # Motion is calculated from optical flow on tiles
     assert result["motion"] is not None
@@ -224,6 +232,10 @@ def test_get_radar_nowcast_with_stationary_rain(monkeypatch):
     assert result["status"] == "ok"
     assert result["motion"] is not None
     assert result["motion"]["direction_th"] == "เกือบอยู่กับที่"
+    assert result["motion"]["is_moving"] is False
+    lead = result["rain_cells"][0]
+    assert all(abs(p["lat"] - lead["centroid_lat"]) < 0.05 and abs(p["lon"] - lead["centroid_lon"]) < 0.05
+               for frame in result["forecast_frames"] for p in frame["cells"] if p["id"] == lead["id"])
     assert len(result["rain_cells"]) >= 1
     assert "เกือบอยู่กับที่" in result["explanation"] or "ฝนสะสม" in result["explanation"]
 
@@ -482,7 +494,7 @@ def test_slow_qwen_answers_with_template_then_fills_cache(monkeypatch):
     async def run():
         try:
             first = await svc.get_radar_nowcast()
-            assert first["explanation_source"] == "template"
+            assert first["explanation_source"] == "template" and first["explanation_pending"] is True
         finally:
             release.set()
 
@@ -495,4 +507,5 @@ def test_slow_qwen_answers_with_template_then_fills_cache(monkeypatch):
     first, later = asyncio.run(run())
     assert first["explanation_source"] == "template" and first["explanation"] != "ข้อความจาก Qwen"
     assert later["explanation_source"] == "qwen" and later["explanation"] == "ข้อความจาก Qwen"
+    assert later["explanation_pending"] is False
     assert later["forecast_frames"] == first["forecast_frames"]

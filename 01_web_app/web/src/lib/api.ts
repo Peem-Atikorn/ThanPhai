@@ -12,11 +12,14 @@ export type RadarNowcast = {
   enabled: boolean;
   status: "ok" | "unavailable";
   past_frames: { tile_url: string; time: number }[];
-  forecast_frames: { time: number; horizon_min: number; dx_pixels: number; dy_pixels: number }[];
-  motion: { speed_kmh: number; direction_deg: number; direction_th: string } | null;
-  rain_cells: { id: string; centroid_lat: number; centroid_lon: number; peak_intensity_dbz: number }[];
+  /** `cells` are the backend's projected positions of each rain cell at this lead time. */
+  forecast_frames: { time: number; horizon_min: number; dx_pixels: number; dy_pixels: number; cells?: { id: number | string; lat: number; lon: number }[] }[];
+  motion: { speed_kmh: number; direction_deg: number; direction_th: string; is_moving?: boolean } | null;
+  rain_cells: { id: number | string; centroid_lat: number; centroid_lon: number; peak_intensity_dbz: number }[];
   explanation: string;
   explanation_source: "qwen" | "template";
+  /** Qwen was still writing when the backend answered; asking again later returns its text. */
+  explanation_pending?: boolean;
 };
 
 export const HAZARDS: { id: Hazard; th: string; ready: boolean }[] = [

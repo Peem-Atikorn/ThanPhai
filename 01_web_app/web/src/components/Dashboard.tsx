@@ -107,26 +107,33 @@ const RID_HOURLY = "https://hyd-app.rid.go.th/hydro5h.html";
 type View = MapView;
 // The rain radar is drawn on these maps.
 const RADAR_LAYERS: MapLayerId[] = ["overview", "rain_storm", "tropical_cyclone"];
-function forecastCellLayer(cells: RadarNowcast["rain_cells"], motion: RadarNowcast["motion"], horizonMin: number | undefined): GeoJSON.FeatureCollection {
-    if (!motion || !horizonMin || motion.speed_kmh < 2) return { type: "FeatureCollection", features: [] };
-    const distanceKm = motion.speed_kmh * horizonMin / 60;
-    const bearing = motion.direction_deg * Math.PI / 180;
-    const northKm = distanceKm * Math.cos(bearing);
-    const eastKm = distanceKm * Math.sin(bearing);
+// Asks once more for the Qwen text the backend was still writing (its Qwen timeout is 15 s).
+const NOWCAST_RETRY_MS = 15_000;
+// Draws the positions the backend projected for this lead time; a track only when the backend says the rain moves.
+function forecastCellLayer(nowcast: RadarNowcast | null, horizonMin: number | undefined): GeoJSON.FeatureCollection {
+    const frame = nowcast?.forecast_frames.find((f) => f.horizon_min === horizonMin);
     const features: GeoJSON.Feature[] = [];
-    for (const cell of cells) {
-        const start: [number, number] = [cell.centroid_lon, cell.centroid_lat];
-        const end: [number, number] = [
-            cell.centroid_lon + eastKm / (111.32 * Math.cos(cell.centroid_lat * Math.PI / 180)),
-            cell.centroid_lat + northKm / 111.32,
-        ];
+    for (const position of frame?.cells ?? []) {
+        const cell = nowcast?.rain_cells.find((c) => c.id === position.id);
+        if (!cell) continue;
+        const end: [number, number] = [position.lon, position.lat];
         const properties = { cellId: cell.id, intensityDbz: cell.peak_intensity_dbz };
-        features.push(
-            { type: "Feature", geometry: { type: "LineString", coordinates: [start, end] }, properties: { ...properties, kind: "track" } },
-            { type: "Feature", geometry: { type: "Point", coordinates: end }, properties: { ...properties, kind: "position" } },
-        );
+        if (nowcast?.motion?.is_moving)
+            features.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[cell.centroid_lon, cell.centroid_lat], end] }, properties: { ...properties, kind: "track" } });
+        features.push({ type: "Feature", geometry: { type: "Point", coordinates: end }, properties: { ...properties, kind: "position" } });
     }
     return { type: "FeatureCollection", features };
+}
+// One timeline: the newer of the two observed lists, then forecasts only when they start from its last frame.
+function radarTimeline(observedRadar: { frames: RadarFrame[] } | null, nowcast: RadarNowcast | null) {
+    const fromRadar = observedRadar?.frames ?? [];
+    const fromNowcast: RadarFrame[] = (nowcast?.past_frames ?? []).map((frame) => ({ tiles: frame.tile_url, time: frame.time, kind: "observed" }));
+    const observed = (fromNowcast.at(-1)?.time ?? -Infinity) > (fromRadar.at(-1)?.time ?? -Infinity) ? fromNowcast : fromRadar;
+    const latest = observed.at(-1);
+    const forecasts: RadarFrame[] = latest && nowcast?.motion && nowcast.past_frames.at(-1)?.time === latest.time
+        ? nowcast.forecast_frames.map((frame) => ({ tiles: latest.tiles, imageTime: latest.time, time: frame.time, kind: "forecast", horizonMin: frame.horizon_min }))
+        : [];
+    return { frames: [...observed, ...forecasts], latestObservedIndex: Math.max(0, observed.length - 1) };
 }
 const stationFeatures = (stations: AirStation[]): GeoJSON.FeatureCollection => ({
     type: "FeatureCollection",
@@ -349,29 +356,21 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(true);
-    const [radarAvailable, setRadarAvailable] = useState(false);
     const [radarPlaying, setRadarPlaying] = useState(false);
-    const [observedRadarFrames, setObservedRadarFrames] = useState<RadarFrame[]>([]);
-    const [forecastRadarFrames, setForecastRadarFrames] = useState<RadarFrame[]>([]);
-    const radarFrames = useMemo(() => [...observedRadarFrames, ...forecastRadarFrames], [observedRadarFrames, forecastRadarFrames]);
-    const [radarFrameIndex, setRadarFrameIndex] = useState(0);
-    const [radarExplanation, setRadarExplanation] = useState("");
-    const [radarExplanationSource, setRadarExplanationSource] = useState<"qwen" | "template">("template");
-    const [radarMotion, setRadarMotion] = useState<RadarNowcast["motion"]>(null);
-    const [radarCells, setRadarCells] = useState<RadarNowcast["rain_cells"]>([]);
-    const selectedRadarFrame = useRef<{ time: number; kind?: RadarFrame["kind"] } | null>(null);
+    // Each endpoint's last answer; the timeline and the selected frame are derived from them during render,
+    // so the map never draws a frame that is not the selected one.
+    const [radarObserved, setRadarObserved] = useState<{ enabled: boolean; frames: RadarFrame[] } | null>(null);
+    const [radarNowcast, setRadarNowcast] = useState<RadarNowcast | null>(null);
+    const [radarSelection, setRadarSelection] = useState<{ time: number; kind?: RadarFrame["kind"] } | null>(null);
+    const radarAvailable = !!radarObserved?.enabled || !!radarNowcast?.enabled;
+    const { frames: radarFrames, latestObservedIndex } = useMemo(() => radarTimeline(radarObserved, radarNowcast), [radarObserved, radarNowcast]);
+    const selectedRadarIndex = radarFrames.findIndex((frame) => frame.time === radarSelection?.time && frame.kind === radarSelection?.kind);
+    const radarFrameIndex = selectedRadarIndex >= 0 ? selectedRadarIndex : latestObservedIndex;
     const radarFrame = radarFrames[radarFrameIndex] ?? null;
     const radarNextFrame = radarPlaying && radarFrames.length > 1 ? radarFrames[(radarFrameIndex + 1) % radarFrames.length] : null;
     const radarForecast = useMemo(() => radarFrame?.kind === "forecast"
-        ? forecastCellLayer(radarCells, radarMotion, radarFrame.horizonMin)
-        : null, [radarFrame, radarCells, radarMotion]);
-    useEffect(() => {
-        const selectedIndex = radarFrames.findIndex((frame) => frame.time === selectedRadarFrame.current?.time && frame.kind === selectedRadarFrame.current?.kind);
-        const latestObservedIndex = Math.max(0, observedRadarFrames.length - 1);
-        const nextIndex = selectedIndex >= 0 ? selectedIndex : latestObservedIndex;
-        selectedRadarFrame.current = radarFrames[nextIndex] ?? null;
-        setRadarFrameIndex(nextIndex);
-    }, [radarFrames, observedRadarFrames.length]);
+        ? forecastCellLayer(radarNowcast, radarFrame.horizonMin)
+        : null, [radarFrame, radarNowcast]);
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
     const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
     const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
@@ -452,44 +451,18 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         if (!showRadar)
             return;
         let cancelled = false;
-        let nowcastHasFrames = false;
-        // Show observed tiles as soon as the lightweight endpoint responds; nowcast/Qwen can finish later.
-        api.radar().then((result) => { if (!cancelled) {
-            setRadarAvailable(result.enabled || nowcastHasFrames);
-            if (result.frames.length || !nowcastHasFrames) setObservedRadarFrames(result.frames);
-        } }).catch(() => { if (!cancelled) {
-            if (!nowcastHasFrames) {
-                setRadarAvailable(false);
-                setObservedRadarFrames([]);
-            }
-        } });
-        api.radarNowcast().then((result) => { if (!cancelled) {
-            if (result.enabled) setRadarAvailable(true);
-            const observed = result.past_frames.map((frame) => ({ tiles: frame.tile_url, time: frame.time, kind: "observed" as const }));
-            nowcastHasFrames = observed.length > 0;
-            if (observed.length) setObservedRadarFrames(current => current.length ? current : observed);
-            const latestObserved = result.past_frames.at(-1);
-            const forecasts = latestObserved && result.motion
-                ? result.forecast_frames.map((frame) => ({
-                    tiles: latestObserved.tile_url,
-                    imageTime: latestObserved.time,
-                    time: frame.time,
-                    kind: "forecast" as const,
-                    horizonMin: frame.horizon_min,
-                }))
-                : [];
-            setForecastRadarFrames(forecasts);
-            setRadarExplanation(result.explanation);
-            setRadarExplanationSource(result.explanation_source);
-            setRadarMotion(result.motion);
-            setRadarCells(result.rain_cells);
-        } }).catch(() => { if (!cancelled) {
-            setForecastRadarFrames([]);
-            setRadarExplanation("");
-            setRadarMotion(null);
-            setRadarCells([]);
-        } });
-        return () => { cancelled = true; };
+        let retry: ReturnType<typeof setTimeout> | undefined;
+        // Observed tiles show as soon as the lightweight endpoint responds; nowcast/Qwen can finish later.
+        // A failure of one endpoint leaves the other's frames in the timeline.
+        api.radar().then((result) => { if (!cancelled) setRadarObserved(result); })
+            .catch(() => { if (!cancelled) setRadarObserved({ enabled: false, frames: [] }); });
+        const loadNowcast = (first: boolean) => api.radarNowcast().then((result) => {
+            if (cancelled) return;
+            setRadarNowcast(result);
+            if (first && result.explanation_pending) retry = setTimeout(() => loadNowcast(false), NOWCAST_RETRY_MS);
+        }).catch(() => { if (!cancelled && first) setRadarNowcast(null); });
+        loadNowcast(true);
+        return () => { cancelled = true; clearTimeout(retry); };
     }, [showRadar, revision]);
     useEffect(() => {
         let cancelled = false;
@@ -934,9 +907,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(view === "rivers" && rivers.status === "loading" && <div className="map-notice" role="status"><span className="spinner"/>{tr("กำลังโหลดข้อมูลแม่น้ำ\u2026")}</div>)}
             {tr(view === "rivers" && rivers.status === "error" && !rivers.list.length && <div className="map-notice error-notice" role="alert"><Icon name="info"/><div><strong>{tr("โหลดข้อมูลแม่น้ำไม่สำเร็จ")}</strong><p>{tr("ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง")}</p></div><button className="text-button" onClick={() => setRevision((value) => value + 1)}>{tr("ลองใหม่")}</button></div>)}
           </div>
-          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarExplanation} explanationSource={radarExplanationSource} onChange={(index) => { const frame = radarFrames[index]; selectedRadarFrame.current = frame ? { time: frame.time, kind: frame.kind } : null; setRadarFrameIndex(index); }} onPlaybackChange={setRadarPlaying}/>}
+          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarNowcast?.explanation ?? ""} explanationSource={radarNowcast?.explanation_source ?? "template"} explanationPending={!!radarNowcast?.explanation_pending} onChange={(index) => { const frame = radarFrames[index]; setRadarSelection(frame ? { time: frame.time, kind: frame.kind } : null); }} onPlaybackChange={setRadarPlaying}/>}
           <details className="map-supplement"><summary>{tr(overview ? "ชั้นข้อมูลและคำอธิบายแผนที่" : "คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
-          {tr(hideToolbar && overview && !selectedRiskLevel && mapControls)}
           {tr(overview && !selectedRiskLevel && <div className="overview-overlay-summary">
             <OverlayLegends data={overlays.data} enabled={overlays.enabled}/>
             {tr(pmOn && <section><h4>{tr("ฝุ่น PM2.5 \u00B7 เฉลี่ย 24 ชม.")}</h4><ul className="overlay-levels">{tr(PM25_BANDS.map(b => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}</li>))}</ul><p>{tr(airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ · แสดงข้อมูลเดิมถ้ามี" : !airStations?.length ? "ยังไม่มีข้อมูลสถานี" : tr("") + tr(airStations.length) + tr(" สถานี \u00B7 แต่ละสถานีอาจรายงานคนละเวลา"))}</p><small>{tr("Air4Thai (กรมควบคุมมลพิษ) \u00B7 เวลาล่าสุด ")}{tr(formatTime(airStations?.map(s => s.time).sort().at(-1)))}{tr(" (เวลาไทย)")}</small></section>)}
