@@ -404,8 +404,36 @@ class AskRequest(BaseModel):
     area_code: str | None = Field(None, pattern=r"^TH\d{2,8}$")
 
 
+# Each question may call the LLM; on a public site, cap how many one visitor can ask.
+ASK_LIMIT_PER_MINUTE = int(os.getenv("ASK_LIMIT_PER_MINUTE", "10"))
+_ask_times: dict[str, list[float]] = {}
+
+
+def client_ip(request: Request) -> str:
+    """The visitor's address. Behind Cloudflare Tunnel and the Next proxy, request.client is the web container;
+    Cloudflare sets CF-Connecting-IP and Next passes it on. The web port is reachable only through the tunnel."""
+    forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0]
+    return forwarded.strip() or (request.client.host if request.client else "unknown")
+
+
+def check_ask_limit(ip: str, now: float | None = None) -> None:
+    if ASK_LIMIT_PER_MINUTE <= 0:
+        return
+    now = time.monotonic() if now is None else now
+    recent = [t for t in _ask_times.get(ip, []) if now - t < 60]
+    if len(recent) >= ASK_LIMIT_PER_MINUTE:
+        _ask_times[ip] = recent
+        raise HTTPException(429, "ถามถี่เกินไป กรุณารอสักครู่แล้วถามใหม่ครับ", headers={"Retry-After": "60"})
+    recent.append(now)
+    _ask_times[ip] = recent
+    if len(_ask_times) > 10_000:  # drop visitors with nothing in the last minute
+        for key in [k for k, v in _ask_times.items() if not v or now - v[-1] >= 60]:
+            del _ask_times[key]
+
+
 @app.post("/v1/ask")
-async def ask(body: AskRequest) -> dict:
+async def ask(body: AskRequest, request: Request) -> dict:
+    check_ask_limit(client_ip(request))
     svc = await fresh_service()
     # ask() may call Gemini (seconds, blocking SDK call); run it in a thread so other requests keep flowing.
     answer = await asyncio.to_thread(agent.ask, body.question, datetime.now(timezone.utc), body.area_code)

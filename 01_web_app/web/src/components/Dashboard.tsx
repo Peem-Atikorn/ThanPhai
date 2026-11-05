@@ -784,8 +784,11 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             if (response.area)
                 chooseArea(response.area);
         }
-        catch {
-            settle({ text: "ยังตอบคำถามไม่ได้ในขณะนี้ กรุณาลองถามอีกครั้ง", intent: "error", area: null, sources: [] });
+        catch (err) {
+            const text = err instanceof Error && err.message === "429"
+                ? "ถามถี่เกินไป กรุณารอสักครู่แล้วถามใหม่ครับ"
+                : "ยังตอบคำถามไม่ได้ในขณะนี้ กรุณาลองถามอีกครั้ง";
+            settle({ text, intent: "error", area: null, sources: [] });
         }
         questionInput.current?.focus();
     }
