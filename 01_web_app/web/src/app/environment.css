@@ -1,4 +1,5 @@
-.environment-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 0 0 290px; min-width: 0; gap: 6px; }
+/* PM2.5, heat and chance of rain side by side in the map header. */
+.environment-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 420px; min-width: 0; gap: 6px; }
 .environment-summary article { min-width: 0; height: 44px; display: grid; grid-template-columns: 18px minmax(0, 1fr); grid-template-rows: 1fr 1fr; align-items: center; column-gap: 5px; padding: 4px 7px; color: var(--foreground); background: var(--cc-panel, var(--surface)); border: 1px solid var(--line); border-radius: 8px; }
 .environment-icon { grid-column: 1; grid-row: 1 / -1; display: grid; place-items: center; color: var(--cc-accent, var(--brand)); }
 .environment-icon svg { width: 16px; height: 16px; }
@@ -6,9 +7,13 @@
 .landscape-shell .journey-dashboard .map-heading .environment-value { grid-column: 2; grid-row: 2; display: flex; flex-direction: row; align-items: baseline; gap: 3px; margin: 0; line-height: 1; overflow: visible; -webkit-line-clamp: unset; }
 .environment-value strong { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .environment-value span { font-size: 8px; color: var(--muted); white-space: nowrap; }
+/* The hour of the highest chance of rain ("ราว 16:00 น."), beside the percentage. */
+/* The number never wraps ("100" must not break into "10/0"); the hour gives way first. */
+.environment-value strong { white-space: nowrap; flex-shrink: 0; }
+.environment-value .environment-hour { min-width: 0; overflow: hidden; text-overflow: ellipsis; margin-left: 2px; font-size: 9px; color: var(--foreground); }
 .environment-summary .environment-status { display: none; }
 @media (max-width: 600px) {
-  .environment-summary { flex-basis: 240px; gap: 4px; }
+  .environment-summary { flex-basis: 300px; gap: 4px; }
   .environment-summary article { grid-template-columns: minmax(0, 1fr); padding-inline: 5px; }
   .environment-icon { display: none; }
   .environment-summary :is(h3,.environment-status) { grid-column: 1; }

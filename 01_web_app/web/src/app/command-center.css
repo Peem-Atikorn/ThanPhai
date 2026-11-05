@@ -573,7 +573,7 @@ body { background: var(--cc-outer); }
 .landscape-shell .header-snapshot { grid-column: 4; grid-row: 1; min-height: 70px; }
 .landscape-shell .header-snapshot .situation-strip article { min-height: 70px; padding-block: 6px; }
 .landscape-shell .journey-hero-dashboard { grid-template-columns: minmax(0,1fr) clamp(320px,26vw,390px); grid-template-rows: minmax(0,1fr); }
-.landscape-shell .journey-footer { display: grid; grid-template-columns: auto minmax(0,1fr) auto; width: 100%; max-width: none; }
+.landscape-shell .journey-footer { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; width: 100%; max-width: none; }
 .landscape-shell .journey-footer .disclaimer { grid-row: 1; grid-column: 2; justify-self: center; align-items: center; max-width: 720px; margin: 0; padding: 3px 8px; text-align: center; }
 .landscape-shell .location-scope { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
 .landscape-shell .location-scope > svg { flex-shrink: 0; color: var(--cc-accent); }
@@ -611,3 +611,9 @@ body { background: var(--cc-outer); }
   .landscape-shell .header-snapshot .situation-strip article { min-height: 54px; padding-block: 3px; }
   .landscape-shell .journey-hero-dashboard { grid-template-rows: minmax(0,1.7fr) minmax(0,1fr); }
 }
+
+/* Footer clock: when the map data was fetched and the time now, in the same accent as the footer links. */
+.data-clock { margin: 0; color: var(--cc-accent, var(--brand)); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.landscape-shell .journey-footer .data-clock { justify-self: end; }
+@media (max-width: 1050px) { .landscape-shell .journey-footer .data-clock { grid-row: 3; grid-column: 1 / -1; } }
+@media (max-width: 600px) { .data-clock { white-space: normal; } }

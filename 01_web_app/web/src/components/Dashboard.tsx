@@ -12,7 +12,7 @@ import RainCloudSkeleton from "@/components/RainCloudSkeleton";
 import DamHistoryChart from "@/components/DamHistoryChart";
 import MediaPanel from "@/components/MediaPanel";
 import EventsPanel from "@/components/EventsPanel";
-import EnvironmentSummary, { type EnvironmentState } from "@/components/EnvironmentSummary";
+import EnvironmentSummary, { ENVIRONMENT_METRICS, type EnvironmentState, type Metric as EnvironmentMetric } from "@/components/EnvironmentSummary";
 import StormsPanel from "@/components/StormsPanel";
 import AreaWarnings from "@/components/AreaWarnings";
 import RiskAlerts from "@/components/RiskAlerts";
@@ -26,6 +26,8 @@ const HazardMap = dynamic(() => import("@/components/HazardMap"), {
     loading: () => <RainCloudSkeleton inline/>,
 });
 type Layer = Awaited<ReturnType<typeof api.layer>>;
+// PM2.5, heat and rain-chance layers feed the summary cards as well as their own map tab.
+const isEnvironment = (id: string): id is EnvironmentMetric => (ENVIRONMENT_METRICS as readonly string[]).includes(id);
 type SearchArea = Awaited<ReturnType<typeof api.search>>[number];
 const number = new Intl.NumberFormat(getLocale());
 const prefix = (level: string) => level === "province" ? "จ." : level === "tambon" ? "ต." : "อ.";
@@ -201,7 +203,7 @@ function DamDetail({ dam, onClose }: {
       <p className="source-note">{tr("ปริมาณต่อวินาทีเป็นค่าเฉลี่ยจากยอดทั้งวัน ไม่ใช่อัตราระบาย ณ ขณะนี้")}</p>
     </div>);
 }
-export default function Dashboard({ activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, summaryTarget, locationTarget, onOpenSearch, onAreaChosen, onReady, riskLevel, onRiskLevelChange }: {
+export default function Dashboard({ activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, summaryTarget, locationTarget, onOpenSearch, onAreaChosen, onReady, onDataTime, riskLevel, onRiskLevelChange }: {
     activeHazard?: MapLayerId;
     onHazardChange?: (value: MapLayerId) => void;
     activeView?: View;
@@ -214,6 +216,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     onOpenSearch?: () => void;
     onAreaChosen?: () => void;
     onReady?: () => void;
+    /** When the data on the map was last fetched (ISO), for the footer clock. */
+    onDataTime?: (updatedAt: string | null) => void;
     riskLevel?: RiskFilter | null;
     onRiskLevelChange?: (level: RiskFilter | null) => void;
 }) {
@@ -221,19 +225,21 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const hazard = activeHazard ?? localHazard;
     const setHazard = onHazardChange ?? setLocalHazard;
     const [revision, setRevision] = useState(0);
-    const [environmentLayers, setEnvironmentLayers] = useState<Record<"air_quality" | "heat", EnvironmentState | null>>({ air_quality: null, heat: null });
+    const [environmentLayers, setEnvironmentLayers] = useState<Record<EnvironmentMetric, EnvironmentState | null>>({ air_quality: null, heat: null, rain_storm: null });
     const [layerState, setLayerState] = useState<{
         key: string;
         data: Layer | null;
         error: boolean;
     } | null>(null);
     const layerKey = hazard + ":" + revision;
-    const activeLayerState = hazard === "air_quality" || hazard === "heat" ? environmentLayers[hazard] : layerState;
+    const activeLayerState = isEnvironment(hazard) ? environmentLayers[hazard] : layerState;
     const layer = activeLayerState?.key === layerKey || activeLayerState?.key.startsWith(hazard + ":") ? activeLayerState?.data ?? null : null;
     const layerError = activeLayerState?.key === layerKey && activeLayerState.error;
     const layerLoading = activeLayerState?.key !== layerKey;
     useEffect(() => { if (!layerLoading)
         onReady?.(); }, [layerLoading, onReady]);
+    const dataTime = layer?.meta.data_updated_at ?? null;
+    useEffect(() => { onDataTime?.(dataTime); }, [dataTime, onDataTime]);
     const [nationalLayer, setNationalLayer] = useState<Layer | null>(null);
     const needsNationalLayer = hazard !== "overview";
     useEffect(() => {
@@ -437,7 +443,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     }, [revision]);
     useEffect(() => {
         let cancelled = false;
-        for (const metric of ["air_quality", "heat"] as const) {
+        for (const metric of ENVIRONMENT_METRICS) {
             const key = metric + ":" + revision;
             api.layer(metric)
                 .then(data => !cancelled && setEnvironmentLayers(old => ({ ...old, [metric]: { key, data, error: false } })))
@@ -446,8 +452,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         return () => { cancelled = true; };
     }, [revision]);
     useEffect(() => {
-        // These two layers also feed the persistent summary; switching tabs reuses that request.
-        if (hazard === "air_quality" || hazard === "heat") return;
+        // These layers also feed the persistent summary cards; switching tabs reuses that request.
+        if (isEnvironment(hazard)) return;
         let cancelled = false;
         api.layer(hazard)
             .then((data) => !cancelled && setLayerState({ key: layerKey, data, error: false }))

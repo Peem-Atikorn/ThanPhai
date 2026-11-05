@@ -382,6 +382,7 @@ def test_heat_level_comes_from_the_forecast_heat_index(base_service, monkeypatch
     # The chance of rain comes in the same forecast and is shown under rain/storm; it does not set the level.
     rain = next(i for i in decisions[sena] if i["hazard"] == "rain_storm")
     assert rain["observations"]["rain_chance_now"] == 20.0 and rain["observations"]["rain_chance_max_24h"] == 70.0
+    assert rain["observations"]["rain_chance_peak_hour"] == 15.0  # Thai hour of the peak, for the card
     assert any("70%" in n and "15:00" in n for n in rain["notices"])
     assert "14:00" in heat["notices"][0]
     other = next(c for c in svc.amphoe_codes if c != sena)
