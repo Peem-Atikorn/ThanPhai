@@ -4,6 +4,7 @@ import { t as tr, useLanguage, setLanguage } from "@/lib/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Dashboard from "@/components/Dashboard";
+import DataClock from "@/components/DataClock";
 import Icon from "@/components/Icon";
 import RainCloudSkeleton from "@/components/RainCloudSkeleton";
 import type { RiskFilter } from "@/components/RiskSnapshot";
@@ -15,6 +16,7 @@ export default function LandingExperience() {
     const [summaryTarget, setSummaryTarget] = useState<HTMLDivElement | null>(null);
     const [ready, setReady] = useState(false);
     const finishLoading = useCallback(() => setReady(true), []);
+    const [dataTime, setDataTime] = useState<string | null>(null);
     const [riskLevel, setRiskLevel] = useState<RiskFilter | null>(null);
     const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
     const navigation = useRef<HTMLElement>(null);
@@ -115,11 +117,11 @@ export default function LandingExperience() {
             </div>))}
           </nav>
           <main className="main-content journey-dashboard journey-hero-dashboard" id="risk-map" tabIndex={-1}>
-            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} summaryTarget={summaryTarget} locationTarget={locationTarget} onOpenSearch={focusAreaSearch} onAreaChosen={finishAreaSearch} onReady={finishLoading} riskLevel={riskLevel} onRiskLevelChange={openRiskLevel}/>
+            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} summaryTarget={summaryTarget} locationTarget={locationTarget} onOpenSearch={focusAreaSearch} onAreaChosen={finishAreaSearch} onReady={finishLoading} onDataTime={setDataTime} riskLevel={riskLevel} onRiskLevelChange={openRiskLevel}/>
           </main><span className="journey-photo-note">{tr("ภาพประกอบบรรยากาศ \u00B7 ไม่ใช่ภาพสถานการณ์ปัจจุบัน")}</span>
         </div>
       </section>
-      <footer className="site-footer journey-footer" id="emergency"><div className="footer-utilities"><div className="language-switch" role="group" aria-label="Language / ภาษา"><button type="button" lang="th" aria-label="ภาษาไทย" aria-pressed={language === "th"} onClick={() => setLanguage("th")}>TH</button><button type="button" lang="en" aria-label="English" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>EN</button></div><button className="text-button" type="button" onClick={() => guide.current?.showModal()}>{tr("วิธีใช้งานทันภัย ")}<Icon name="arrow"/></button></div><Link className="journey-footer-brand" href="/" prefetch={false} onClick={(event) => { event.preventDefault(); window.location.assign("/"); }}><Icon name="shield"/>{tr(" ทันภัย ")}<span>THANPHAI</span></Link><div className="disclaimer"><Icon name="shield"/><p>{tr("ทันภัยเป็นเครื่องมือประเมินความเสี่ยง ไม่ใช่ประกาศทางการ ")}<strong>{tr("ให้ยึดประกาศจากหน่วยงานทางการเป็นหลัก")}</strong></p></div><div className="emergency-numbers"><Icon name="phone"/><strong>{tr("ฉุกเฉิน")}</strong><a href="tel:1784">1784 <span>{tr("ปภ.")}</span></a><a href="tel:1669">1669 <span>{tr("แพทย์ฉุกเฉิน")}</span></a><a href="tel:199">199 <span>{tr("แจ้งเหตุเพลิงไหม้")}</span></a></div><p>{tr("ติดตามประกาศจากหน่วยงานทางการเป็นหลัก \u00B7 ThaiWater \u00B7 กรมอุตุนิยมวิทยา \u00B7 GISTDA \u00B7 NASA FIRMS")}</p></footer>
+      <footer className="site-footer journey-footer" id="emergency"><div className="footer-utilities"><div className="language-switch" role="group" aria-label="Language / ภาษา"><button type="button" lang="th" aria-label="ภาษาไทย" aria-pressed={language === "th"} onClick={() => setLanguage("th")}>TH</button><button type="button" lang="en" aria-label="English" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>EN</button></div><button className="text-button" type="button" onClick={() => guide.current?.showModal()}>{tr("วิธีใช้งานทันภัย ")}<Icon name="arrow"/></button></div><Link className="journey-footer-brand" href="/" prefetch={false} onClick={(event) => { event.preventDefault(); window.location.assign("/"); }}><Icon name="shield"/>{tr(" ทันภัย ")}<span>THANPHAI</span></Link><div className="disclaimer"><Icon name="shield"/><p>{tr("ทันภัยเป็นเครื่องมือประเมินความเสี่ยง ไม่ใช่ประกาศทางการ ")}<strong>{tr("ให้ยึดประกาศจากหน่วยงานทางการเป็นหลัก")}</strong></p></div><DataClock updatedAt={dataTime}/><div className="emergency-numbers"><Icon name="phone"/><strong>{tr("ฉุกเฉิน")}</strong><a href="tel:1784">1784 <span>{tr("ปภ.")}</span></a><a href="tel:1669">1669 <span>{tr("แพทย์ฉุกเฉิน")}</span></a><a href="tel:199">199 <span>{tr("แจ้งเหตุเพลิงไหม้")}</span></a></div><p>{tr("ติดตามประกาศจากหน่วยงานทางการเป็นหลัก \u00B7 ThaiWater \u00B7 กรมอุตุนิยมวิทยา \u00B7 GISTDA \u00B7 NASA FIRMS")}</p></footer>
       <dialog className="journey-search-dialog" ref={searchDialog} aria-label={tr("ค้นหาพื้นที่")}>
         <button className="journey-dialog-close" type="button" aria-label={tr("ปิดหน้าค้นหาพื้นที่")} onClick={() => searchDialog.current?.close()}><Icon name="close"/></button>
         <div ref={setSearchTarget}/>

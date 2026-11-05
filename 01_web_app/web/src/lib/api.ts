@@ -384,6 +384,8 @@ export function describeObservation(key: string, value: number | null): string |
       return `ฝน 24 ชม. สูงสุด ${value.toFixed(1)} มม.`;
     case "rain_chance_now":
       return `โอกาสฝนตกชั่วโมงนี้ ${value.toFixed(0)}%`;
+    case "rain_chance_peak_hour":
+      return null;  // shown with the peak on the card and in the notice
     case "rain_chance_max_24h":
       return `โอกาสฝนตกสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(0)}% (แบบจำลอง)`;
     case "hotspots_24h":
