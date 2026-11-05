@@ -20,17 +20,26 @@
   .landscape-shell .journey-dashboard .map-heading .environment-value { grid-column: 1; }
 }
 .landscape-shell .overview-heading-controls .layer-toolbar { width: fit-content; max-width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
-.landscape-shell .overview-heading-controls .layer-toolbar-buttons { display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; }
+.landscape-shell .overview-heading-controls .layer-toolbar-buttons { display: flex; flex-wrap: wrap; gap: 4px; overflow: visible; }
 .landscape-shell .overview-heading-controls .layer-toolbar-buttons button { flex-shrink: 0; min-height: 34px; padding: 5px 6px; white-space: nowrap; gap: 4px; font-size: 10px; line-height: 1.4; border-radius: 8px; }
 .landscape-shell .overview-heading-controls .layer-toolbar-buttons button > svg { width: 13px; height: 13px; flex-shrink: 0; }
 .landscape-shell .overview-heading-controls .layer-toolbar-buttons button:focus-visible { outline: 2px solid var(--cc-accent, var(--brand)); outline-offset: 2px; }
 .landscape-shell .journey-dashboard .has-overview-controls .map-heading-copy { display: none; }
-.overview-heading-controls { flex: 1; min-width: 0; }
+.overview-heading-controls { flex: 1 1 480px; min-width: 0; }
 
-.landscape-shell .map-chrome:has(.has-overview-controls) { height: 60px; flex-basis: 60px; }
-.landscape-shell .journey-dashboard .has-overview-controls { padding: 8px 12px; }
+.landscape-shell .map-chrome:has(.has-overview-controls) { display: block; height: auto; flex: 0 0 auto; }
+.landscape-shell .journey-dashboard .map-heading.has-overview-controls { position: static; flex-wrap: wrap; padding: 8px 12px; }
+.has-overview-controls .environment-summary { flex: 1 1 330px; }
 .landscape-shell .overview-heading-controls .layer-toggle { flex-basis: 7px; width: 7px; height: 7px; }
 @media (pointer: coarse) {
   .landscape-shell .overview-heading-controls .layer-toolbar-buttons button { min-height: 44px; }
-  .landscape-shell .map-chrome:has(.has-overview-controls) { height: 68px; flex-basis: 68px; }
+}
+
+/* Use the same glass surface as the detail sidebar, including the map chrome. */
+.landscape-shell.command-shell .journey-dashboard .map-panel {
+  background: rgb(255 255 255 / 10%);
+  backdrop-filter: blur(20px);
+}
+.landscape-shell.command-shell .map-panel :is(.radar-playback, .map-supplement) {
+  background: transparent;
 }

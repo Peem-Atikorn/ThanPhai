@@ -19,7 +19,7 @@ import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
 import RadarPlayback from "@/components/RadarPlayback";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
-import { OverlayControls, OverlayLegends, useOverviewLayers } from "@/components/OverviewLayers";
+import { OverlayControls, useOverviewLayers } from "@/components/OverviewLayers";
 import { RiverDetail, RiverRow, riverTime, RiverSort, sortRivers } from "@/components/RiverPanel";
 const HazardMap = dynamic(() => import("@/components/HazardMap"), {
     ssr: false,
@@ -290,6 +290,12 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         zoom?: number;
     } | null>(null);
     const [outline, setOutline] = useState<AreaBoundary | null>(null);
+    const [areaHistory, setAreaHistory] = useState<{
+        place: AreaHazards["area"] | null;
+        selected: string | null;
+        focus: { lat: number; lon: number; zoom?: number } | null;
+        outline: AreaBoundary | null;
+    }[]>([]);
     const outlineRequest = useRef(0);
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<SearchArea[] | null>(null);
@@ -361,7 +367,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const [pmOn, setPmOn] = useState(false);
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
-    const [radarOn, setRadarOn] = useState(true);
+    const [radarOn, setRadarOn] = useState(false);
     const [radarPlaying, setRadarPlaying] = useState(false);
     // Each endpoint's last answer; the timeline and the selected frame are derived from them during render,
     // so the map never draws a frame that is not the selected one.
@@ -379,7 +385,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         : null, [radarFrame, radarNowcast]);
     const [darkMap, setDarkMap] = useStoredFlag("map-dark", true);
     const [riskOnly, setRiskOnly] = useStoredFlag("map-risk-only");
-    const showRadar = view === "hazard" && radarOn && RADAR_LAYERS.includes(hazard);
+    const radarView = view === "hazard" && RADAR_LAYERS.includes(hazard);
+    const showRadar = radarView && radarOn;
     // TMD bulletins for the overview, by region; a failed request just leaves the card out.
     const [nationalWarnings, setNationalWarnings] = useState<OfficialWarning[]>([]);
     useEffect(() => {
@@ -454,7 +461,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         return () => { cancelled = true; };
     }, [hazard, overview, revision]);
     useEffect(() => {
-        if (!showRadar)
+        if (!radarView)
             return;
         let cancelled = false;
         let retry: ReturnType<typeof setTimeout> | undefined;
@@ -469,7 +476,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         }).catch(() => { if (!cancelled && first) setRadarNowcast(null); });
         loadNowcast(true);
         return () => { cancelled = true; clearTimeout(retry); };
-    }, [showRadar, revision]);
+    }, [radarView, revision]);
     useEffect(() => {
         let cancelled = false;
         api.rivers()
@@ -516,7 +523,9 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         return () => { cancelled = true; };
     }, [view, revision]);
     const latestArea = useRef(0);
-    const select = useCallback((code: string, mapCode: string | null = code, context?: AreaHazards["area"]) => {
+    const select = useCallback((code: string, mapCode: string | null = code, context?: AreaHazards["area"], remember = true) => {
+        if (remember && place?.code !== code)
+            setAreaHistory(history => [...history, { place, selected, focus, outline }]);
         const request = ++latestArea.current;
         setPlace(previous => context ?? (previous?.code === code ? previous : { code, level: "amphoe", name_th: "กำลังโหลดพื้นที่…", name_en: "", parents: [] }));
         setSelected(mapCode);
@@ -531,7 +540,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             }
         })
             .catch(() => latestArea.current === request && setAreaStatus("error"));
-    }, []);
+    }, [place, selected, focus, outline]);
     const selectedCode = useRef<string | null>(null);
     useEffect(() => {
         const code = selectedCode.current;
@@ -588,6 +597,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             onAreaChosen?.();
     }
     function clearArea() {
+        setAreaHistory([]);
         searchRequest.current++;
         locationRequest.current++;
         setQuery("");
@@ -609,6 +619,34 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         setSelectedRiver(null);
         setSelectedQuality(null);
         setFocus({ lat: 13.4, lon: 100.9, zoom: 5 });
+    }
+    function backArea() {
+        const previous = areaHistory.at(-1);
+        if (!previous) return;
+        if (!previous.place) { clearArea(); return; }
+        setAreaHistory(history => history.slice(0, -1));
+        searchRequest.current++;
+        locationRequest.current++;
+        outlineRequest.current++;
+        setResults(null);
+        setSearchStatus("idle");
+        setSearchActive(false);
+        setActiveSuggestion(-1);
+        setLocating(false);
+        setLocationError(null);
+        selectedCode.current = previous.place.code;
+        select(previous.place.code, previous.selected, previous.place, false);
+        setQuery(previous.place.name_th);
+        setOutline(previous.outline);
+        setFocus(previous.focus ? { ...previous.focus } : null);
+        setSelectedDam(null);
+        setSelectedRiver(null);
+        setSelectedQuality(null);
+        setView("hazard");
+        if (!previous.outline) {
+            const request = outlineRequest.current;
+            api.boundary(previous.place.code).then(b => request === outlineRequest.current && setOutline(b)).catch(() => {});
+        }
     }
     function showRiskLevel(level: RiskFilter | null) {
         clearArea();
@@ -877,7 +915,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
           </div>);
     return (<>
       {tr(searchInHeader && searchTarget && createPortal(searchPanel, searchTarget))}
-      {tr(locationTarget && createPortal(<><button className={"journey-search-icon" + (place ? " has-location" : "")} type="button" aria-label={tr(place ? tr("เปลี่ยนพื้นที่ ") + tr(prefix(place.level)) + tr("") + tr(place.name_th) + tr("") : undefined)} title={tr(place ? [place.name_th, ...place.parents].join(" · ") : undefined)} onClick={onOpenSearch}><Icon name={place ? "pin" : "search"}/><span>{tr(place ? `${prefix(place.level)}${place.name_th}${place.parents.length ? ` · ${place.parents.at(-1)}` : ""}` : "พื้นที่ที่คุณอยากรู้")}</span></button>{tr(place && <button type="button" className="clear-location-button" aria-label={tr("ล้างพื้นที่ที่ค้นหา")} title={tr("ล้างพื้นที่ที่ค้นหา")} onClick={() => { clearArea(); requestAnimationFrame(() => locationTarget.querySelector("button")?.focus({ preventScroll: true })); }}><Icon name="close"/></button>)}</>, locationTarget))}
+      {tr(locationTarget && createPortal(<>{areaHistory.length > 0 && <button type="button" className="clear-location-button back-location-button" aria-label={tr("ย้อนกลับพื้นที่ก่อนหน้า")} title={tr("ย้อนกลับพื้นที่ก่อนหน้า")} onClick={backArea}><Icon name="arrow"/></button>}<button className={"journey-search-icon" + (place ? " has-location" : "")} type="button" aria-label={tr(place ? tr("เปลี่ยนพื้นที่ ") + tr(prefix(place.level)) + tr("") + tr(place.name_th) + tr("") : undefined)} title={tr(place ? [place.name_th, ...place.parents].join(" · ") : undefined)} onClick={onOpenSearch}><Icon name={place ? "pin" : "search"}/><span>{tr(place ? `${prefix(place.level)}${place.name_th}${place.parents.length ? ` · ${place.parents.at(-1)}` : ""}` : "พื้นที่ที่คุณอยากรู้")}</span></button>{tr(place && <button type="button" className="clear-location-button" aria-label={tr("ล้างพื้นที่ที่ค้นหา")} title={tr("ล้างพื้นที่ที่ค้นหา")} onClick={() => { clearArea(); requestAnimationFrame(() => locationTarget.querySelector("button")?.focus({ preventScroll: true })); }}><Icon name="close"/></button>)}</>, locationTarget))}
       {tr(summaryTarget ? createPortal(<RiskSnapshot total={summaryLayer ? summaryLayer.features.length : null} counts={summaryCounts} scope="ภาพรวมทุกภัย" activeLevel={selectedRiskLevel} overviewActive={overview} onSelect={showRiskLevel}/>, summaryTarget) : !searchInHeader && <RiskSnapshot total={summaryLayer ? summaryLayer.features.length : null} counts={summaryCounts} scope="ภาพรวมทุกภัย" activeLevel={selectedRiskLevel} overviewActive={overview} onSelect={showRiskLevel}/>)}
       <div className="dashboard-grid">
         {tr(!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search"/>{tr("ค้นหาจังหวัด อำเภอ หรือตำบล")}<Icon name="arrow"/></a>)}
@@ -913,12 +951,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             {tr(view === "rivers" && rivers.status === "loading" && <div className="map-notice" role="status"><span className="spinner"/>{tr("กำลังโหลดข้อมูลแม่น้ำ\u2026")}</div>)}
             {tr(view === "rivers" && rivers.status === "error" && !rivers.list.length && <div className="map-notice error-notice" role="alert"><Icon name="info"/><div><strong>{tr("โหลดข้อมูลแม่น้ำไม่สำเร็จ")}</strong><p>{tr("ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง")}</p></div><button className="text-button" onClick={() => setRevision((value) => value + 1)}>{tr("ลองใหม่")}</button></div>)}
           </div>
-          {showRadar && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarNowcast?.explanation ?? ""} explanationSource={radarNowcast?.explanation_source ?? "template"} explanationPending={!!radarNowcast?.explanation_pending} onChange={(index) => { const frame = radarFrames[index]; setRadarSelection(frame ? { time: frame.time, kind: frame.kind } : null); }} onPlaybackChange={setRadarPlaying}/>}
-          <details className="map-supplement"><summary>{tr(overview ? "ชั้นข้อมูลและคำอธิบายแผนที่" : "คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
-          {tr(overview && !selectedRiskLevel && <div className="overview-overlay-summary">
-            <OverlayLegends data={overlays.data} enabled={overlays.enabled}/>
-            {tr(pmOn && <section><h4>{tr("ฝุ่น PM2.5 \u00B7 เฉลี่ย 24 ชม.")}</h4><ul className="overlay-levels">{tr(PM25_BANDS.map(b => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}</li>))}</ul><p>{tr(airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ · แสดงข้อมูลเดิมถ้ามี" : !airStations?.length ? "ยังไม่มีข้อมูลสถานี" : tr("") + tr(airStations.length) + tr(" สถานี \u00B7 แต่ละสถานีอาจรายงานคนละเวลา"))}</p><small>{tr("Air4Thai (กรมควบคุมมลพิษ) \u00B7 เวลาล่าสุด ")}{tr(formatTime(airStations?.map(s => s.time).sort().at(-1)))}{tr(" (เวลาไทย)")}</small></section>)}
-          </div>)}
+          {showRadar && !selectedRiskLevel && radarAvailable && radarFrames.length > 0 && <RadarPlayback frames={radarFrames} index={radarFrameIndex} explanation={radarNowcast?.explanation ?? ""} explanationSource={radarNowcast?.explanation_source ?? "template"} explanationPending={!!radarNowcast?.explanation_pending} onChange={(index) => { const frame = radarFrames[index]; setRadarSelection(frame ? { time: frame.time, kind: frame.kind } : null); }} onPlaybackChange={setRadarPlaying}/>}
+          {!overview && <details className="map-supplement"><summary>{tr("คำอธิบายและข้อมูลเพิ่มเติม")}</summary><div className="map-supplement-body">
           {tr(view === "water-quality" ? <div className="map-summary"><div className="legend-heading"><h3>{tr("สถานีวัดคุณภาพน้ำ")}</h3><span>{tr(visibleQuality.length)}{tr(" สถานี")}</span></div><p className="source-note"><span style={{ color: "#e07b16" }}>●</span>{tr(" มีค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#2f7fb5" }}>●</span>{tr(" ไม่พบค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#8a97a3" }}>●</span>{tr(" ไม่มีค่าความเค็มและออกซิเจน")}</p><div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(quality.updated))}{tr(" (เวลาไทย)")}</span></div></div> : view === "rivers" ? <div className="map-summary">
             <div className="legend-heading"><h3>{tr("สถานะน้ำเทียบตลิ่ง")}{tr(riverProvince && tr(" \u00B7 จ.") + tr(riverProvince.name) + tr(""))}</h3><span>{tr(rivers.list.length ? number.format(visibleRivers.length) + " สถานี" : "รอข้อมูล")}</span></div>
             <ul className="risk-legend">{tr(RIVER_STATUS.map((c) => <li key={c.id}><span className="legend-dot" style={{ background: c.color }}/><span>{tr(c.th)}</span><strong>{tr(rivers.list.length ? number.format(visibleRivers.filter((r) => r.status === c.id).length) : "—")}</strong></li>))}</ul>
@@ -929,18 +963,18 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             <ul className="risk-legend">{tr(DAM_LEGEND.map((c) => <li key={c.th}><span className="legend-dot" style={{ background: c.color }}/><span>{tr(c.th)}</span><strong>{tr(dams.status === "success" || visibleDams.length ? number.format(visibleDams.filter(c.match).length) : "—")}</strong></li>))}</ul>
             {tr(!!visibleDams.length && <p className="dam-total-release">{tr("เขื่อนในแผนที่รวมกันระบายน้ำ ")}<strong>{tr(mcm(totalRelease))}{tr(" ล้าน ลบ.ม.")}</strong>{tr(" (เฉลี่ยราว ")}{tr(m3s(totalRelease))}{tr(" ลบ.ม./วินาที)")}</p>)}
             <div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูลรายวันของวันที่ ")}{tr(damDate(visibleDams[0]?.date ?? null))}{tr(" \u00B7 % เทียบกับระดับกักเก็บปกติ")}</span></div>
-          </div> : <div className="map-summary">
+          </div> : overview ? null : <div className="map-summary">
             <div className="legend-heading"><h3>{tr("ระดับความเสี่ยง")}</h3><span>{tr(displayedLayer ? number.format(displayedLayer.features.length) + " อำเภอ" : "รอข้อมูล")}</span></div>
             <ul className="risk-legend">{tr(counts.map((level) => <li key={level.id}><span className="legend-dot" style={{ background: level.color }}/><span>{tr(level.th)}</span><strong>{tr(layer ? number.format(level.n) : "—")}</strong></li>))}</ul>
             {tr(hazard === "air_quality" && <div className="pm-legend"><h3>{tr("จุดสถานีวัด PM2.5 (กรมควบคุมมลพิษ) \u00B7 ตัวเลขคือค่าเฉลี่ย 24 ชม. \u00B7 วงใหญ่ = หลายสถานี แสดงค่าสูงสุด")}</h3><ul>{tr(PM25_BANDS.map((b, i) => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}<small>{tr(i === 0 ? "0–15" : i === PM25_BANDS.length - 1 ? "> 75" : `${PM25_BANDS[i - 1].max}–${b.max}`)}</small></li>))}</ul>{tr(airStations && <p className="source-note">{tr(number.format(airStations.length))}{tr(" สถานีที่มีค่าล่าสุดไม่เกิน 6 ชม. \u00B7 อำเภอที่ไม่มีสถานีใช้ค่าจากแบบจำลอง")}</p>)}</div>)}
-            {tr(showRadar && radarAvailable && radarFrame?.kind !== "forecast" && <p className="source-note radar-note">{tr(!radarFrame ? "ยังโหลดเรดาร์ไม่ได้" : <>{tr("เรดาร์ฝนเวลา ")}{tr(new Date(radarFrame.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. · ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</>)}</p>)}
             <div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(layer?.meta.data_updated_at))}{tr(" (เวลาไทย)")}{tr(pending && " · กำลังโหลดข้อมูลดาวเทียมและพยากรณ์เพิ่มเติม")}</span></div>
             {tr(!!layer?.meta.degraded_services.length && <p className="data-notice">{tr("ข้อมูลบางแหล่งไม่พร้อมใช้งาน: ")}{tr(layer.meta.degraded_services.join(", "))}</p>)}
           </div>)}
           {tr(view === "hazard" && hazard === "rain_storm" && <div id="weather-images" className="media-anchor"><MediaPanel revision={revision}/></div>)}
           {view === "hazard" && hazard === "tropical_cyclone" && <StormsPanel revision={revision}/>}
           {tr(view === "hazard" && (hazard === "earthquake" || hazard === "tropical_cyclone") && <EventsPanel revision={revision} quakes={hazard === "earthquake"}/>)}
-          </div></details>
+          </div></details>}
+            {tr(showRadar && radarAvailable && radarFrame?.kind !== "forecast" && <p className="source-note radar-note">{tr(!radarFrame ? "ยังโหลดเรดาร์ไม่ได้" : <>{tr("เรดาร์ฝนเวลา ")}{tr(new Date(radarFrame.time * 1000).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }))}{tr(" น. · ")}<a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer noopener">RainViewer</a>{tr(" (ภาพรวมจากเรดาร์หลายแหล่ง บางพื้นที่อาจไม่ครอบคลุม)")}</>)}</p>)}
         </section>
 
         <aside className="detail-sidebar" aria-label={tr("ค้นหาและดูรายละเอียดพื้นที่")}>

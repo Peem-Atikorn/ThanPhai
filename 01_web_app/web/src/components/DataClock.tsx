@@ -21,3 +21,12 @@ export default function DataClock({ updatedAt }: { updatedAt: string | null }) {
         {tr("ดึงข้อมูลล่าสุด ")}{Number.isNaN(fetched) ? "—" : thaiTime(fetched)}{tr(" · ตอนนี้ ")}{thaiTime(now * 60000)}{tr(" (เวลาไทย)")}
     </div>;
 }
+
+/** Current Thai time, independent of the selected radar image. */
+export function CurrentTime() {
+    const now = useSyncExternalStore(subscribe, minute, () => null);
+    const time = now === null ? null : new Date(now * 60000);
+    return <time dateTime={time?.toISOString()} aria-live="off">
+        {time ? time.toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" }) : "—"}{tr(" น. เวลาไทย")}
+    </time>;
+}

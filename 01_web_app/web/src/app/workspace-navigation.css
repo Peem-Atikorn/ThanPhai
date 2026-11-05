@@ -255,3 +255,7 @@ html[lang="en"] .landscape-shell .journey-brand > span:last-child { font-size: 1
 
 
 @media (min-width: 601px) and (max-width: 1050px) { .landscape-shell .footer-utilities { grid-column: 1; grid-row: 2; } }
+
+.landscape-shell .back-location-button { min-width: 44px; min-height: 44px; cursor: pointer; }
+.landscape-shell .back-location-button svg { transform: rotate(180deg); }
+.landscape-shell .back-location-button:focus-visible { outline: 2px solid var(--cc-accent); outline-offset: 3px; }
