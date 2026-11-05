@@ -382,6 +382,11 @@ h2 { font-size: 17px; font-weight: 650; }
 .dam-detail .source-note { margin-top: 8px; }
 .dam-total-release { font-size: 12px; color: var(--muted); margin-top: 10px; }
 .dam-total-release strong { color: var(--foreground); }
+.diversion-dam { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; font-size: 12px; line-height: 1.6; }
+.diversion-dam > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.diversion-dam p { margin: 4px 0 2px; color: var(--muted); }
+.diversion-dam p strong { color: var(--foreground); }
+.diversion-dam-badge { padding: 1px 8px; border-radius: 999px; background: #8a94a033; color: var(--foreground); font-size: 11px; white-space: nowrap; }
 /* Six categories: icon above label once the toolbar gets narrow. */
 @media (max-width: 1280px) { .hazard-button { flex-direction: column; gap: 4px; min-height: 58px; font-size: 12px; } }
 @media (max-width: 520px) { .hazard-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hazard-button { min-height: 54px; } }
