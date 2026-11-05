@@ -156,6 +156,10 @@ body { background: var(--cc-outer); }
 .command-shell .dam-bar { background: var(--cc-panel-raised); }
 .command-shell .chart-grid { stroke: var(--line); }
 .command-shell :is(.official-warning, .journey-guide-notice) { background: var(--warning-bg); color: var(--warning-text); }
+/* Radar forecast badge and note in the dark theme's amber instead of globals.css's light-theme colours. */
+.command-shell .radar-frame-badge.is-forecast { background: var(--warning-bg); color: var(--cc-amber); }
+.command-shell .radar-forecast-copy { background: var(--warning-bg); color: var(--warning-text); border-left-color: var(--cc-amber); }
+.command-shell .radar-forecast-copy small { color: var(--muted); }
 .command-shell .river-callout { background: var(--cc-danger-bg); color: var(--cc-danger); }
 .command-shell .river-callout small { color: var(--cc-danger); }
 .command-shell .river-callout.is-calm { background: var(--accent-soft); color: var(--cc-accent); }

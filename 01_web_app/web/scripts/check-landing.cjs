@@ -326,6 +326,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       load('@/lib/i18n').setLanguage('en');
       const englishPlayback = instance(RadarPlayback).render({ ...nodes(forecastTree).find(n => n.type.name === 'RadarPlayback').props, explanation: 'กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก' });
       assert(nodes(englishPlayback).some(n => n.type === 'p' && n.props.children === 'กลุ่มฝนเดิมกำลังเคลื่อนไปทางตะวันออก'), 'The validated explanation is shown exactly, not re-translated');
+      assert.equal(englishPlayback.props['aria-label'], "Play the past hour of radar images and the next hour's forecast", 'The playback label is read in English');
       load('@/lib/i18n').setLanguage('th');
 
       let selectedFrame = 1, timerCallback, timerCount = 0, clearCount = 0;
