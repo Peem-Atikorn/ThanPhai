@@ -95,7 +95,9 @@
 .thanphai-mascot .chat-clear { margin-top: 8px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--mascot-muted); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .thanphai-mascot .data-notice { color: #ffe6c6; }
 .thanphai-mascot button:focus-visible { outline: 2px solid #d2e687; outline-offset: 3px; }
-.thanphai-mascot .mascot-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Fixed at the top left: absolute with no offsets put it below the full-height app, 1px past the bottom,
+   which gave the whole page a scrollbar that came and went in Chrome. */
+.thanphai-mascot .mascot-sr-only { position: fixed; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @keyframes mascot-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 @keyframes mascot-wave { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
 @keyframes mascot-hop { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-9px); } }
