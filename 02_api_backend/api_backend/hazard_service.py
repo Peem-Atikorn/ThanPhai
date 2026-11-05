@@ -1618,11 +1618,13 @@ class HazardService:
 
     @staticmethod
     def _rain_chance(record, this_hour: str) -> dict:
-        """Open-Meteo chance of rain for a district (it comes with the heat forecast): now, and the 24-h peak."""
+        """Open-Meteo chance of rain for a district (it comes with the heat forecast): now, the 24-h peak and the
+        Thai hour of that peak (0-23, so the map layer and the card can say "ราว 18:00 น.")."""
         chance = record.extra.get("rain_chance") if record is not None else None
         if not chance:
-            return {"rain_chance_now": None, "rain_chance_max_24h": None}
-        return {"rain_chance_now": chance["hourly"].get(this_hour), "rain_chance_max_24h": chance["max_pct"]}
+            return {"rain_chance_now": None, "rain_chance_max_24h": None, "rain_chance_peak_hour": None}
+        return {"rain_chance_now": chance["hourly"].get(this_hour), "rain_chance_max_24h": chance["max_pct"],
+                "rain_chance_peak_hour": float(chance["peak_time"][11:13])}
 
     def map_layer(self, hazard: str) -> dict:
         features = []

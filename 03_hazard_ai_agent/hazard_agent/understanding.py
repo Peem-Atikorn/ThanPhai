@@ -19,8 +19,11 @@ HAZARD_WORDS = {
     # Smoke and haze are what people breathe, so they are air-quality questions.
     HazardType.AIR_QUALITY: ("ฝุ่น", "pm2.5", "pm 2.5", "pm25", "หมอกควัน", "คุณภาพอากาศ", "มลพิษทางอากาศ", "aqi",
                              "air quality", "smoke", "haze"),
-    HazardType.HEAT: ("ร้อนจัด", "อากาศร้อน", "ร้อนมาก", "ดัชนีความร้อน", "ฮีตสโตรก", "ฮีทสโตรก", "ลมแดด", "heat stroke",
-                      "heatstroke", "heat index", "heat wave", "heatwave"),
+    # Temperature questions ("อุณหภูมิตอนเที่ยงจะเท่าไหร่", "กี่องศา") are answered with the heat forecast. No bare
+    # "ร้อน"/"hot": they are inside "จุดความร้อน"/"hotspot", which are fire questions.
+    HazardType.HEAT: ("ร้อนจัด", "อากาศร้อน", "ร้อนมาก", "ร้อนไหม", "ร้อนเหมือน", "ดัชนีความร้อน", "อุณหภูมิ", "กี่องศา",
+                      "ฮีตสโตรก", "ฮีทสโตรก", "ลมแดด", "heat stroke", "heatstroke", "heat index", "heat wave", "heatwave",
+                      "temperature", "how hot", "feels like"),
     HazardType.EARTHQUAKE: ("แผ่นดินไหว", "อาฟเตอร์ช็อก", "aftershock", "earthquake", "quake", "seismic"),
     HazardType.MARINE: ("คลื่นลมแรง", "คลื่นสูง", "คลื่นทะเล", "ออกเรือ", "เดินเรือ", "ลงเรือ", "ทะเล", "high waves",
                              "rough sea"),
@@ -88,6 +91,9 @@ def detect_hazards(text: str) -> list[HazardType]:
     # "ไต้ฝุ่น" (typhoon) contains "ฝุ่น" (dust): count dust only if it appears outside the word typhoon.
     if HazardType.AIR_QUALITY in found and not any(w in lowered.replace("ไต้ฝุ่น", "") for w in HAZARD_WORDS[HazardType.AIR_QUALITY]):
         found.remove(HazardType.AIR_QUALITY)
+    # "จุดความร้อน" (fire hotspot) contains "ร้อนไหม" in "มีจุดความร้อนไหม": count heat only outside that word.
+    if HazardType.HEAT in found and not any(w in lowered.replace("จุดความร้อน", "") for w in HAZARD_WORDS[HazardType.HEAT]):
+        found.remove(HazardType.HEAT)
     return found
 
 

@@ -600,5 +600,13 @@
   "น. (เวลาไทย)": "(Thailand time)",
   "ระดับพายุจาก สสน. เป็นข้อมูลประกอบ ไม่ใช่ระดับเตือนภัยของทันภัย": "HII storm categories provide context and are separate from ThanPhai alert levels.",
   "เริ่ม": "From",
-  "ถึง": "Until"
+  "ถึง": "Until",
+  "โอกาสฝนตก": "Chance of rain",
+  "ฝุ่น ความร้อน และโอกาสฝน": "Dust, heat and chance of rain",
+  "Open-Meteo (แบบจำลองโอกาสฝน)": "Open-Meteo (rain probability model)",
+  "แบบจำลอง · สูงสุดใน 24 ชม.": "Model · highest in 24 h",
+  "แบบจำลอง · สูงสุดใน 24 ชม. ราว": "Model · highest in 24 h, around",
+  ":00 น.": ":00",
+  "ดึงข้อมูลล่าสุด": "Data fetched",
+  "· ตอนนี้": "· now"
 }

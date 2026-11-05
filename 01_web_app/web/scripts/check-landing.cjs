@@ -63,8 +63,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   const { highestEnvironmentValue, default: EnvironmentSummary } = load('@/components/EnvironmentSummary');
   const environmentLayer = { type: 'FeatureCollection', meta: { data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] }, features: [
     { properties: { name_th: 'ไม่มีค่า', pm25_24h: null, heat_index_now: null, heat_index_max_24h: null } },
-    { properties: { name_th: 'อำเภอ ก', province_th: 'เชียงใหม่', pm25_24h: 80, heat_index_now: 33, heat_index_max_24h: 41, level: 'NORMAL' } },
-    { properties: { name_th: 'อำเภอ ข', province_th: 'สงขลา', pm25_24h: 0, heat_index_now: 35, heat_index_max_24h: 39, level: 'WARNING' } },
+    { properties: { name_th: 'อำเภอ ก', province_th: 'เชียงใหม่', pm25_24h: 80, heat_index_now: 33, heat_index_max_24h: 41, rain_chance_max_24h: 63, rain_chance_peak_hour: 18, level: 'NORMAL' } },
+    { properties: { name_th: 'อำเภอ ข', province_th: 'สงขลา', pm25_24h: 0, heat_index_now: 35, heat_index_max_24h: 39, rain_chance_max_24h: 40, rain_chance_peak_hour: 9, level: 'WARNING' } },
   ] };
   assert.equal(highestEnvironmentValue(environmentLayer, 'air_quality').name, 'อำเภอ ก');
   // The heat card ranks districts by how hot it feels now; the 24-h peak of that district rides along.
@@ -72,11 +72,16 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert.deepEqual([hottestNow.value, hottestNow.name, hottestNow.peak], [35, 'อำเภอ ข', 39], 'National heat is the district hottest now, with its own peak');
   assert.equal(highestEnvironmentValue({ features: [{ properties: { pm25_24h: null } }] }, 'air_quality'), null, 'Null is not zero');
   assert.equal(highestEnvironmentValue({ features: [environmentLayer.features[2]] }, 'air_quality').value, 0, 'A measured zero remains valid');
-  const metricProps = { layers: { air_quality: { data: environmentLayer, error: false, key: 'air_quality:0' }, heat: { data: environmentLayer, error: false, key: 'heat:0' } }, loadingArea: false, area: null };
+  const metricArea0 = () => ({ area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] });
+  const metricProps = { layers: { air_quality: { data: environmentLayer, error: false, key: 'air_quality:0' }, heat: { data: environmentLayer, error: false, key: 'heat:0' }, rain_storm: { data: environmentLayer, error: false, key: 'rain_storm:0' } }, loadingArea: false, area: null };
   let metrics = instance(EnvironmentSummary).render(metricProps);
   assert(content(metrics).includes('80') && content(metrics).includes('เชียงใหม่'), 'National PM2.5 maximum shows value and place');
   assert(content(metrics).includes('ตอนนี้ร้อนเหมือน 35') && content(metrics).includes('สงขลา') && content(metrics).includes('สูงสุดใน 24 ชม. ข้างหน้า 39'), 'National heat shows now, place and the 24-h peak of that district');
   assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-NORMAL'), 'API level wins even when value exceeds a frontend threshold');
+  const rainCard = nodes(metrics).filter(n => n.type === 'article')[2];
+  assert(content(rainCard).includes('โอกาสฝนตก') && content(rainCard).includes('63') && content(rainCard).includes('ราว 18:00 น.') && content(rainCard).includes('แบบจำลอง'), 'Rain card shows the highest chance, its hour, and says it is a model');
+  metrics = instance(EnvironmentSummary).render({ ...metricProps, area: { ...metricArea0(), assessments: [{ hazard: 'rain_storm', level: 'NORMAL', observations: { rain_chance_max_24h: 25, rain_chance_peak_hour: 7 }, sources: [] }] } });
+  assert(content(nodes(metrics).filter(n => n.type === 'article')[2]).includes('25') && content(metrics).includes('ราว 07:00 น.') && !content(metrics).includes('63'), 'Selected area shows its own chance of rain and hour');
   const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_now: 27, heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea });
   assert(content(metrics).includes('27') && content(metrics).includes('30') && !content(metrics).includes('35'), 'Selected area shows its own now and peak, never the national one');
@@ -173,13 +178,13 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert.deepEqual(refreshEnvironment.dependencies, [0], 'Environment requests depend only on refresh revision, not tab or area');
   const stopEnvironment = refreshEnvironment();
   await tick();
-  assert.deepEqual(environmentRequests, ['air_quality', 'heat'], 'Load both summaries once per refresh');
-  for (const activeHazard of ['heat', 'air_quality']) {
+  assert.deepEqual(environmentRequests, ['air_quality', 'heat', 'rain_storm'], 'Load the three summaries once per refresh');
+  for (const activeHazard of ['heat', 'air_quality', 'rain_storm']) {
     environmentEffects.length = 0;
     environmentApp.render({ activeHazard });
     environmentEffects.find(effect => /setLayerState/.test(String(effect)))();
   }
-  assert.deepEqual(environmentRequests, ['air_quality', 'heat'], 'Map tabs reuse the summary layers without another request');
+  assert.deepEqual(environmentRequests, ['air_quality', 'heat', 'rain_storm'], 'Map tabs reuse the summary layers without another request');
   stopEnvironment();
   const originalArea = lib.api.area;
   let areaReading = 12, areaCalls = 0, delayedArea;

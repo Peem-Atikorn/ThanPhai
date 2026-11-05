@@ -450,6 +450,31 @@ def test_follow_up_without_a_place_uses_the_open_area():
     assert "area from the open area" in a.notes
 
 
+@pytest.mark.parametrize("question", ["อุณหภูมิตอนเที่ยงจะเท่าไหร่", "ตอนนี้กี่องศา", "พรุ่งนี้ร้อนไหม"])
+def test_temperature_follow_up_uses_the_open_area(question):
+    # Seen live: after "ธัญบุรีฝนตกไหม", a temperature question went to small talk and asked for the area again.
+    tools = FakeTools()
+    a = HazardAgent(GAZ, tools).ask(question, NOW, area_code="TH1406")
+    assert a.intent == "risk" and a.area["code"] == "TH1406" and tools.calls == ["TH1406"]
+    assert understand(question, GAZ, NOW).hazards == [HazardType.HEAT]
+
+
+def test_fire_hotspot_question_is_not_a_heat_question():
+    # "มีจุดความร้อนไหม" contains "ร้อนไหม".
+    assert HazardType.HEAT not in detect_hazards("อำเภอเสนามีจุดความร้อนไหม")
+    assert detect_hazards("อำเภอเสนามีจุดความร้อนไหม และร้อนไหม") == [HazardType.HEAT]
+
+
+def test_rain_chance_reason_names_the_peak_hour():
+    class RainTools(FakeTools):
+        def get_assessments(self, area_code):
+            return [{"hazard": "rain_storm", "level": "NORMAL", "rule_ids": ["RULES_NO_TRIGGER"], "sources": ["Open-Meteo (แบบจำลองโอกาสฝน)"],
+                     "observations": {"rain_24h": 0.0, "rain_chance_now": 5.0, "rain_chance_max_24h": 63.0, "rain_chance_peak_hour": 18.0}}]
+
+    a = HazardAgent(GAZ, RainTools()).ask("อำเภอเสนาฝนตกไหม", NOW)
+    assert "โอกาสฝนตกสูงสุดใน 24 ชม. ข้างหน้า 63% ราว 18:00 น. (แบบจำลอง Open-Meteo)" in a.text
+
+
 def test_named_place_wins_over_the_open_area():
     a = HazardAgent(GAZ, FakeTools()).ask("น้ำจะท่วมอำเภอบางบัวทองไหม", NOW, area_code="TH1406")
     assert a.area["code"] == "TH1205"
