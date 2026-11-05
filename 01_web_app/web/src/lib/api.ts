@@ -348,11 +348,12 @@ export const api = {
   boundary: (code: string) => get<AreaBoundary>(`/v1/areas/${encodeURIComponent(code)}/boundary`),
   search: (q: string) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }[]>(`/v1/areas/search?q=${encodeURIComponent(q)}`),
   locate: (lat: number, lon: number) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }>(`/v1/areas/locate?lat=${lat}&lon=${lon}`),
-  ask: async (question: string): Promise<AskAnswer> => {
+  /** areaCode: the area open on the page; the backend uses it only when the question names no place. */
+  ask: async (question: string, areaCode: string | null = null): Promise<AskAnswer> => {
     const res = await fetch("/api/v1/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, area_code: areaCode }),
     });
     if (!res.ok) throw new Error(`${res.status}`);
     return res.json();
@@ -378,6 +379,10 @@ export function describeObservation(key: string, value: number | null): string |
       return value > 0 ? `ดาวเทียมพบน้ำท่วมกระจายในพื้นที่ราว ${Math.round(value * 0.1245)} ตร.กม. (7 วัน)` : "ดาวเทียมไม่พบน้ำท่วมใน 7 วัน";
     case "rain_24h":
       return `ฝน 24 ชม. สูงสุด ${value.toFixed(1)} มม.`;
+    case "rain_chance_now":
+      return `โอกาสฝนตกชั่วโมงนี้ ${value.toFixed(0)}%`;
+    case "rain_chance_max_24h":
+      return `โอกาสฝนตกสูงสุดใน 24 ชม. ข้างหน้า ${value.toFixed(0)}% (แบบจำลอง)`;
     case "hotspots_24h":
       return `จุดความร้อน 24 ชม. ${value} จุด`;
     case "fire_probability_7d":

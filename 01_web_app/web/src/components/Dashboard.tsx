@@ -799,7 +799,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         setChat(old => [...old, { asked, sent, answer: null }]);
         const settle = (answer: AskAnswer) => setChat(old => old.map((turn, i) => i === old.length - 1 ? { ...turn, answer } : turn));
         try {
-            const response = await api.ask(sent);
+            // The area on screen (map pick or the last answer's area) answers "แล้วฝนตกไหม" without naming it again.
+            const response = await api.ask(sent, area?.area.code ?? null);
             settle(response);
             if (response.area)
                 chooseArea(response.area);
@@ -902,11 +903,13 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
       <div className="dashboard-grid">
         {tr(!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search"/>{tr("ค้นหาจังหวัด อำเภอ หรือตำบล")}<Icon name="arrow"/></a>)}
         <section className="map-panel" aria-label={tr("ภาพรวมความเสี่ยง")}>
-          <div className="map-chrome">{tr(!hideToolbar && mapControls)}<div className="map-heading">
+          <div className="map-chrome">{tr(!hideToolbar && mapControls)}<div className={"map-heading" + (overview ? " has-overview-controls" : "")}>
+            {overview && <div className="overview-heading-controls">{overviewControls}</div>}
             <div className="map-heading-copy">
               <h2>{tr(selectedRiskLevel ? tr("พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("ทั่วประเทศ") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่ปริมาณน้ำในเขื่อน" : view === "rivers" ? "แผนที่ระดับน้ำในแม่น้ำ" : tr("แผนที่ความเสี่ยง") + tr(itemTh(hazard)) + tr(""))}</h2>
               <p>{tr(view === "water-quality" ? "ความเค็ม ออกซิเจนละลายน้ำ และค่าคุณภาพน้ำรายสถานี" : view === "dams" ? "ปริมาณน้ำและการระบายน้ำของเขื่อนขนาดใหญ่ทั่วประเทศ" : view === "rivers" ? "ระดับน้ำเทียบตลิ่งและปริมาณน้ำไหลผ่านจากสถานีวัดน้ำ" : hazardDescriptions[hazard])}</p>
             </div>
+            {view === "hazard" && (hazard === "overview" || areaStatus !== "idle") && <EnvironmentSummary layers={environmentLayers} area={area} loadingArea={areaStatus === "loading"} areaError={areaStatus === "error"}/>}
             <div className="map-heading-actions">
             {tr(view === "hazard" && radarAvailable && !overview && RADAR_LAYERS.includes(hazard) && <button type="button" title={tr("เรดาร์บนแผนที่")} className={"images-link " + (radarOn ? "is-on" : "")} aria-pressed={radarOn} onClick={() => setRadarOn((on) => !on)}><Icon name="radar"/>{tr("เรดาร์บนแผนที่")}{tr(radarOn ? " · เปิด" : " · ปิด")}</button>)}
             {tr(view === "hazard" && hazard === "rain_storm" && <button type="button" className="images-link" title={tr("ภาพเรดาร์ คาดการณ์ฝน และพายุ")} onClick={showWeatherImages}><Icon name="radar"/>{tr("ภาพเรดาร์ \u00B7 คาดการณ์ฝน \u00B7 พายุ")}</button>)}
@@ -914,10 +917,6 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
-            {view === "hazard" && (overview || areaStatus !== "idle") && <div className="overview-map-widgets">
-              <EnvironmentSummary layers={environmentLayers} area={area} loadingArea={areaStatus === "loading"} areaError={areaStatus === "error"}/>
-              {overviewControls}
-            </div>}
             <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamFromMap : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarNextFrame?.tiles !== radarFrame?.tiles ? radarNextFrame?.tiles ?? null : null} radarDimmed={radarFrame?.kind === "forecast"} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>

@@ -371,13 +371,18 @@ def test_heat_level_comes_from_the_forecast_heat_index(base_service, monkeypatch
     sena = next(a.code for a in svc.gazetteer.resolve("อำเภอเสนา"))
     this_hour = datetime.now(timezone(timedelta(hours=7))).replace(minute=0, second=0, microsecond=0).isoformat()
     peak = {"peak_time": "2026-04-20T14:00:00+07:00", "temperature_c": 38.0, "humidity_pct": 55.0,
-            "hourly": {this_hour: 31.2}}
+            "hourly": {this_hour: 31.2},
+            "rain_chance": {"max_pct": 70.0, "peak_time": "2026-04-20T15:00:00+07:00", "hourly": {this_hour: 20.0}}}
     monkeypatch.setitem(svc.grid, "heat_model", {sena: SimpleNamespace(value=44.6, extra=peak)})
     decisions, _, _ = svc._process({"thaiwater_waterlevel": [], "thaiwater_rain_24h": [], "nasa_firms": [], "air4thai": []}, [])
     heat = next(i for i in decisions[sena] if i["hazard"] == "heat")
     # The level follows the 24-h peak; "now" is only shown.
     assert heat["level"] == "WARNING" and heat["rule_ids"][0] == "HEAT_INDEX_DANGER"
     assert heat["observations"]["heat_index_now"] == 31.2
+    # The chance of rain comes in the same forecast and is shown under rain/storm; it does not set the level.
+    rain = next(i for i in decisions[sena] if i["hazard"] == "rain_storm")
+    assert rain["observations"]["rain_chance_now"] == 20.0 and rain["observations"]["rain_chance_max_24h"] == 70.0
+    assert any("70%" in n and "15:00" in n for n in rain["notices"])
     assert "14:00" in heat["notices"][0]
     other = next(c for c in svc.amphoe_codes if c != sena)
     assert next(i for i in decisions[other] if i["hazard"] == "heat")["level"] is None  # no forecast yet = no data

@@ -166,6 +166,12 @@ def test_ask_reports_llm_flag(client):
 
 def test_ask_validates_input(client):
     assert client[0].post("/v1/ask", json={"question": ""}).status_code == 422
+    assert client[0].post("/v1/ask", json={"question": "ฝนตกไหม", "area_code": "../x"}).status_code == 422
+
+
+def test_ask_uses_the_open_area_when_the_question_names_none(client):
+    body = client[0].post("/v1/ask", json={"question": "น้ำจะท่วมไหม", "area_code": client[2]}).json()
+    assert body["intent"] == "risk" and body["area"]["code"] == client[2]
 
 
 def test_request_id_header(client):

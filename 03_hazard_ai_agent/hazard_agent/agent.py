@@ -47,6 +47,8 @@ SOURCE_TH = {
 REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history", "river", "storms",
                    "waves", "water_quality", "pm25_stations", "fire_hotspots"}
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
+# Start of a TMD warning line ("⚠ ประกาศกรมอุตุนิยมวิทยา: <title>") once spacing is removed.
+WARNING_TITLE = "ประกาศกรมอุตุนิยมวิทยา:"
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
 PREPARE_TH = {
     "flood": ["ยกของมีค่าและปลั๊กไฟขึ้นที่สูง", "เตรียมยา น้ำดื่ม อาหารแห้ง ไฟฉาย และเอกสารสำคัญใส่ถุงกันน้ำ", "ติดตามประกาศของ ปภ. และเตรียมเส้นทางอพยพ"],
@@ -66,6 +68,11 @@ PREPARE_TH = {
     "landslide": ["สังเกตสัญญาณเตือน: น้ำในลำห้วยขุ่นข้นผิดปกติ ดินแยก ต้นไม้เอียง หรือได้ยินเสียงดังจากภูเขา",
                   "เมื่อฝนตกหนักต่อเนื่อง ให้ออกจากบ้านที่อยู่ติดเชิงเขาหรือทางน้ำไหล", "ติดตามประกาศของกรมทรัพยากรธรณีและ ปภ. และเตรียมเส้นทางอพยพ"],
 }
+
+
+def _plain(line: str) -> str:
+    """A line without warning marks, bullets or spacing differences, to spot a copied tail line."""
+    return re.sub(r"\s+", "", line.replace("⚠", "")).lstrip("•-*").rstrip(".")
 
 
 def tmd_heat_label(heat_index: float) -> str:
@@ -278,6 +285,10 @@ def _reason(item: dict) -> str:
         parts.append(f"ดาวเทียมพบน้ำท่วมกระจายในพื้นที่ราว {cells * 0.1245:.0f} ตร.กม. ใน 7 วัน")
     if obs.get("rain_24h") is not None:
         parts.append(f"ฝนสะสม 24 ชม. สูงสุด {obs['rain_24h']:.1f} มม.")
+    if obs.get("rain_chance_now") is not None:
+        parts.append(f"โอกาสฝนตกชั่วโมงนี้ {obs['rain_chance_now']:.0f}%")
+    if obs.get("rain_chance_max_24h") is not None:
+        parts.append(f"โอกาสฝนตกสูงสุดใน 24 ชม. ข้างหน้า {obs['rain_chance_max_24h']:.0f}% (แบบจำลอง Open-Meteo)")
     if obs.get("hotspots_24h") is not None:
         parts.append(f"จุดความร้อน 24 ชม. {int(obs['hotspots_24h'])} จุด")
     if obs.get("fire_probability_7d") is not None:
@@ -347,8 +358,10 @@ class HazardAgent:
         return AgentAnswer(reply.strip(), fallback.intent, None, [], llm_used=True, facts=fallback.text,
                            llm_model=self._model_name())
 
-    def ask(self, question: str, now: datetime) -> AgentAnswer:
-        answer = self._route(question, now)
+    def ask(self, question: str, now: datetime, area_code: str | None = None) -> AgentAnswer:
+        """area_code: the area the user has open (picked on the map or named in an earlier question).
+        It is used only when the question names no place, so "แล้วฝนตกไหม" follows the conversation."""
+        answer = self._route(question, now, area_code)
         if self.explainer and answer.intent in REWRITE_INTENTS and answer.text and not answer.llm_used:
             answer.facts = answer.text
             rewritten = self.explainer(question, answer.text)
@@ -358,14 +371,24 @@ class HazardAgent:
                 # word, so a rewrite can never drop or change them.
                 tail = [line for line in answer.text.splitlines() if line.startswith(VERBATIM_PREFIXES)]
                 # The model sometimes copies a tail line ("ที่มา: …") into its own text; keep only the verbatim copy.
-                body = [line for line in rewritten.strip().splitlines() if not line.strip().startswith(VERBATIM_PREFIXES)]
+                # It also copies a warning without its "⚠", with other spacing or with a shortened title; a TMD title
+                # is shown only verbatim, so any warning line of its own is dropped.
+                copied = {_plain(line) for line in tail}
+                body = [line for line in rewritten.strip().splitlines()
+                        if not line.strip().lstrip("•-* ").startswith(VERBATIM_PREFIXES)
+                        and _plain(line) not in copied and not _plain(line).startswith(WARNING_TITLE)]
                 answer.text, answer.llm_used = "\n".join([*body, *tail]), True
                 answer.llm_model = self._model_name()
         return answer
 
-    def _route(self, question: str, now: datetime) -> AgentAnswer:
+    def _route(self, question: str, now: datetime, area_code: str | None = None) -> AgentAnswer:
         # "พรุ่งนี้" means tomorrow in Thailand; with a UTC clock it would be wrong between 00:00 and 07:00.
         u = understand(question, self.gazetteer, now.astimezone(BANGKOK))
+        context = self.gazetteer.by_code.get(area_code) if area_code else None
+        if context is not None and u.intent in ("risk", "explain") and not u.areas and not u.regions:
+            # A question about "here" with an area already open: answer for that area instead of asking where.
+            u.areas = [context]
+            u.notes = [n for n in u.notes if n != "no area found"] + ["area from the open area"]
         if u.intent == "emergency":
             return AgentAnswer(EMERGENCY_TH, u.intent, None, [h.value for h in u.hazards])
         if u.intent == "greeting":

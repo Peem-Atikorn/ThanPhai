@@ -442,6 +442,51 @@ def test_explainer_rewrites_and_keeps_facts():
     assert "2.11" in a.facts and calls[0][0] == "น้ำจะท่วมอำเภอเสนาไหม"
 
 
+def test_follow_up_without_a_place_uses_the_open_area():
+    # "แล้วมีโอกาสฝนตกกี่เปอร์เซ็น" after a question about Sena (or with Sena picked on the map).
+    tools = FakeTools()
+    a = HazardAgent(GAZ, tools).ask("แล้วฝนตกไหม", NOW, area_code="TH1406")
+    assert a.intent == "risk" and a.area["code"] == "TH1406" and tools.calls == ["TH1406"]
+    assert "area from the open area" in a.notes
+
+
+def test_named_place_wins_over_the_open_area():
+    a = HazardAgent(GAZ, FakeTools()).ask("น้ำจะท่วมอำเภอบางบัวทองไหม", NOW, area_code="TH1406")
+    assert a.area["code"] == "TH1205"
+
+
+def test_unknown_or_missing_open_area_still_asks_where():
+    agent_ = HazardAgent(GAZ, FakeTools())
+    assert agent_.ask("ฝนตกไหม", NOW, area_code="TH9999").intent == "clarify"
+    assert agent_.ask("ฝนตกไหม", NOW).intent == "clarify"
+
+
+def test_rewrite_that_copies_the_warning_shows_it_once():
+    # Seen live: the model repeated the TMD warning without "⚠" and with other spacing, above the verbatim copy.
+    def copying_llm(question, facts):
+        warning = next(line for line in facts.splitlines() if line.startswith("⚠"))
+        copied = "  ".join(warning.removeprefix("⚠ ").split(" "))
+        return f"เสนาน้ำท่วมวิกฤต\n{copied}\n• ที่มา: ThaiWater (สสน.)"
+
+    a = HazardAgent(GAZ, FakeTools(), explainer=copying_llm).ask("น้ำจะท่วมอำเภอเสนาไหม", NOW)
+    assert a.llm_used and a.text.startswith("เสนาน้ำท่วมวิกฤต\n")
+    assert a.text.count("ฝนตกหนักถึงหนักมากบริเวณประเทศไทย") == 1
+    assert a.text.count("ที่มา:") == 1
+    assert "⚠ ประกาศกรมอุตุนิยมวิทยา: ฝนตกหนักถึงหนักมากบริเวณประเทศไทย" in a.text
+
+
+def test_rewrite_with_a_shortened_warning_title_keeps_only_the_verbatim_one():
+    # Seen live: the model dropped part of the title ("(มีผลกระทบ…)"); a TMD title is shown only word for word.
+    def shortening_llm(question, facts):
+        warning = next(line for line in facts.splitlines() if line.startswith("⚠"))
+        return f"เสนาน้ำท่วมวิกฤต\n**ประกาศกรมอุตุนิยมวิทยา:** {warning.split(': ', 1)[1][:12]}"
+
+    a = HazardAgent(GAZ, FakeTools(), explainer=shortening_llm).ask("น้ำจะท่วมอำเภอเสนาไหม", NOW)
+    assert a.llm_used and a.text.startswith("เสนาน้ำท่วมวิกฤต\n")
+    assert a.text.count("ประกาศกรมอุตุนิยมวิทยา:") == 1
+    assert "⚠ ประกาศกรมอุตุนิยมวิทยา: ฝนตกหนักถึงหนักมากบริเวณประเทศไทย" in a.text
+
+
 def test_explainer_rejection_keeps_rule_answer():
     a = HazardAgent(GAZ, FakeTools(), explainer=lambda q, f: None).ask("น้ำจะท่วมอำเภอเสนาไหม", NOW)
     assert not a.llm_used and "น้ำท่วม: วิกฤต" in a.text
