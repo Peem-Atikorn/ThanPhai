@@ -60,6 +60,22 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
 
 (async () => {
   const lib = load('@/lib/api');
+  const { CurrentTime } = load('@/components/DataClock');
+  assert.equal(typeof CurrentTime, 'function', 'The radar clock can show current time independently of image time');
+  const savedNow = Date.now, savedStore = hooks.useSyncExternalStore;
+  try {
+    let now = Date.UTC(2026, 10, 5, 7, 10);
+    Date.now = () => now;
+    hooks.useSyncExternalStore = (subscribe, getSnapshot) => getSnapshot();
+    const clock = instance(CurrentTime);
+    let currentClock = clock.render();
+    assert.equal(currentClock.props.dateTime, '2026-11-05T07:10:00.000Z');
+    assert(content(currentClock).includes('14:10'), 'Current time uses the Bangkok timezone');
+    now += 60000;
+    currentClock = clock.render();
+    assert(content(currentClock).includes('14:11'), 'Current time follows the clock instead of the selected radar frame');
+  } finally { Date.now = savedNow; hooks.useSyncExternalStore = savedStore; }
+
   const savedFetch = global.fetch;
   let nowcastUrl = '';
   global.fetch = async url => {
@@ -210,6 +226,49 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   lib.api.area = async () => ({ area: { code: '13', level: 'province', name_th: 'ปทุมธานี', parents: [] }, assessments: [], forecast: [], rivers: [{ status: 'NORMAL' }], river_province: { code: '13', name_th: 'ปทุมธานี' }, official_warnings: [], degraded_services: [] });
   lib.api.boundary = async () => null;
   const Dashboard = load('@/components/Dashboard').default;
+  // Search a province, tap districts, then step back without creating a history loop.
+  {
+    const saved = { area: lib.api.area, search: lib.api.search, boundary: lib.api.boundary };
+    const places = {
+      TH20: { code: 'TH20', level: 'province', name_th: 'ชลบุรี', name_en: '', parents: [], lat: 13.3, lon: 100.9 },
+      TH2007: { code: 'TH2007', level: 'amphoe', name_th: 'ศรีราชา', name_en: '', parents: ['ชลบุรี'], lat: 13.1, lon: 100.9 },
+      TH2001: { code: 'TH2001', level: 'amphoe', name_th: 'เมืองชลบุรี', name_en: '', parents: ['ชลบุรี'], lat: 13.4, lon: 101 },
+    };
+    const boundary = { type: 'FeatureCollection', features: [] };
+    lib.api.search = async () => [places.TH20];
+    lib.api.boundary = async () => boundary;
+    lib.api.area = async code => ({ area: places[code], assessments: [], forecast: [], rivers: [], official_warnings: [], degraded_services: [] });
+    try {
+      const historyApp = instance(Dashboard);
+      const hp = { activeView: 'hazard', activeHazard: 'overview', searchInHeader: true, searchTarget: {}, locationTarget: {} };
+      const map = t => nodes(t).find(n => n.props.mode === 'hazard' && 'dark' in n.props);
+      const back = t => nodes(t).find(n => n.props['aria-label'] === 'ย้อนกลับพื้นที่ก่อนหน้า');
+      let t = historyApp.render(hp);
+      nodes(t).find(n => n.props.id === 'area-search').props.onChange({ target: { value: 'ชลบุรี' } });
+      t = historyApp.render(hp);
+      await nodes(t).find(n => n.props.role === 'search').props.onSubmit({ preventDefault() {} });
+      t = historyApp.render(hp);
+      nodes(t).find(n => n.props.role === 'option').props.onClick(); await tick();
+      t = historyApp.render(hp);
+      assert(back(t), 'Selecting a province offers a back button');
+      map(t).props.onSelect('TH2007'); await tick(); t = historyApp.render(hp);
+      map(t).props.onSelect('TH2007'); await tick(); t = historyApp.render(hp);
+      map(t).props.onSelect('TH2001'); await tick(); t = historyApp.render(hp);
+      back(t).props.onClick(); await tick(); t = historyApp.render(hp);
+      assert.equal(map(t).props.selected, 'TH2007', 'Back restores the previous district');
+      back(t).props.onClick(); await tick(); t = historyApp.render(hp);
+      assert.equal(map(t).props.selected, null, 'Back restores the province rather than duplicating repeated taps');
+      assert.equal(map(t).props.outline, boundary, 'Province outline is restored');
+      assert(content(t).includes('ชลบุรี'), 'Province label is restored');
+      back(t).props.onClick(); await tick(); t = historyApp.render(hp);
+      assert.equal(map(t).props.selected, null);
+      assert.equal(map(t).props.outline, null);
+      assert(!back(t), 'Returning to the country exhausts history');
+    } finally { Object.assign(lib.api, saved); }
+  }
+  assert(!nodes(instance(Dashboard).render({ activeView: "hazard", activeHazard: "overview" })).some(n => n.props.className === "map-supplement"), "Overview removes the entire map supplement accordion");
+  assert(!nodes(instance(Dashboard).render({ activeView: 'hazard', activeHazard: 'overview' })).some(n => n.props.className === 'map-summary'), 'Overview omits the redundant risk legend and timestamp');
+  assert(nodes(instance(Dashboard).render({ activeView: 'hazard', activeHazard: 'flood' })).some(n => n.props.className === 'map-summary'), 'Individual hazard maps retain their risk legend');
   const environmentRequests = [];
   lib.api.layer = async id => { environmentRequests.push(id); return environmentLayer; };
   const environmentEffects = [];
@@ -310,16 +369,28 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       let enabledTree = radarApp.render(props);
       enabledTree = radarApp.render(props);
       assert(nodes(enabledTree).some(n => n.props['data-layer'] === 'radar'), 'Overview radar toggle appears when backend enables it');
+      assert(nodes(enabledTree).filter(n => ['pm25', 'radar'].includes(n.props['data-layer'])).every(n => n.props['aria-pressed'] === false), 'A fresh homepage starts with optional layers off');
+      nodes(enabledTree).find(n => n.props['data-layer'] === 'radar').props.onClick();
+      enabledTree = radarApp.render(props);
+
       assert.equal(nodes(enabledTree).find(n => 'radarNext' in n.props).props.radar, radarFrames.at(-1).tiles, 'The first render with frames already draws the latest frame, not the oldest');
       const playback = nodes(enabledTree).find(n => n.type.name === 'RadarPlayback');
       assert(playback && playback.props.frames.length === 4 && playback.props.index === 1, 'Radar playback appends forecasts and opens on the latest observed frame');
       assert.equal(playback.props.frames[2].kind, 'forecast', 'Forecast entries follow observed radar frames in one timeline');
       assert.equal(playback.props.frames[2].horizonMin, 10, 'Forecast entry retains its lead time');
+      for (const riskLevel of ['CRITICAL', 'WARNING', 'WATCH']) {
+        const filtered = radarApp.render({ ...props, riskLevel });
+        assert(!nodes(filtered).some(n => n.type.name === 'RadarPlayback'), `The radar playback bar is hidden for ${riskLevel}`);
+        assert.equal(nodes(filtered).find(n => 'radarNext' in n.props).props.radar, null, 'Filtered risk maps do not show radar');
+        assert.equal(nodes(filtered).find(n => n.props['data-layer'] === 'radar').props['aria-pressed'], true, 'Filtering preserves the radar toggle');
+      }
+      enabledTree = radarApp.render(props);
+      assert(nodes(enabledTree).some(n => n.type.name === 'RadarPlayback'), 'Returning to overview restores the radar bar');
+
+
       assert.equal(nodes(enabledTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Idle radar playback does not preload another frame');
-      playback.props.onPlaybackChange(true);
       const playingTree = radarApp.render(props);
       assert.equal(nodes(playingTree).find(n => 'radarNext' in n.props).props.radarNext, null, 'Forecast entries do not preload a radar image');
-      playback.props.onPlaybackChange(false);
       radarApp.render(props);
       playback.props.onChange(2);
       const forecastTree = radarApp.render(props);
@@ -351,23 +422,91 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert.equal(englishPlayback.props['aria-label'], "Play the past hour of radar images and the next hour's forecast", 'The playback label is read in English');
       load('@/lib/i18n').setLanguage('th');
 
-      let selectedFrame = 1, timerCallback, timerCount = 0, clearCount = 0;
-      window.setInterval = callback => { timerCallback = callback; timerCount++; return timerCount; };
-      window.clearInterval = () => { clearCount++; };
+      const stepProbe = instance(RadarPlayback).render({ frames: [{ time: 0 }, { time: 600 }], index: 0, onChange() {}, onPlaybackChange() {} });
+      assert.equal(nodes(stepProbe).find(n => n.type === 'input').props.step, 'any', 'The timeline can be dragged continuously');
+      let animationId = 0, clock = 0;
+      const animations = new Map();
+      window.requestAnimationFrame = callback => { animations.set(++animationId, callback); return animationId; };
+      window.cancelAnimationFrame = id => animations.delete(id);
+      document.addEventListener = () => {};
+      document.removeEventListener = () => {};
+      const advance = ms => { clock += ms; const pending = [...animations.values()]; animations.clear(); pending.forEach(callback => callback(clock)); };
+      let selectedFrame = 0, mapUpdates = 0;
       const playbackApp = instance(RadarPlayback, undefined, true);
-      const playbackProps = () => ({ frames: radarFrames, index: selectedFrame, onChange: index => { selectedFrame = index; }, onPlaybackChange() {} });
-      let playbackControl = nodes(playbackApp.render(playbackProps())).find(n => n.type === 'button');
-      playbackControl.props.onClick();
+      const playbackProps = () => ({ frames: radarFrames, index: selectedFrame, onChange: index => { selectedFrame = index; mapUpdates++; }, onPlaybackChange() {} });
+      let movingTree = playbackApp.render(playbackProps());
+      nodes(movingTree).find(n => n.type === 'button').props.onClick();
       playbackApp.render(playbackProps());
-      selectedFrame = 0;
-      playbackApp.render(playbackProps());
-      assert.equal(timerCount, 1, 'Parent renders and callback identity changes do not restart the playback timer');
-      timerCallback();
-      assert.equal(selectedFrame, 1, 'Playback advances from the latest selected frame after a parent render');
-      playbackControl = nodes(playbackApp.render(playbackProps())).find(n => n.type === 'button');
-      playbackControl.props.onClick();
-      playbackApp.render(playbackProps());
-      assert.equal(clearCount, 1, 'Pausing clears the playback timer');
+      advance(0); advance(6000);
+      movingTree = playbackApp.render(playbackProps());
+      assert.equal(nodes(movingTree).find(n => n.type === 'input').props.value, 0.5, 'The slider moves between frames');
+      assert.equal(mapUpdates, 0, 'Smooth slider animation does not redraw the map between images');
+      advance(6000);
+      movingTree = playbackApp.render(playbackProps());
+      assert.equal(selectedFrame, 1);
+      assert.equal(mapUpdates, 1, 'The map still changes only once per radar image');
+      nodes(movingTree).find(n => n.type === 'input').props.onChange({ target: { value: '0.37' } });
+      movingTree = playbackApp.render(playbackProps());
+      assert.equal(nodes(movingTree).find(n => n.type === 'input').props.value, 0.37, 'Dragging does not snap the thumb to an image');
+      assert.equal(animations.size, 0);
+
+      const currentFrames = [
+        { kind: 'forecast', time: 400 },
+        { kind: 'observed', time: 300 },
+        { kind: 'observed', time: 100 },
+      ];
+      let currentSelection = 2, currentPlaying = false;
+      const currentApp = instance(RadarPlayback, undefined, true);
+      const currentProps = () => ({ frames: currentFrames, index: currentSelection, onChange: i => { currentSelection = i; }, onPlaybackChange: value => { currentPlaying = value; } });
+      let currentTree = currentApp.render(currentProps());
+      nodes(currentTree).find(n => n.type === 'button').props.onClick();
+      currentTree = currentApp.render(currentProps());
+      assert.equal(currentPlaying, true);
+      const currentButton = nodes(currentTree).find(n => n.type === 'button' && n.props.className === 'radar-current-button');
+      assert(currentButton, 'Radar has a current-time button');
+      currentButton.props.onClick();
+      currentApp.render(currentProps());
+      assert.equal(currentSelection, 1, 'Current time selects the newest observed timestamp, excluding forecasts');
+      assert.equal(currentPlaying, false, 'Returning to current time stops playback');
+
+      const speedApp = instance(RadarPlayback, undefined, true);
+      let speedTree = speedApp.render(currentProps());
+      const speedButton = label => nodes(speedTree).find(n => n.type === 'button' && n.props['aria-label'] === label);
+      for (const speed of [1.5, 2, 3, 4, 5]) {
+        speedButton('เพิ่มความเร็ว').props.onClick(); speedTree = speedApp.render(currentProps());
+        assert.equal(content(nodes(speedTree).find(n => n.type === 'output' && n.props['aria-live'])), speed + '×');
+      }
+      assert.equal(speedButton('เพิ่มความเร็ว').props.disabled, true);
+      nodes(speedTree).find(n => n.type === 'input').props.onChange({ target: { value: '0' } });
+      speedTree = speedApp.render(currentProps());
+      nodes(speedTree).find(n => n.type === 'button').props.onClick(); speedApp.render(currentProps());
+      advance(0); advance(600);
+      speedTree = speedApp.render(currentProps());
+      assert.equal(nodes(speedTree).find(n => n.type === 'input').props.value, 0.25, '5x keeps continuous progress');
+      for (const speed of [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.25, 0.2]) {
+        speedButton('ลดความเร็ว').props.onClick(); speedTree = speedApp.render(currentProps());
+        assert.equal(content(nodes(speedTree).find(n => n.type === 'output' && n.props['aria-live'])), speed + '×');
+        assert.equal(nodes(speedTree).find(n => n.type === 'input').props.value, 0.25, 'Speed changes preserve the thumb position');
+        assert.equal(animations.size, 1);
+      }
+      assert.equal(speedButton('ลดความเร็ว').props.disabled, true);
+      nodes(speedTree).find(n => n.type === 'button').props.onClick(); speedTree = speedApp.render(currentProps());
+      assert.equal(animations.size, 0);
+
+      const markerTree = i => instance(RadarPlayback).render({ ...currentProps(), index: i });
+      const markerAt = i => nodes(markerTree(i)).find(n => n.props.className === 'radar-slider-time');
+      assert(markerAt(0), 'A time label is shown above the slider thumb');
+      for (const i of [0, 1, 2]) {
+        const expected = new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }).format(currentFrames[i].time * 1000);
+        assert.equal(markerAt(i).props.children, expected, 'The thumb label updates to the selected frame time');
+        assert.equal(nodes(markerTree(i)).find(n => n.type === 'input').props['aria-valuetext'], expected);
+      }
+      assert.notEqual(markerAt(0).props.style.left, markerAt(2).props.style.left, 'The time label follows the selected thumb position');
+      const singleFrame = instance(RadarPlayback).render({ ...currentProps(), frames: [currentFrames[1]], index: 0 });
+      assert(!String(nodes(singleFrame).find(n => n.props.className === 'radar-slider-time').props.style.left).includes('NaN'), 'A single frame keeps a valid label position');
+
+
+
 
       nodes(enabledTree).find(n => n.type.name === 'RadarPlayback').props.onChange(0);
       radarFrames = [
@@ -428,7 +567,9 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
     resolveNowcast({ enabled: true, past_frames: [{ tile_url: 'https://tiles.test/fallback.png', time: 1800000000 }], forecast_frames: [], motion: null, rain_cells: [], explanation: '', explanation_source: 'template' });
     await tick();
     if (!failFirst) { rejectObserved(new Error('timeout')); await tick(); }
-    const tree = app.render(props);
+    let tree = app.render(props);
+    nodes(tree).find(n => n.props['data-layer'] === 'radar').props.onClick();
+    tree = app.render(props);
     assert(nodes(tree).some(n => n.type.name === 'RadarPlayback' && n.props.frames.length === 1), 'Nowcast history survives observed endpoint failure in either response order');
     cleanup?.();
   }
@@ -449,7 +590,9 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       app.render(props);
       const cleanup = effects.find(effect => /\.radarNowcast\(/.test(String(effect)))();
       await tick();
-      const tree = app.render(props);
+      let tree = app.render(props);
+      nodes(tree).find(n => n.props['data-layer'] === 'radar').props.onClick();
+      tree = app.render(props);
       return { tree, app, props, cleanup, playback: nodes(tree).find(n => n.type.name === 'RadarPlayback') };
     };
     let r = await run({ enabled: true, frames: [frame(T - 1200, 'a'), frame(T - 600, 'b')] }, nowcastAt(T));
@@ -480,7 +623,10 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
     timers.find(t => t.ms === 15000).fn();
     await tick();
     assert.equal(nowcastCalls, 2, 'The retry asks the backend again');
-    assert.equal(nodes(app.render(props)).find(n => n.type.name === 'RadarPlayback').props.explanationSource, 'qwen', 'The late Qwen text reaches the open page');
+    let explanationTree = app.render(props);
+    nodes(explanationTree).find(n => n.props['data-layer'] === 'radar').props.onClick();
+    explanationTree = app.render(props);
+    assert.equal(nodes(explanationTree).find(n => n.type.name === 'RadarPlayback').props.explanationSource, 'qwen', 'The late Qwen text reaches the open page');
     assert.equal(timers.filter(t => t.ms === 15000).length, 1, 'A final answer schedules nothing more');
     cleanup?.();
     global.setTimeout = savedSetTimeout;
@@ -553,6 +699,12 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
 
   const landing = instance(load('@/components/LandingExperience').default);
   tree = landing.render();
+  const savedLocation = window.location;
+  let homeDestination;
+  window.location = { assign: url => { homeDestination = url; } };
+  nodes(tree).find(n => n.props.className === 'journey-brand').props.onClick({ preventDefault() {} });
+  assert.equal(homeDestination, '/', 'Clicking the brand reloads the homepage with all optional layers off');
+  window.location = savedLocation;
   const headerSearch = nodes(tree).find(n => n.type === 'button' && n.props.className === 'journey-search-icon');
   assert(headerSearch, 'header search entry remains available');
   assert.equal(content(headerSearch), 'พื้นที่ที่คุณอยากรู้', 'visible search label is the accessible name');
@@ -576,11 +728,11 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   for (const unused of ['initialQuery', 'initialHazard', 'initialView']) assert(!source.includes(unused), 'unused prop removed: ' + unused);
   assert(!content(tree).includes('ผลการค้นหาในแดชบอร์ด'), 'guide describes current dialog flow');
   const { OverlayControls, OverlayLegends, DEFAULT_OVERLAYS } = load('@/components/OverviewLayers');
-  assert.deepEqual(DEFAULT_OVERLAYS, { flood: false, cyclones: true, waves: false });
+  assert.deepEqual(DEFAULT_OVERLAYS, { flood: false, cyclones: false, waves: false });
   const overlay = (status, count = 1) => ({ type: 'FeatureCollection', features: Array.from({length: count}, () => ({type: 'Feature', geometry: null, properties: {}})), overlay: {status, source: 'Test provider', updated_at: '2026-10-22T12:00:00Z'}, degraded_services: [] });
   let toggled;
   const controls = instance(OverlayControls);
-  const controlProps = { data: {flood: overlay('unavailable', 0), cyclones: overlay('ok', 0), waves: overlay('pending', 0)}, enabled: DEFAULT_OVERLAYS, onToggle: id => toggled = id };
+  const controlProps = { data: {flood: overlay('unavailable', 0), cyclones: overlay('ok', 0), waves: overlay('pending', 0)}, enabled: { ...DEFAULT_OVERLAYS, cyclones: true }, onToggle: id => toggled = id };
   tree = controls.render(controlProps);
   assert(content(tree).includes('พายุหมุน') && content(tree).includes('ไม่พบพายุ'), 'cyclone control stays available and explains an empty successful layer');
   assert(nodes(tree).find(n => n.type === 'button' && content(n).includes('น้ำท่วม')).props.disabled, 'unavailable source disables layer with explanation');

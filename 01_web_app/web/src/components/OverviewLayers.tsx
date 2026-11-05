@@ -4,7 +4,7 @@ import { t as tr, getLocale } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import Icon, { type IconName } from "@/components/Icon";
 import { api, LEVELS, type MapOverlay, type OverlayId } from "@/lib/api";
-export const DEFAULT_OVERLAYS = { flood: false, cyclones: true, waves: false };
+export const DEFAULT_OVERLAYS = { flood: false, cyclones: false, waves: false };
 const NAMES = { flood: "น้ำท่วมจากดาวเทียม", cyclones: "พายุหมุนเขตร้อน", waves: "คลื่นทะเล" };
 const ICONS: Record<OverlayId, IconName> = { flood: "flood", cyclones: "tropical_cyclone", waves: "marine" };
 const SOURCES = { flood: "gistda_flood", cyclones: "gdacs_cyclones", waves: "open_meteo_waves" };
