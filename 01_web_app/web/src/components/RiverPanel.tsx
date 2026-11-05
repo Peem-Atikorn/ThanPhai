@@ -2,7 +2,7 @@
 
 import { t as tr, getLocale } from "@/lib/i18n";
 import { useEffect, useState } from "react";
-import { AGENCY_TH, api, River, riverColor, StationGraph } from "@/lib/api";
+import { AGENCY_TH, api, River, riverColor, RiverForecast, StationGraph } from "@/lib/api";
 import Icon from "@/components/Icon";
 import LineChart from "@/components/LineChart";
 const number = new Intl.NumberFormat(getLocale());
@@ -48,8 +48,17 @@ function shortTime(t: string) {
     const [, m, day] = d.split("-");
     return { x: new Date(t.replace(" ", "T") + ":00+07:00").getTime(), label: tr("") + tr(+day) + tr("/") + tr(+m) + tr(" ") + tr(hm?.slice(0, 2)) + tr("น.") };
 }
-function StationCharts({ graph }: {
+// The forecast line continues from the last point of the level line (or, without one, from the hour the model started
+// at); dashed and amber so it never reads as a reading.
+export function forecastSeries(forecast: RiverForecast | null, last?: [number, number]): [number, number][] {
+    if (!forecast?.available || !forecast.from_time || forecast.level_msl == null || !forecast.points?.length)
+        return [];
+    const start: [number, number] = last ?? [shortTime(forecast.from_time).x, forecast.level_msl];
+    return [start, ...forecast.points.map((p) => [shortTime(p.time).x, p.level_msl] as [number, number])];
+}
+function StationCharts({ graph, forecast }: {
     graph: StationGraph;
+    forecast: RiverForecast | null;
 }) {
     const pts = graph.points.map((p) => ({ ...p, x: shortTime(p.time).x }));
     const level = pts.filter((p) => p.level_msl != null).map((p) => [p.x, p.level_msl!] as [
@@ -60,12 +69,37 @@ function StationCharts({ graph }: {
         number,
         number
     ]);
-    // One tick per day, at midnight.
-    const days = Array.from(new Set(graph.points.map((p) => p.time.slice(0, 10))));
+    const ahead = forecastSeries(forecast, level.at(-1));
+    // One tick per day, at midnight (the forecast can reach into the next day).
+    const days = Array.from(new Set([...graph.points.map((p) => p.time), ...(forecast?.points ?? []).map((p) => p.time)].map((t) => t.slice(0, 10))));
     const ticks = days.map((d) => shortTime(d + " 00:00")).map((t) => ({ x: t.x, label: t.label.replace(" 00น.", "") }));
+    const levelSeries = [{ label: "ระดับน้ำ", color: "#2f7fb5", points: level }, ...(ahead.length > 1 ? [{ label: "ค่าคาดการณ์จากแบบจำลอง", color: "#d97706", points: ahead, dashed: true }] : [])];
     return (<div className="station-charts">
-      {tr(level.length > 1 && <LineChart ariaLabel="กราฟระดับน้ำย้อนหลัง" unit="ม.รทก." xTicks={ticks} series={[{ label: "ระดับน้ำ", color: "#2f7fb5", points: level }]} refs={graph.bank_msl != null ? [{ y: graph.bank_msl, label: "ระดับตลิ่ง", color: "#d7263d" }] : []}/>)}
+      {tr(level.length > 1 && <LineChart ariaLabel={ahead.length > 1 ? "กราฟระดับน้ำย้อนหลังและค่าคาดการณ์" : "กราฟระดับน้ำย้อนหลัง"} unit="ม.รทก." xTicks={ticks} series={levelSeries} refs={graph.bank_msl != null ? [{ y: graph.bank_msl, label: "ระดับตลิ่ง", color: "#d7263d" }] : []}/>)}
       {tr(flow.length > 1 && <LineChart ariaLabel="กราฟปริมาณน้ำไหลผ่านย้อนหลัง" unit="ลบ.ม./วิ" xTicks={ticks} series={[{ label: "ปริมาณน้ำไหลผ่าน", color: "#0f766e", points: flow }]} refs={graph.qmax_m3s != null ? [{ y: graph.qmax_m3s, label: "ความจุลำน้ำ", color: "#d7263d" }] : []}/>)}
+    </div>);
+}
+const cm = (m: number) => Math.round(Math.abs(m) * 100);
+/** The forecast in words, labelled as a model and never as a warning level. */
+export function ForecastNote({ forecast }: {
+    forecast: RiverForecast | null;
+}) {
+    if (forecast && !forecast.available && forecast.reason === "not_chosen")
+        return <p className="source-note">{tr("สถานีนี้ไม่มีค่าคาดการณ์: ในปีที่ใช้ตรวจ แบบจำลองไม่แม่นกว่าการถือว่าระดับน้ำคงเดิม")}</p>;
+    if (!forecast?.available || !forecast.points?.length)
+        return null;
+    const errors = forecast.points.map((p) => p.test_mae_m).filter((e): e is number => e != null);
+    return (<div className="river-forecast">
+      <h4>{tr("ค่าคาดการณ์จากแบบจำลอง (ไม่ใช่ระดับเตือนภัย)")}</h4>
+      <ul>
+        {forecast.points.map((p) => (<li key={p.hours}>
+          {/* A clock time, not "in N hours": the model counts from the start of the latest hour, not from now. */}
+          <span>{tr("ราว ")}{tr(shortTime(p.time).label)}</span>
+          <strong>{p.level_msl.toFixed(2)}<small>{tr(" ม.รทก.")}</small></strong>
+          <small>{tr(Math.abs(p.change_m) < 0.01 ? "ทรงตัว" : p.change_m > 0 ? "ขึ้น " : "ลด ")}{Math.abs(p.change_m) < 0.01 ? "" : <>{cm(p.change_m)}{tr(" ซม.")}</>}{tr(" · ")}{tr(p.above_bank_m > 0 ? "สูงกว่าตลิ่ง " : "ต่ำกว่าตลิ่ง ")}{Math.abs(p.above_bank_m).toFixed(2)}{tr(" ม.")}</small>
+        </li>))}
+      </ul>
+      <small>{tr("คำนวณจากระดับน้ำย้อนหลัง 3 วันของสถานีนี้เท่านั้น ไม่รู้ฝนที่จะตกหรือน้ำจากต้นน้ำ")}{errors.length > 0 && <>{tr(" · ในปีทดสอบคลาดเคลื่อนเฉลี่ย ")}{Math.min(...errors.map(cm))}{tr("–")}{Math.max(...errors.map(cm))}{tr(" ซม.")}</>}{tr(" · ระดับเตือนภัยยังมาจากเกณฑ์ของทันภัย")}</small>
     </div>);
 }
 export function RiverDetail({ river, onClose }: {
@@ -77,6 +111,10 @@ export function RiverDetail({ river, onClose }: {
         data: StationGraph | null;
         error: boolean;
     } | null>(null);
+    const [forecast, setForecast] = useState<{
+        id: string;
+        data: RiverForecast | null;
+    } | null>(null);
     const id = river.id;
     useEffect(() => {
         if (!id)
@@ -85,9 +123,14 @@ export function RiverDetail({ river, onClose }: {
         api.riverGraph(id, 3)
             .then((data) => !cancelled && setGraph({ id, data, error: false }))
             .catch(() => !cancelled && setGraph({ id, data: null, error: true }));
+        // The forecast reuses the graph's cached request on the server; a failure just leaves it out.
+        api.riverForecast(id)
+            .then((data) => !cancelled && setForecast({ id, data }))
+            .catch(() => !cancelled && setForecast({ id, data: null }));
         return () => { cancelled = true; };
     }, [id]);
     const current = graph?.id === id ? graph : null;
+    const currentForecast = forecast?.id === id ? forecast.data : null;
     const trend = trendText(river.level_change_m);
     return (<div className="dam-detail">
       <div className="area-title">
@@ -114,7 +157,8 @@ export function RiverDetail({ river, onClose }: {
         <h3>{tr("ย้อนหลัง 3 วัน (รายชั่วโมง)")}</h3>
         {tr(!current && <p role="status">{tr("กำลังโหลดกราฟ\u2026")}</p>)}
         {tr(current?.error && <p className="data-notice">{tr("โหลดกราฟไม่สำเร็จ")}</p>)}
-        {tr(current?.data && <StationCharts graph={current.data}/>)}
+        {tr(current?.data && <StationCharts graph={current.data} forecast={currentForecast}/>)}
+        {tr(current?.data && <ForecastNote forecast={currentForecast}/>)}
       </div>
       <p className="source-note">{tr("ข้อมูล ณ ")}{tr(riverTime(river.time))}{tr(" \u00B7 ThaiWater (สสน.)")}{tr(river.agency && <>{tr(", สถานีของ")}{tr(AGENCY_TH[river.agency] ?? river.agency)}</>)}</p>
     </div>);

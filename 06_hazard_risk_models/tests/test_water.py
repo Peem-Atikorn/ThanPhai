@@ -109,15 +109,40 @@ def test_river_chunks_are_calendar_quarters_whatever_the_start_day():
 
 
 def test_the_fall_after_a_day_long_flood_is_kept(tmp_path):
-    # Up 7.5 m, 30 hours there, then down 1.5 m an hour: the centred 2-day median falls with the water, so no hour
-    # of the fall is cut as a bad run.
+    # Up 7.5 m, 30 hours there, then down 1.5 m an hour: after the fall the level sits far below the median of the
+    # last 2 days (still full of flood hours), but it got there smoothly, so it is water.
     flood = [5.0 + 1.5 * k for k in range(1, 6)] + [12.5] * 30 + [12.5 - 1.5 * k for k in range(1, 6)]
     _station(tmp_path, "2", [5.0] * 72 + flood + [5.0] * 72)
     assert station_series(tmp_path / "rivers" / "2").isna().sum() == 0
-    # A dip of the same size with no high water before it is still a bad run.
-    dip = [5.0 - 2.0 * k for k in range(1, 5)] + [-3.0] * 4 + [-3.0 + 2.0 * k for k in range(1, 5)]
-    _station(tmp_path, "1", [5.0] * 72 + dip + [5.0] * 72)
+    # The same drop in one hour is a bad run.
+    _station(tmp_path, "1", [5.0] * 72 + [-3.0] * 6 + [5.0] * 72)
     assert station_series(tmp_path / "rivers" / "1").min() > -3.0
+
+
+def test_cleaning_an_hour_never_uses_later_readings(raw):
+    # Live, the hours after the latest reading are not known: cleaning the history up to any hour must give the same
+    # value for that hour as cleaning the whole history (a flood rising 6 m and a bad 20 m run included).
+    from risk_models.water.dataset import clean_level
+
+    start = datetime(2024, 1, 1)
+    levels = [5.0] * 72 + [5.0 + 1.5 * k for k in range(1, 5)] + [11.0] * 30 + [11.0 - 2.0 * k for k in range(1, 4)]
+    levels += [5.0] * 40 + [25.0] * 6 + [5.0] * 30
+    rows = [[(start + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M"), v, None] for i, v in enumerate(levels)]
+    whole = clean_level(rows)
+    for n in range(80, len(rows), 7):
+        part = clean_level(rows[:n])
+        assert part.iloc[-1] == pytest.approx(whole.loc[part.index[-1]]) or (np.isnan(part.iloc[-1]) and np.isnan(whole.loc[part.index[-1]])), n
+
+
+def test_an_unconfirmed_jump_in_the_newest_reading_is_not_used(tmp_path):
+    from risk_models.water.dataset import clean_level
+
+    start = datetime(2024, 1, 1)
+    rows = [[(start + timedelta(minutes=10 * i)).strftime("%Y-%m-%d %H:%M"), 5.0, None] for i in range(6 * 72)]
+    rows.append([(start + timedelta(minutes=10 * len(rows))).strftime("%Y-%m-%d %H:%M"), 8.0, None])
+    assert clean_level(rows).iloc[-1] == pytest.approx(5.0)  # a 3 m glitch in the latest reading is left out
+    rows.append([(start + timedelta(minutes=10 * len(rows))).strftime("%Y-%m-%d %H:%M"), 8.1, None])
+    assert clean_level(rows).iloc[-1] > 7.0  # confirmed by the next reading: it is water
 
 
 def test_a_step_out_of_the_bank_range_is_a_datum_change_even_if_the_flow_follows(tmp_path):
@@ -199,6 +224,41 @@ def test_splits_leave_out_rows_whose_target_reaches_the_next_period():
     rows = pd.DataFrame({"time": pd.date_range("2024-12-31 12:00", periods=24, freq="h")})
     kept = _before(rows, pd.Timestamp("2025-01-01"), pd.Timedelta(hours=6))
     assert kept["time"].max() == pd.Timestamp("2024-12-31 17:00")
+
+
+def test_live_features_match_the_training_rows(raw):
+    # The live forecast must see exactly what training saw for the same hour: same cleaning, same features.
+    from risk_models.water.dataset import LIVE_RIVER_FEATURES, _read, live_features
+
+    table = river_table(raw).query("station_id == '1'").set_index("time")
+    rows = _read(raw / "rivers" / "1" / "2024-01-01.json.gz")["rows"]
+    t = table.index[-1]
+    row = live_features(rows, bank=10.0, now=t + pd.Timedelta(minutes=30))
+    assert row["time"] == t
+    for name in LIVE_RIVER_FEATURES:
+        assert row[name] == pytest.approx(table.loc[t, name]), name
+    assert np.isnan(row["basin_d6h"]) and np.isnan(row["rain_24h"])  # not known live
+    # Readings that stopped more than 3 hours before now give no row.
+    assert live_features(rows, bank=10.0, now=t + pd.Timedelta(hours=4)) is None
+
+
+def test_forecast_change_only_at_chosen_horizons():
+    from risk_models.water.dataset import LIVE_RIVER_FEATURES
+    from risk_models.water.model import WaterModels, forecast_change
+
+    class Const:
+        def __init__(self, v):
+            self.v = v
+
+        def predict(self, x):
+            return np.full(len(x), self.v)
+
+    models = WaterModels(river={}, river_features=[], trend_damping={}, dam=None, dam_features=[], dam_scale={},
+                         version="t", river_live={6: Const(0.1), 12: Const(0.2)},
+                         river_live_features=list(LIVE_RIVER_FEATURES), live_stations={6: ["A"], 12: ["B"]})
+    row = pd.Series({name: 0.0 for name in LIVE_RIVER_FEATURES})
+    assert forecast_change(models, "A", row) == {6: pytest.approx(0.1)}
+    assert forecast_change(models, "C", row) == {}
 
 
 def test_river_targets_are_future_change_and_basin_excludes_itself(raw):

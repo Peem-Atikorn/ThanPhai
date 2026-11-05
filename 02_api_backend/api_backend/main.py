@@ -286,6 +286,23 @@ async def river_graph(station_id: str, days: int = Query(3, ge=1, le=7)) -> dict
     return {"station_id": station_id, **graph}
 
 
+@app.get("/v1/rivers/{station_id}/forecast")
+async def river_forecast(station_id: str) -> dict:
+    """Model forecast of the water level at +6/+12/+24 h (display only, never an alert level or river status).
+
+    `available` is false with a `reason` when there is no model, the station was not chosen (the model did not beat
+    "no change" there in the validation year), it has no bank level, or its latest reading is over 3 hours old.
+    """
+    svc = await fresh_service()
+    try:
+        forecast = await svc.river_forecast(station_id)
+    except httpx.HTTPError:
+        raise HTTPException(502, "ThaiWater did not answer; try again later")
+    if forecast is None:
+        raise HTTPException(404, f"unknown station {station_id}")
+    return forecast
+
+
 @app.get("/v1/air/stations")
 async def air_stations() -> dict:
     """Air4Thai stations with a current PM2.5 reading (24-hour average), worst first."""

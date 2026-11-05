@@ -55,7 +55,8 @@ def river_stations(client: httpx.Client) -> list[dict]:
         bank = next((r for r in group if r.extra.get("bank_quality") == "ok" and r.extra.get("min_bank") is not None), None)
         if bank is None or not any(r.extra.get("discharge_m3s") or r.extra.get("is_key_station") for r in group):
             continue
-        main = sorted(group, key=lambda r: not r.extra.get("is_key_station"))[0]
+        # The same choice as the app's river list (hazard_service), so a trained station has the id the page asks for.
+        main = sorted(group, key=lambda r: (not r.extra.get("is_key_station"), r.extra.get("discharge_m3s") is None))[0]
         first = lambda key, group=group: next((r.extra.get(key) for r in group if r.extra.get(key) is not None), None)  # noqa: E731
         stations.append({"id": main.station_id, "code": code, "name_th": first("name_th"), "agency": first("agency_en"),
                          "basin_th": first("basin_th"), "river_th": first("river_name"), "province_code": province,

@@ -15,7 +15,8 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
-from risk_models.water.dataset import DAM_FEATURES, RIVER_FEATURES, add_dam_climatology, dam_table, river_table, station_rain
+from risk_models.water.dataset import (DAM_FEATURES, LIVE_RIVER_FEATURES, RIVER_FEATURES, add_dam_climatology, dam_table,
+                                       river_table, station_rain)
 from risk_models.water.model import WaterModels, train_dams, train_rivers
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,6 +36,8 @@ if __name__ == "__main__":
     saved = joblib.load(model_path) if model_path.exists() else None
     river_models, damping = (saved.river, saved.trend_damping) if saved else ({}, {})
     dam_model, dam_scale = (saved.dam, saved.dam_scale) if saved else (None, {})
+    live_models = getattr(saved, "river_live", {}) if saved else {}
+    live_stations = getattr(saved, "live_stations", {}) if saved else {}
 
     if args.part in ("dams", "all"):
         started = time.time()
@@ -63,11 +66,20 @@ if __name__ == "__main__":
                   "seconds": round(time.time() - started)})
         metrics["rivers_level_change"] = m
         print(json.dumps(m, ensure_ascii=False, indent=1), flush=True)
+        # The model the app serves: the same split and settings, on what one station's own readings give live.
+        started = time.time()
+        live_models, _, lm = train_rivers(table, valid_start, test_start, features=LIVE_RIVER_FEATURES)
+        live_stations = {int(k[:-1]): set(v["stations_better_on_valid"]) for k, v in lm.items() if k.endswith("h")}
+        lm["seconds"] = round(time.time() - started)
+        metrics["rivers_live"] = lm
+        print(json.dumps({k: v["test"]["model"] for k, v in lm.items() if k.endswith("h")}, indent=1), flush=True)
 
     river_features = metrics.get("rivers_level_change", {}).get("features", list(RIVER_FEATURES))
     models = WaterModels(river=river_models, river_features=river_features, trend_damping=damping, dam=dam_model,
                          dam_features=list(DAM_FEATURES), dam_scale=dam_scale,
-                         version=datetime.now().strftime("%Y%m%d-%H%M"), metrics=metrics)
+                         version=datetime.now().strftime("%Y%m%d-%H%M"), metrics=metrics, river_live=live_models,
+                         river_live_features=metrics.get("rivers_live", {}).get("features", list(LIVE_RIVER_FEATURES)),
+                         live_stations=live_stations)
     joblib.dump(models, model_path)
     metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"saved {model_path}", flush=True)

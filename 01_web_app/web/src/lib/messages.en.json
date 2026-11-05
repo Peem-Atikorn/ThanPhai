@@ -623,5 +623,17 @@
   "ราว": "around",
   "สูงสุดใน 24 ชม.": "highest in 24 h",
   "สูงสุดใน 24 ชม. ราว": "highest in 24 h, around",
-  "ระดับภัยฝนและพายุ (จากปริมาณฝน):": "Rain and storm level (from rainfall):"
+  "ระดับภัยฝนและพายุ (จากปริมาณฝน):": "Rain and storm level (from rainfall):",
+  "ค่าคาดการณ์จากแบบจำลอง": "Model forecast",
+  "กราฟระดับน้ำย้อนหลังและค่าคาดการณ์": "Water level history and forecast",
+  "ค่าคาดการณ์จากแบบจำลอง (ไม่ใช่ระดับเตือนภัย)": "Model forecast (not an alert level)",
+  "ชม.": "h",
+  "ซม.": "cm",
+  "ขึ้น": "up",
+  "ลด": "down",
+  "สูงกว่าตลิ่ง": "above bank level",
+  "สถานีนี้ไม่มีค่าคาดการณ์: ในปีที่ใช้ตรวจ แบบจำลองไม่แม่นกว่าการถือว่าระดับน้ำคงเดิม": "No forecast at this station: in the validation year the model was no better than assuming the level stays the same",
+  "คำนวณจากระดับน้ำย้อนหลัง 3 วันของสถานีนี้เท่านั้น ไม่รู้ฝนที่จะตกหรือน้ำจากต้นน้ำ": "Computed from this station's last 3 days of levels only; it does not know coming rain or water from upstream",
+  "· ในปีทดสอบคลาดเคลื่อนเฉลี่ย": "· mean error in the test year",
+  "· ระดับเตือนภัยยังมาจากเกณฑ์ของทันภัย": "· alert levels still come from ThanPhai's rules"
 }
