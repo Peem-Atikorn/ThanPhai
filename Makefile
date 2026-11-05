@@ -1,7 +1,7 @@
 PY ?= .venv/Scripts/python
 MODULES = 02_api_backend 03_hazard_ai_agent 04_external_data_services 05_geo_data_integration 06_hazard_risk_models 07_knowledge_decision_llm 08_alert_feedback_monitoring
 
-.PHONY: setup data test test-live snapshot ndvi fire-model landslide api web up down logs
+.PHONY: setup data test test-live snapshot ndvi fire-model water-model landslide api web up down logs
 
 setup:
 	python -m venv .venv
@@ -35,6 +35,11 @@ landslide:
 fire-model:
 	$(PY) scripts/download_firms_history.py
 	$(PY) scripts/train_fire_model.py
+
+# Water-level (+6/12/24 h) and 7-day dam-inflow models from ThaiWater history (download ~2 h, resumable; ~120 MB)
+water-model:
+	$(PY) scripts/download_water_history.py
+	$(PY) scripts/train_water_model.py
 
 api:
 	$(PY) -m uvicorn api_backend.main:app --port 8002
