@@ -44,6 +44,10 @@ DAILY_RAIN_WORDS = ("ตากผ้า", "ซักผ้า", "พกร่ม
                     "ล้างรถ", "umbrella", "laundry")
 PREPARE_WORDS = ("เตรียม", "ต้องทำ", "ทำยังไง", "ทำอย่างไร", "ควรทำ", "อพยพ", "prepare", "what should")
 EMERGENCY_WORDS = ("ช่วยด้วย", "ติดอยู่", "บาดเจ็บ", "จมน้ำ", "ฉุกเฉิน", "help", "trapped", "injured")
+# Questions about a place that are not about hazards ("ชลบุรี ของกินอร่อยไหม"): without these the place name
+# alone made them risk questions and the reply was a hazard report.
+OFF_TOPIC_WORDS = ("อร่อย", "ของกิน", "ร้านอาหาร", "ร้านกาแฟ", "คาเฟ่", "กินอะไร", "ของฝาก", "ที่เที่ยว", "เที่ยวไหน",
+                   "เที่ยวที่ไหน", "ที่พัก", "โรงแรม", "รีสอร์ท", "ช้อปปิ้ง", "ราคา", "restaurant", "food", "hotel", "cafe")
 SOURCE_WORDS = ("แหล่งข้อมูล", "ข้อมูลจากไหน", "ข้อมูลมาจากไหน", "ที่มาของข้อมูล", "ใช้ข้อมูลจาก", "data source")
 GREETING = re.compile(r"(?:(?:สวัสดี|หวัดดี)(?:\s*(?:ครับ|ค่ะ|คะ))?|hello|hi|hey)[!?.\s]*")
 # A past period or a count turns an earthquake question about a place into the list of events there.
@@ -181,6 +185,8 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
     if data_intent:
         return Understanding(data_intent, [], areas, start, end, language, regions=regions)
     hazards = detect_hazards(text)
+    if not hazards and any(w in lowered for w in OFF_TOPIC_WORDS):
+        return Understanding("out_of_scope", [], areas, start, end, language)
     if not hazards and any(w in lowered for w in DAILY_RAIN_WORDS):
         hazards = [HazardType.RAIN_STORM]  # "ตากผ้าได้ไหม" is a rain question about one place
     ranking = any(w in lowered for w in ("จังหวัดไหน", "ที่ไหน", "เสี่ยงสุด", "มากที่สุด", "highest", "most at risk"))

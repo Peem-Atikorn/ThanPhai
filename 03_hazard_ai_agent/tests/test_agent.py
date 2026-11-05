@@ -757,3 +757,17 @@ def test_a_source_line_the_llm_copies_is_not_shown_twice():
 
     answer = HazardAgent(GAZ, DamTools(), explainer=reword).ask("Nong Pla Lai dam level?", NOW)
     assert answer.llm_used and answer.text.count("ที่มา:") == answer.facts.count("ที่มา:") == 1
+
+
+@pytest.mark.parametrize("question", ["อยุธยา ของกินอร่อยมั้ย", "เสนามีที่เที่ยวไหม", "โรงแรมในนนทบุรีราคาเท่าไหร่"])
+def test_off_topic_question_about_a_place_is_redirected_not_reported(question):
+    tools = FakeTools()
+    answer = HazardAgent(GAZ, tools).ask(question, NOW)
+    assert answer.intent == "out_of_scope" and answer.area is not None
+    assert "แนะนำไม่ได้" in answer.text and "ฝนตกไหม" in answer.text
+    assert tools.calls == []  # no hazard lookup, so no hazard report
+
+
+def test_hazard_question_with_a_travel_word_stays_a_risk_question():
+    assert understand("ไปเที่ยวอยุธยาฝนจะตกไหม", GAZ, NOW).intent == "risk"
+    assert understand("ที่เที่ยวอยุธยาน้ำท่วมไหม", GAZ, NOW).intent == "risk"
