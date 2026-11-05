@@ -80,6 +80,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert(nodes(metrics).some(n => n.props.className === 'risk-badge level-NORMAL'), 'API level wins even when value exceeds a frontend threshold');
   const rainCard = nodes(metrics).filter(n => n.type === 'article')[2];
   assert(content(rainCard).includes('โอกาสฝนตก') && content(rainCard).includes('63') && content(rainCard).includes('ราว 18:00 น.') && content(rainCard).includes('แบบจำลอง'), 'Rain card shows the highest chance, its hour, and says it is a model');
+  const rainBadge = nodes(rainCard).find(n => String(n.props.className).startsWith('risk-badge'));
+  assert(content(rainBadge).includes('ระดับภัยฝนและพายุ (จากปริมาณฝน): ปกติ'), 'Rain card level says it is the rain/storm level, not a level for the chance of rain');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: { ...metricArea0(), assessments: [{ hazard: 'rain_storm', level: 'NORMAL', observations: { rain_chance_max_24h: 25, rain_chance_peak_hour: 7 }, sources: [] }] } });
   assert(content(nodes(metrics).filter(n => n.type === 'article')[2]).includes('25') && content(metrics).includes('ราว 07:00 น.') && !content(metrics).includes('63'), 'Selected area shows its own chance of rain and hour');
   const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_now: 27, heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
