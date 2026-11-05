@@ -493,12 +493,12 @@ body { background: var(--cc-outer); }
 .landscape-shell .map-canvas { flex: 1; min-height: 0; height: auto; }
 .landscape-shell .map-supplement { flex: 0 0 auto; border-top: 1px solid var(--line); background: var(--cc-panel-deep); }
 .landscape-shell .map-supplement > summary { cursor: pointer; padding: 8px 14px; font-size: 12px; color: var(--cc-accent); }
-.landscape-shell .map-supplement-body { max-height: min(22dvh, 180px); overflow-y: auto; overscroll-behavior: contain; }
+.landscape-shell .map-supplement-body { max-height: min(22dvh, 180px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .landscape-shell .detail-sidebar { min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; gap: 8px; }
 .landscape-shell .detail-sidebar > :is(.area-panel,.dam-panel) { flex: 1; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-color: var(--cc-accent) var(--cc-panel-deep); }
 .landscape-shell .detail-sidebar > [hidden] { display: none; }
 .landscape-shell .quality-list { max-height: none; overflow: visible; }
-.landscape-shell .journey-dashboard .assistant-panel { flex: 0 0 auto; min-height: 0; max-height: 48%; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px; }
+.landscape-shell .journey-dashboard .assistant-panel { flex: 0 0 auto; min-height: 0; max-height: 48%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 10px 14px; }
 .landscape-shell .assistant-heading { min-height: 30px; margin: 0; cursor: pointer; list-style: none; }
 .landscape-shell .assistant-heading::-webkit-details-marker { display: none; }
 .landscape-shell .assistant-heading::after { content: '+'; margin-left: auto; color: var(--cc-accent); font-size: 22px; }
