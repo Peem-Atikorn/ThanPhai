@@ -108,6 +108,99 @@ def test_river_chunks_are_calendar_quarters_whatever_the_start_day():
     assert a[-1] == (date(2026, 10, 1), date(2026, 11, 5)) and all(x[1] == y[0] for x, y in zip(a, a[1:]))
 
 
+def test_the_fall_after_a_day_long_flood_is_kept(tmp_path):
+    # Up 7.5 m, 30 hours there, then down 1.5 m an hour: the centred 2-day median falls with the water, so no hour
+    # of the fall is cut as a bad run.
+    flood = [5.0 + 1.5 * k for k in range(1, 6)] + [12.5] * 30 + [12.5 - 1.5 * k for k in range(1, 6)]
+    _station(tmp_path, "2", [5.0] * 72 + flood + [5.0] * 72)
+    assert station_series(tmp_path / "rivers" / "2").isna().sum() == 0
+    # A dip of the same size with no high water before it is still a bad run.
+    dip = [5.0 - 2.0 * k for k in range(1, 5)] + [-3.0] * 4 + [-3.0 + 2.0 * k for k in range(1, 5)]
+    _station(tmp_path, "1", [5.0] * 72 + dip + [5.0] * 72)
+    assert station_series(tmp_path / "rivers" / "1").min() > -3.0
+
+
+def test_a_step_out_of_the_bank_range_is_a_datum_change_even_if_the_flow_follows(tmp_path):
+    # Flow is often computed from the level, so it can jump with a new datum: 5 m -> 70 m beside a 10 m bank.
+    start = datetime(2024, 1, 1)
+    before = [[(start + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M"), 5.0, 10.0] for i in range(24 * 30)]
+    after = [[(start + timedelta(hours=24 * 30 + 20 + i)).strftime("%Y-%m-%d %H:%M"), 70.0, 500.0] for i in range(24 * 8)]
+    _gz(tmp_path / "rivers" / "4" / "2024-01-01.json.gz", {"station_id": "4", "rows": before + after})
+    assert station_series(tmp_path / "rivers" / "4", bank=10.0).first_valid_index() > pd.Timestamp(start)
+    assert station_series(tmp_path / "rivers" / "4").first_valid_index() == pd.Timestamp(start)  # no bank: flow decides
+
+
+def test_a_station_without_a_basin_gets_no_basin_signal(raw):
+    stations = json.loads((raw / "stations.json").read_text(encoding="utf-8"))
+    for s in stations:
+        s["basin_th"] = None
+    (raw / "stations.json").write_text(json.dumps(stations), encoding="utf-8")
+    table = river_table(raw)
+    assert table["basin_d6h"].isna().all() and table["basin_d24h"].isna().all()
+
+
+def test_rain_sums_are_missing_where_rain_is_missing(raw):
+    # ERA5 stops a few days before today: the last hours have no rain, which must not read as 0 mm.
+    hours = pd.date_range("2024-01-01", periods=24 * 60, freq="h")
+    _gz(raw / "rain" / "15.00_100.00.json.gz", {"lat": 15.0, "lon": 100.0, "time": [t.strftime("%Y-%m-%dT%H:%M") for t in hours],
+                                                 "precipitation": [1.0] * len(hours)})
+    one = river_table(raw, station_rain(raw)).query("station_id == '1'").set_index("time")
+    assert one.loc["2024-02-01 12:00", "rain_72h"] == pytest.approx(72.0)
+    late = one.loc[one.index > hours[-1]]
+    assert len(late) and late["rain_6h"].isna().all() and late["basin_rain_24h"].isna().all()
+
+
+def test_saved_chunks_of_any_shape_cover_a_quarter():
+    from datetime import date
+
+    from risk_models.water.download import covered
+
+    old = [("2021-11-06", "2022-02-04"), ("2022-02-04", "2022-05-05")]  # 90-day chunks of the first version
+    assert covered(date(2022, 1, 1), date(2022, 4, 1), old)
+    assert not covered(date(2021, 10, 1), date(2022, 1, 1), old)  # October 2021 was never fetched
+    assert not covered(date(2022, 4, 1), date(2022, 7, 1), old)
+
+
+class _FakeClient:
+    """Answers with the queued replies in order; an exception in the queue is raised."""
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+
+    def get(self, url, params=None, timeout=None):
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def test_downloads_survive_a_timeout_and_never_save_an_empty_reply(tmp_path, monkeypatch):
+    from datetime import date
+
+    import httpx
+
+    from risk_models.water import download
+
+    monkeypatch.setattr(download.time, "sleep", lambda s: None)
+    request = httpx.Request("GET", "https://example.test")
+    rain = httpx.Response(200, json={"hourly": {"time": ["2024-01-01T00:00"], "precipitation": [0.5]}}, request=request)
+    station = {"id": "9", "lat": 15.0, "lon": 100.0}
+    counts = download.download_rain(tmp_path, [station], date(2024, 1, 1), date(2024, 1, 2),
+                                    _FakeClient(httpx.ReadTimeout("slow"), rain))
+    assert counts["fetched"] == 1 and (tmp_path / "rain" / "15.00_100.00.json.gz").exists()
+    empty = httpx.Response(200, json={"result": "OK", "data": {"graph_data": []}}, request=request)
+    counts = download.download_rivers(tmp_path, [station], date(2024, 1, 1), date(2024, 2, 1), _FakeClient(empty))
+    assert counts["empty"] == 1 and not (tmp_path / "rivers" / "9").exists()
+
+
+def test_splits_leave_out_rows_whose_target_reaches_the_next_period():
+    from risk_models.water.model import _before
+
+    rows = pd.DataFrame({"time": pd.date_range("2024-12-31 12:00", periods=24, freq="h")})
+    kept = _before(rows, pd.Timestamp("2025-01-01"), pd.Timedelta(hours=6))
+    assert kept["time"].max() == pd.Timestamp("2024-12-31 17:00")
+
+
 def test_river_targets_are_future_change_and_basin_excludes_itself(raw):
     table = river_table(raw)
     assert set(RIVER_FEATURES) <= set(table.columns)
@@ -144,9 +237,15 @@ def test_dam_target_is_next_seven_days_and_climatology_uses_training_years(tmp_p
     days = pd.date_range("2004-01-01", "2010-12-31", freq="D")
     inflow = (np.arange(len(days)) % 10).astype(float)
     rows = [{"year": y, "data": [{"date": str(d.date()), "value": v} for d, v in zip(days, inflow) if d.year == y]} for y in range(2004, 2011)]
-    for series in ("dam_inflow", "dam_released", "dam_storage"):
+    for series in ("dam_inflow", "dam_released"):
         _gz(tmp_path / "dams" / f"7_{series}.json.gz", {"raw": {"data": {"graph_data": rows}}})
+    # Storage peaks at 90 in the test years (2010) and 9 before: the capacity must come from the training years.
+    storage = [{"year": y, "data": [{"date": str(d.date()), "value": v * (10 if y == 2010 else 1)}
+                                    for d, v in zip(days, inflow) if d.year == y]} for y in range(2004, 2011)]
+    _gz(tmp_path / "dams" / "7_dam_storage.json.gz", {"raw": {"data": {"graph_data": storage}}})
     (tmp_path / "dams.json").write_text(json.dumps([{"id": 7, "name_th": "ทดสอบ"}]), encoding="utf-8")
+    fitted = dam_table(tmp_path, fit_end=pd.Timestamp("2008-01-01")).set_index("time")
+    assert fitted["storage_pct"].loc[:"2007-12-31"].max() == pytest.approx(100.0)
     table = dam_table(tmp_path)
     row = table.set_index("time").loc["2005-03-01"]
     expected = sum(inflow[days.get_loc(pd.Timestamp("2005-03-01")) + k] for k in range(1, 8))

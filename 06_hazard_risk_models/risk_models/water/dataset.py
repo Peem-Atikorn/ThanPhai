@@ -22,6 +22,7 @@ MAX_JUMP_M = 1.5
 MAX_STEP_M = 3.0
 STEP_WINDOW = np.timedelta64(7, "D")
 FLOW_STEP_RATIO = 2.0
+BANK_BELOW_M, BANK_ABOVE_M = 40.0, 15.0  # readings outside bank-40 m .. bank+15 m are not water
 MAX_RUN_M = 5.0
 RAIN_CELL_DEG = 0.5
 # Some stations report 9999.9 (or similar) for "no reading".
@@ -64,8 +65,18 @@ def _flow_follows(before: np.ndarray, after: np.ndarray, level_rose: bool) -> bo
     return ratio >= FLOW_STEP_RATIO if level_rose else ratio <= 1 / FLOW_STEP_RATIO
 
 
-def station_series(folder: Path) -> pd.Series:
-    """One station's hourly level (m MSL), indexed by Thai local time, cleaned of spikes."""
+def plausible(level, bank: float | None):
+    """True where a level can be water at a station with this bank (bank-40 m .. bank+15 m); everywhere if no bank."""
+    if bank is None:
+        return np.ones_like(np.asarray(level, dtype=float), dtype=bool) if np.ndim(level) else True
+    return (level > bank - BANK_BELOW_M) & (level < bank + BANK_ABOVE_M)
+
+
+def station_series(folder: Path, bank: float | None = None) -> pd.Series:
+    """One station's hourly level (m MSL), indexed by Thai local time, cleaned of spikes.
+
+    `bank` (m MSL) is used only to tell a flood from a datum change: a flood stays within the plausible range.
+    """
     rows = []
     for path in sorted(folder.glob("*.json.gz")):
         rows.extend(_read(path)["rows"])
@@ -94,15 +105,20 @@ def station_series(folder: Path) -> pd.Series:
         before, after = values[start:i], values[i:stop]
         if not (len(before) and len(after) and abs(np.median(after) - np.median(before)) > MAX_STEP_M):
             continue
-        if _flow_follows(flow[start:i], flow[i:stop], np.median(after) > np.median(before)):
-            continue  # the flow moved with the level: a flood (or its end) that rose while the sensor was off
+        # The flow moved with the level: a flood (or its end) that rose while the sensor was off. Flow is often
+        # computed from the level (a rating curve), so it can follow a datum change too; a flood also has to stay
+        # within the bank range on both sides (บ้านท่าบุญมี "rose" 15 -> 79 m beside an 18 m bank, flow 1.4 -> 71).
+        if (_flow_follows(flow[start:i], flow[i:stop], np.median(after) > np.median(before))
+                and plausible(np.median(before), bank) and plausible(np.median(after), bank)):
+            continue
         level = level.iloc[i:]
         break
     hourly = level.resample("1h").mean()
     # Runs of bad readings survive the checks above (Ct.4 sat 20 m low for 12 hours on 2023-04-04): hours more than
     # MAX_RUN_M from the median of the two days around them. A run is kept when it is above that median and the level
     # entered and left it without a jump of more than MAX_STEP_M in an hour: that is a flash flood (a river can rise
-    # 5-8 m in a few hours), while bad runs in this data start or end with a jump of 5 m or more (272 of 283).
+    # 5-8 m in a few hours), while bad runs in this data start or end with a jump of 5 m or more (272 of 283). The
+    # fall after a long flood is not cut: the centred median falls with it. Only a short dip sits far below it.
     median = hourly.rolling(49, center=True, min_periods=12).median()
     far = (hourly - median).abs() > MAX_RUN_M
     if far.any():
@@ -144,21 +160,26 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
     stations = json.loads((raw_dir / "stations.json").read_text(encoding="utf-8"))
     series = {}
     for s in stations:
-        lv = station_series(raw_dir / "rivers" / s["id"])
         bank = s.get("bank_msl")
-        if lv.empty or bank is None:
+        if bank is None:
+            continue
+        lv = station_series(raw_dir / "rivers" / s["id"], bank)
+        if lv.empty:
             continue
         # where(), not a filter: every shift() and rolling() below counts rows as hours, so the index must stay hourly.
-        lv = lv.where((lv > bank - 40) & (lv < bank + 15))
+        lv = lv.where(plausible(lv, bank))
         if lv.count() >= 24 * 60:  # at least ~60 days of readings
             series[s["id"]] = lv
     frames = []
     # Basin signal: mean change of every station in the basin (each station's own change is removed below).
     changes = {sid: pd.DataFrame({"d6": lv - lv.shift(6), "d24": lv - lv.shift(24)}) for sid, lv in series.items()}
-    basin_of = {s["id"]: s.get("basin_th") or "?" for s in stations}
+    # A station without a basin name has no basin signal (NaN), rather than sharing one with every other such station.
+    basin_of = {s["id"]: s.get("basin_th") or None for s in stations}
     basin_sum, basin_n = {}, {}
     for sid, ch in changes.items():
         b = basin_of[sid]
+        if b is None:
+            continue
         filled = ch.fillna(0.0)
         count = ch.notna().astype(float)
         basin_sum[b] = filled if b not in basin_sum else basin_sum[b].add(filled, fill_value=0.0)
@@ -167,7 +188,7 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
     # Hourly basin rain: the mean over the basin's stations (each station's cell), one series per basin.
     basin_rain = {}
     if rain is not None:
-        for b in set(basin_of.values()):
+        for b in set(basin_of.values()) - {None}:
             cols = [sid for sid in rain.columns if basin_of.get(sid) == b]
             if cols:
                 basin_rain[b] = rain[cols].mean(axis=1)
@@ -179,15 +200,23 @@ def river_table(raw_dir: Path, rain: pd.DataFrame | None = None) -> pd.DataFrame
         df["to_bank_m"] = lv - s["bank_msl"]
         df["std24h"] = lv.rolling(24, min_periods=12).std()
         b, ch = basin_of[sid], changes[sid]
-        others_n = basin_n[b].reindex(df.index) - ch.notna().astype(float).reindex(df.index)
-        others_sum = basin_sum[b].reindex(df.index) - ch.fillna(0.0).reindex(df.index)
-        df["basin_d6h"] = (others_sum["d6"] / others_n["d6"]).where(others_n["d6"] > 0)
-        df["basin_d24h"] = (others_sum["d24"] / others_n["d24"]).where(others_n["d24"] > 0)
+        if b is None:
+            df["basin_d6h"] = df["basin_d24h"] = np.nan
+        else:
+            others_n = basin_n[b].reindex(df.index) - ch.notna().astype(float).reindex(df.index)
+            others_sum = basin_sum[b].reindex(df.index) - ch.fillna(0.0).reindex(df.index)
+            df["basin_d6h"] = (others_sum["d6"] / others_n["d6"]).where(others_n["d6"] > 0)
+            df["basin_d24h"] = (others_sum["d24"] / others_n["d24"]).where(others_n["d24"] > 0)
+        # A sum needs every hour of its window: hours ERA5 has not published yet (the last ~5 days) are missing,
+        # and counting them as 0 mm would look like a dry spell.
         if rain is not None and sid in rain.columns:
             r = rain[sid].reindex(df.index)
-            df["rain_6h"], df["rain_24h"], df["rain_72h"] = (r.rolling(n, min_periods=1).sum() for n in (6, 24, 72))
-            basin = basin_rain[b].reindex(df.index)
-            df["basin_rain_24h"], df["basin_rain_72h"] = (basin.rolling(n, min_periods=1).sum() for n in (24, 72))
+            df["rain_6h"], df["rain_24h"], df["rain_72h"] = (r.rolling(n, min_periods=n).sum() for n in (6, 24, 72))
+            if b in basin_rain:
+                basin = basin_rain[b].reindex(df.index)
+                df["basin_rain_24h"], df["basin_rain_72h"] = (basin.rolling(n, min_periods=n).sum() for n in (24, 72))
+            else:
+                df["basin_rain_24h"] = df["basin_rain_72h"] = np.nan
         else:
             df["rain_6h"] = df["rain_24h"] = df["rain_72h"] = df["basin_rain_24h"] = df["basin_rain_72h"] = np.nan
         doy = df.index.dayofyear.to_numpy() * 2 * np.pi / 365.25
@@ -223,17 +252,26 @@ def _dam_series(raw_dir: Path, dam_id: int, series: str) -> pd.Series:
     return s.loc[: s.last_valid_index()].asfreq("1D") if s.notna().any() else pd.Series(dtype=float)
 
 
-def dam_table(raw_dir: Path) -> pd.DataFrame:
-    """Rows of (dam, day) with DAM_FEATURES and target y7 = inflow of the next 7 days (million m³)."""
+def dam_table(raw_dir: Path, fit_end: pd.Timestamp | None = None) -> pd.DataFrame:
+    """Rows of (dam, day) with DAM_FEATURES and target y7 = inflow of the next 7 days (million m³).
+
+    The spike limit and the storage capacity are taken from days before `fit_end` (the training years), so later
+    years cannot shape the training rows; all days when it is None or the dam has no days before it.
+    """
     dams = json.loads((raw_dir / "dams.json").read_text(encoding="utf-8"))
     frames = []
+
+    def fit_part(s: pd.Series) -> pd.Series:
+        part = s.loc[: fit_end - pd.Timedelta(days=1)] if fit_end is not None else s
+        return part if part.notna().any() else s
+
     for d in dams:
         inflow = _dam_series(raw_dir, d["id"], "dam_inflow").loc[DAM_START:]
         if inflow.count() < 365 * 3:
             continue
         inflow = inflow.where(inflow >= 0)
         # A day far above anything else this dam has recorded is a typing or unit error, not a flood.
-        inflow = inflow.where(inflow <= DAM_SPIKE_FACTOR * inflow.quantile(0.99))
+        inflow = inflow.where(inflow <= DAM_SPIKE_FACTOR * fit_part(inflow).quantile(0.99))
         released = _dam_series(raw_dir, d["id"], "dam_released").reindex(inflow.index)
         storage = _dam_series(raw_dir, d["id"], "dam_storage").reindex(inflow.index)
         df = pd.DataFrame({"inflow": inflow})
@@ -242,7 +280,7 @@ def dam_table(raw_dir: Path) -> pd.DataFrame:
         df["inflow_mean30"] = inflow.rolling(30, min_periods=20).mean()
         df["inflow_trend7"] = df["inflow_mean7"] - df["inflow_mean7"].shift(7)
         df["released_mean7"] = released.rolling(7, min_periods=5).mean()
-        cap = storage.max()
+        cap = fit_part(storage).max()
         df["storage_pct"] = storage / cap * 100 if cap and cap > 0 else np.nan
         df["storage_change7"] = storage - storage.shift(7)
         df["y7"] = inflow[::-1].rolling(DAM_HORIZON_D, min_periods=DAM_HORIZON_D).sum()[::-1].shift(-1)
@@ -257,7 +295,7 @@ def dam_table(raw_dir: Path) -> pd.DataFrame:
 
 def add_dam_climatology(table: pd.DataFrame, train_end: pd.Timestamp) -> pd.DataFrame:
     """Mean 7-day inflow for each dam and day of year, from training years only (no look at later years)."""
-    train = table[table["time"] < train_end]
+    train = table[table["time"] + pd.Timedelta(days=DAM_HORIZON_D) < train_end]  # whole 7-day target before train_end
     parts = []
     for dam_id, rows in train.groupby("dam_id"):
         by_day = rows.groupby("doy")["y7"].mean().reindex(range(1, 367)).interpolate(limit_direction="both")

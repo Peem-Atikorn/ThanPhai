@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 
-from risk_models.water.dataset import DAM_FEATURES, HORIZONS_H, RIVER_FEATURES
+from risk_models.water.dataset import DAM_FEATURES, DAM_HORIZON_D, HORIZONS_H, RIVER_FEATURES
 
 TREND_DAMPING = (0.0, 0.25, 0.5, 0.75, 1.0)
 HIGH_WATER_M = -1.0  # "near the bank": within 1 m below it, or above
@@ -59,18 +59,23 @@ def river_scores(df: pd.DataFrame, h: int, pred: np.ndarray) -> dict:
     }
 
 
+def _before(df: pd.DataFrame, end: pd.Timestamp, horizon: pd.Timedelta) -> pd.DataFrame:
+    """Rows whose whole target window (up to time + horizon) ends before `end`."""
+    return df[df["time"] + horizon < end]
+
+
 def train_rivers(table: pd.DataFrame, valid_start: pd.Timestamp, test_start: pd.Timestamp, sample_every: int = 3,
                  **settings) -> tuple:
-    train = table[table["time"] < valid_start]
-    valid = table[(table["time"] >= valid_start) & (table["time"] < test_start)]
     test = table[table["time"] >= test_start]
     # Neighbouring hours are nearly the same row; every 3rd hour keeps the information at a third of the cost.
-    train = train[train["time"].dt.hour % sample_every == 0]
+    sampled = table[table["time"].dt.hour % sample_every == 0]
     # Rain columns are empty when no rain was downloaded; a column with no values cannot be split on.
-    features = [f for f in RIVER_FEATURES if train[f].notna().any()]
+    features = [f for f in RIVER_FEATURES if sampled.loc[sampled["time"] < valid_start, f].notna().any()]
     models, damping, metrics = {}, {}, {"features": features}
     for h in HORIZONS_H:
-        t = train.dropna(subset=[f"y{h}"])
+        # A row's target is the level h hours later, so a row belongs to a period only when that hour does too.
+        t = _before(sampled, valid_start, pd.Timedelta(hours=h)).dropna(subset=[f"y{h}"])
+        valid = _before(table[table["time"] >= valid_start], test_start, pd.Timedelta(hours=h))
         # Chosen on the validation year: absolute error beat squared error at every horizon (24 h MAE 0.144 vs
         # 0.162 m), because the few remaining bad readings pull a squared-error fit off.
         model = _estimator(**{"loss": "absolute_error", **settings}).fit(t[features], t[f"y{h}"])
@@ -109,7 +114,8 @@ def train_rivers(table: pd.DataFrame, valid_start: pd.Timestamp, test_start: pd.
 
 def train_dams(table: pd.DataFrame, valid_start: pd.Timestamp, test_start: pd.Timestamp, **settings) -> tuple:
     """Inflow is scaled by each dam's mean daily inflow in the training years, so big and small dams share one model."""
-    train = table[table["time"] < valid_start]
+    horizon = pd.Timedelta(days=DAM_HORIZON_D)
+    train = _before(table, valid_start, horizon)
     scale = train.groupby("dam_id")["inflow"].mean().clip(lower=0.01).to_dict()
     def scaled(df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
@@ -124,7 +130,7 @@ def train_dams(table: pd.DataFrame, valid_start: pd.Timestamp, test_start: pd.Ti
     # better than 600.
     model = _estimator(**{"loss": "absolute_error", "max_iter": 600, **settings}).fit(tr[DAM_FEATURES], tr["y7"])
     metrics = {"train_rows": int(len(tr)), "iterations": int(model.n_iter_)}
-    for name, part in (("valid", table[(table["time"] >= valid_start) & (table["time"] < test_start)]),
+    for name, part in (("valid", _before(table[table["time"] >= valid_start], test_start, horizon)),
                        ("test", table[table["time"] >= test_start])):
         p = scaled(part).dropna(subset=["y7", "clim_next7"])
         s = p["dam_id"].map(scale).to_numpy()

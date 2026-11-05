@@ -38,9 +38,9 @@ if __name__ == "__main__":
 
     if args.part in ("dams", "all"):
         started = time.time()
-        table = dam_table(raw)
         # Train up to 2022, choose nothing on 2023-2024 except reporting, test on 2025 onward.
         valid_start, test_start = pd.Timestamp("2023-01-01"), pd.Timestamp("2025-01-01")
+        table = dam_table(raw, fit_end=valid_start)
         table = add_dam_climatology(table, valid_start)
         dam_model, dam_scale, m = train_dams(table, valid_start, test_start)
         m.update({"dams": int(table["dam_id"].nunique()), "from": str(table["time"].min().date()),

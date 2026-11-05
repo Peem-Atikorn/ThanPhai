@@ -63,9 +63,31 @@ def river_stations(client: httpx.Client) -> list[dict]:
     return stations
 
 
-def _saved_end(path: Path) -> str:
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f).get("end") or ""
+def _saved_spans(folder: Path) -> list[tuple[str, str]]:
+    """(start, end) of every chunk already saved for a station, whatever its file name."""
+    spans = []
+    for path in folder.glob("*.json.gz"):
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            saved = json.load(f)
+        if saved.get("start") and saved.get("end"):
+            spans.append((saved["start"], saved["end"]))
+    return spans
+
+
+def covered(chunk_start: date, chunk_end: date, spans: list[tuple[str, str]]) -> bool:
+    """True when the saved chunks together already reach from chunk_start to chunk_end.
+
+    Files from an earlier run may be cut differently (the first version used 90-day chunks from the start day), so
+    a quarter counts as done when any saved chunks cover it, not only a file with its own name.
+    """
+    cursor = chunk_start.isoformat()
+    for start, end in sorted(spans):
+        if start > cursor:
+            break
+        cursor = max(cursor, end)
+        if cursor >= chunk_end.isoformat():
+            return True
+    return cursor >= chunk_end.isoformat()
 
 
 def river_chunks(start: date, end: date) -> list[tuple[date, date]]:
@@ -84,14 +106,18 @@ def river_chunks(start: date, end: date) -> list[tuple[date, date]]:
 
 
 def download_rivers(out: Path, stations: list[dict], start: date, end: date, client: httpx.Client) -> dict:
-    """Fetch every station's chunks between start and end; returns counts of fetched, skipped and failed chunks."""
-    counts = {"fetched": 0, "skipped": 0, "failed": 0}
+    """Fetch every station's chunks between start and end; returns counts of fetched, skipped, empty and failed chunks.
+
+    A reply without readings is not saved (it may be a passing error), so a later run asks for that quarter again.
+    """
+    counts = {"fetched": 0, "skipped": 0, "empty": 0, "failed": 0}
     chunks = river_chunks(start, end)
     for n, station in enumerate(stations, 1):
+        spans = _saved_spans(out / "rivers" / station["id"])
         for chunk_start, chunk_end in chunks:
             path = out / "rivers" / station["id"] / f"{chunk_start.isoformat()}.json.gz"
             # The current quarter is saved only up to the day it was fetched; a later run fetches it again.
-            if path.exists() and _saved_end(path) >= chunk_end.isoformat():
+            if covered(chunk_start, chunk_end, spans):
                 counts["skipped"] += 1
                 continue
             params = {"station_type": "tele_waterlevel", "station_id": station["id"],
@@ -102,6 +128,9 @@ def download_rivers(out: Path, stations: list[dict], start: date, end: date, cli
                     response.raise_for_status()
                     data = (response.json() or {}).get("data") or {}
                     rows = [[row.get("datetime"), row.get("value"), row.get("discharge")] for row in data.get("graph_data") or []]
+                    if not rows:
+                        counts["empty"] += 1
+                        break
                     _write_gz(path, {"station_id": station["id"], "start": params["start_date"], "end": params["end_date"],
                                      "min_bank": data.get("min_bank"), "ground_level": data.get("ground_level"),
                                      "qmax": data.get("qmax"), "rows": rows})
@@ -174,7 +203,12 @@ def download_rain(out: Path, stations: list[dict], start: date, end: date, clien
         params = {"latitude": lat, "longitude": lon, "start_date": start.isoformat(), "end_date": end.isoformat(),
                   "hourly": "precipitation", "timezone": "Asia/Bangkok"}
         for attempt in range(3):
-            response = client.get(OPEN_METEO_ARCHIVE, params=params, timeout=120)
+            try:
+                response = client.get(OPEN_METEO_ARCHIVE, params=params, timeout=120)
+            except httpx.HTTPError as exc:  # a timeout or dropped connection: try again, the run goes on
+                log.warning("rain %s,%s attempt %d: %s", lat, lon, attempt + 1, exc)
+                time.sleep(10 * (attempt + 1))
+                continue
             if response.status_code == 429:
                 reason = response.text
                 if "Daily" in reason or "Hourly" in reason:
@@ -185,9 +219,16 @@ def download_rain(out: Path, stations: list[dict], start: date, end: date, clien
                 continue
             if response.status_code != 200:
                 log.warning("rain %s,%s: HTTP %s %s", lat, lon, response.status_code, response.text[:200])
+                counts["failed"] += 1
                 break
-            hourly = response.json()["hourly"]
-            _write_gz(path, {"lat": lat, "lon": lon, "time": hourly["time"], "precipitation": hourly["precipitation"]})
+            try:
+                hourly = response.json()["hourly"]
+                times, rain = hourly["time"], hourly["precipitation"]
+            except (ValueError, KeyError, TypeError) as exc:
+                log.warning("rain %s,%s: unreadable reply: %s", lat, lon, exc)
+                counts["failed"] += 1
+                break
+            _write_gz(path, {"lat": lat, "lon": lon, "time": times, "precipitation": rain})
             counts["fetched"] += 1
             counts["cost"] += float(response.headers.get("X-RateLimit-Cost", 0) or 0)
             break
