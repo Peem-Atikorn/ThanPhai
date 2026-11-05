@@ -612,8 +612,8 @@ body { background: var(--cc-outer); }
   .landscape-shell .journey-hero-dashboard { grid-template-rows: minmax(0,1.7fr) minmax(0,1fr); }
 }
 
-/* Footer clock: when the map data was fetched and the time now (green, small). */
-.data-clock { margin: 0; color: var(--cc-good, #236441); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Footer clock: when the map data was fetched and the time now, in the same accent as the footer links. */
+.data-clock { margin: 0; color: var(--cc-accent, var(--brand)); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .landscape-shell .journey-footer .data-clock { justify-self: end; }
 @media (max-width: 1050px) { .landscape-shell .journey-footer .data-clock { grid-row: 3; grid-column: 1 / -1; } }
 @media (max-width: 600px) { .data-clock { white-space: normal; } }
