@@ -50,6 +50,17 @@ def test_bad_run_sentinel_and_datum_change(tmp_path):
     assert s.dropna().between(19.9, 20.1).all() and s.count() >= 60
 
 
+def test_a_flash_flood_that_goes_down_is_water_not_a_datum_change(tmp_path):
+    # Every 10 minutes: 4 m up within one reading, two days high, then down again. 24 readings are only 4 hours,
+    # so the step must be judged on the week around it, which keeps the 30 days before.
+    start = datetime(2024, 1, 1)
+    levels = [5.0] * (6 * 24 * 30) + [9.0] * (6 * 48) + [5.0] * (6 * 24 * 10)
+    rows = [[(start + timedelta(minutes=10 * i)).strftime("%Y-%m-%d %H:%M"), v, None] for i, v in enumerate(levels)]
+    _gz(tmp_path / "rivers" / "6" / "2024-01-01.json.gz", {"station_id": "6", "rows": rows})
+    s = station_series(tmp_path / "rivers" / "6")
+    assert s.first_valid_index() == pd.Timestamp(start) and s.max() == pytest.approx(9.0)
+
+
 def test_river_targets_are_future_change_and_basin_excludes_itself(raw):
     table = river_table(raw)
     assert set(RIVER_FEATURES) <= set(table.columns)

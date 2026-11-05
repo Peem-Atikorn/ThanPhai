@@ -1,8 +1,8 @@
 """Hourly river-level and daily dam-inflow tables from the downloaded ThaiWater history.
 
 Rivers: every station is resampled to hourly means. Readings that jump more than MAX_JUMP_M from both neighbours
-(sensor spikes) are dropped; after a lasting step of more than MAX_STEP_M (a datum change: some stations jump 30 m
-in an hour) only the later part is kept; readings outside bank-40 m .. bank+15 m are dropped. The target is the
+(sensor spikes) are dropped; after a step of more than MAX_STEP_M that lasts a week (a datum change: some stations jump
+30 m in an hour) only the later part is kept; readings outside bank-40 m .. bank+15 m are dropped. The target is the
 level change h hours ahead (not the level), so one model serves stations at any height.
 
 Dams: daily inflow (million m³) from 2004; the target is the total inflow of the next 7 days. Years before 2018
@@ -20,7 +20,9 @@ HORIZONS_H = (6, 12, 24)
 LAGS_H = (1, 3, 6, 12, 24, 48, 72)
 MAX_JUMP_M = 1.5
 MAX_STEP_M = 3.0
+STEP_WINDOW = np.timedelta64(7, "D")
 MAX_RUN_M = 5.0
+RAIN_CELL_DEG = 0.5
 # Some stations report 9999.9 (or similar) for "no reading".
 SENTINEL_M = 999.0
 DAM_HORIZON_D = 7
@@ -64,12 +66,16 @@ def station_series(folder: Path) -> pd.Series:
     prev, nxt = level.shift(1), level.shift(-1)
     spike = ((level - prev).abs() > MAX_JUMP_M) & ((level - nxt).abs() > MAX_JUMP_M)
     level = level[~spike]
-    # A lasting step of several metres within an hour is a new datum or a moved sensor, not water: keep only the
-    # readings after the last step, which share today's datum and bank.
-    # A step counts only when the day after it sits MAX_STEP_M away from the day before (not a short glitch).
-    values = level.to_numpy()
+    # A lasting step of several metres between two readings is a new datum or a moved sensor, not water: keep only
+    # the readings after the last step, which share today's datum and bank. It counts only when the week after it
+    # sits MAX_STEP_M away from the week before, measured in time, not in readings: 24 readings are only 4-6 hours
+    # at stations that report every 10-15 minutes, and a flash flood that stays up for a day is water. Steps across
+    # a gap in the readings still count: in this data they are mostly sensors reinstalled on a new datum
+    # (อ.นครชัยศรี went from -9.1 to 0.7 m after 15 hours off).
+    values, times = level.to_numpy(), level.index.to_numpy()
     for i in reversed(np.flatnonzero(np.abs(np.diff(values)) > MAX_STEP_M) + 1):
-        before, after = values[max(0, i - 24):i], values[i:i + 24]
+        before = values[times.searchsorted(times[i] - STEP_WINDOW):i]
+        after = values[i:times.searchsorted(times[i] + STEP_WINDOW)]
         if len(before) and len(after) and abs(np.median(after) - np.median(before)) > MAX_STEP_M:
             level = level.iloc[i:]
             break
@@ -82,10 +88,13 @@ def station_series(folder: Path) -> pd.Series:
     return hourly.interpolate(limit=3, limit_area="inside")
 
 
+def rain_cell(lat: float, lon: float) -> tuple[float, float]:
+    """The 0.5° cell centre a station's rain is read from (ERA5 itself is 0.25°)."""
+    return round(round(lat / RAIN_CELL_DEG) * RAIN_CELL_DEG, 2), round(round(lon / RAIN_CELL_DEG) * RAIN_CELL_DEG, 2)
+
+
 def station_rain(raw_dir: Path) -> pd.DataFrame | None:
     """Hourly rain (mm) per station, read from its 0.5° cell file; None when no rain was downloaded."""
-    from risk_models.water.download import rain_cell
-
     folder = raw_dir / "rain"
     if not folder.exists():
         return None

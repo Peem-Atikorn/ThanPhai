@@ -18,6 +18,7 @@ import httpx
 
 from external_data.adapters.thaiwater import ThaiWaterWaterLevel
 from external_data.adapters.thaiwater_graphs import ROOT as THAIWATER_ROOT
+from risk_models.water.dataset import rain_cell
 
 log = logging.getLogger("water.download")
 USER_AGENT = {"User-Agent": "ThanPhai/0.1 (student project; history for a water-level model)"}
@@ -139,12 +140,6 @@ def dam_ids(client: httpx.Client) -> list[dict]:
 
 
 OPEN_METEO_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
-RAIN_CELL_DEG = 0.5
-
-
-def rain_cell(lat: float, lon: float) -> tuple[float, float]:
-    """The 0.5° cell centre a station's rain is read from (ERA5 itself is 0.25°)."""
-    return round(round(lat / RAIN_CELL_DEG) * RAIN_CELL_DEG, 2), round(round(lon / RAIN_CELL_DEG) * RAIN_CELL_DEG, 2)
 
 
 def download_rain(out: Path, stations: list[dict], start: date, end: date, client: httpx.Client) -> dict:

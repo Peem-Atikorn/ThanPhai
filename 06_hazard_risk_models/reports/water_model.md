@@ -11,7 +11,7 @@ Neither model sets an alert level. Levels still come only from `rules.yaml`; not
 - **Rivers:** 311 stations with a trusted bank level and a flow gauge or RID key-station status (289 RID, 15 EGAT,
   6 HII, 1 DWR), grouped like the app's river view. Five years, 2021-11-06 to 2026-11-05, from
   `public/waterlevel_graph` in 90-day chunks. RID stations report about hourly, HII every 10 minutes, EGAT every 15.
-  295 stations keep at least 60 days after cleaning; 8.2 million station-hours.
+  299 stations keep at least 60 days after cleaning; 8.7 million station-hours.
 - **Dams:** all 35 large dams, daily inflow, release and storage from `analyst/dam_yearly_graph`.
   Used from 2004 to 2026-11-04 (199,142 dam-days).
 - **Rain:** hourly precipitation (mm, Thai local time) from the Open-Meteo archive (ERA5) for each station's 0.5°
@@ -23,13 +23,19 @@ Neither model sets an alert level. Levels still come only from `rules.yaml`; not
 | Problem | Example | Fix |
 |---|---|---|
 | Single spike | one reading 4 m off that comes straight back | dropped when > 1.5 m from both neighbours |
-| Datum change | stations that move 20-30 m within an hour and stay there | only the readings after the last lasting step (> 3 m, the day after vs the day before) |
+| Datum change | stations that move 20-30 m within an hour and stay there; อ.นครชัยศรี went from −9.1 to 0.7 m after 15 hours off | only the readings after the last lasting step (> 3 m, the week after vs the week before, in time, not in readings) |
 | Run of bad readings | Ct.4 sat 20 m low for 12 hours on 2023-04-04 | dropped when > 5 m from the median of the 49 hours around it |
 | "No reading" marker | MKSND02 reports `9999.9` | values ≥ 999 dropped |
 | Implausible bank | X.258: bank 18.4 m, water at ~51 m | readings outside bank −40 m … bank +15 m dropped |
 | Dam running totals | 2002-2003 hold the total since 1 January (Bhumibol 3,946 → 4,005) | dam data from 2004 only; a day above 5 × the dam's 99th percentile is dropped |
 
-After cleaning, the largest 24-hour change left in the river data is 6.5 m (a flash flood is possible; 20 m is not).
+After cleaning, the largest 24-hour change left in the river data is 10.1 m: บ้านผานกเค้า (ลุ่มน้ำชี) rose smoothly from
+232.5 to 240.8 m, over its 238.5 m bank, and went back down within five days in late September 2022. A flood like
+that is possible; a 20 m step is not.
+
+A first version judged a step on the 24 readings around it. At stations that report every 10-15 minutes that is only
+4-6 hours, so floods like the one above counted as datum changes, and everything before them was dropped at 40
+stations (418,000 station-hours). The numbers below are from the fixed version.
 Years before 2018 have many missing dam days; rows whose 7-day target has a gap are not used.
 
 ## Features (data up to hour/day *t* only)
@@ -46,21 +52,22 @@ Rain is past rain only: the model does not know tomorrow's forecast rain.
 ## Split (by time, no shuffling)
 | | Rivers | Dams |
 |---|---|---|
-| Train | 2021-11-07 – 2024-11-04 (every 3rd hour: 1.44 M rows) | 2004 – 2022 (118,127 rows) |
+| Train | 2021-11-07 – 2024-11-04 (every 3rd hour: 1.55 M rows) | 2004 – 2022 (118,127 rows) |
 | Validation (choices only) | 2024-11-05 – 2025-11-04 | 2023 – 2024 |
 | **Test (reported)** | **2025-11-05 – 2026-11-05** | **2025-01-01 – 2026-11-04** |
 
-Chosen on validation only: absolute-error loss for both (rivers 24 h MAE 0.144 vs 0.162 m with squared error;
-dams 8.9 vs 9.9-10.2 million m³), 600 trees for dams (2,000 did no better), and the trend baseline's damping.
+Chosen on validation only: absolute-error loss for both (rivers 24 h MAE 0.144 vs 0.162 m with squared error, on the
+first cleaning; dams 8.9 vs 9.9-10.2 million m³), 600 trees for dams (2,000 did no better), and the trend baseline's
+damping.
 
 ## Results on the test period (never used for fitting or choosing)
 
 ### Rivers: error of the level h hours ahead (MAE, m) and rises over the bank caught
 | Horizon | Model | No change | Model, near the bank* | No change, near the bank* | Rises over the bank | Caught (recall) | Warnings that came true (precision) |
 |---|---|---|---|---|---|---|---|
-| +6 h | **0.075** | 0.105 | **0.113** | 0.151 | 1,741 | 24.9 % | 67.1 % |
-| +12 h | **0.093** | 0.141 | **0.118** | 0.211 | 2,549 | 35.5 % | 76.7 % |
-| +24 h | **0.125** | 0.142 | **0.160** | 0.210 | 2,899 | 15.4 % | 65.7 % |
+| +6 h | **0.077** | 0.107 | **0.114** | 0.152 | 1,774 | 26.8 % | 67.8 % |
+| +12 h | **0.094** | 0.144 | **0.120** | 0.214 | 2,612 | 33.6 % | 76.5 % |
+| +24 h | **0.127** | 0.144 | **0.164** | 0.216 | 3,001 | 14.2 % | 66.3 % |
 
 \* within 1 m below the bank or above it — the hours that matter for a warning.
 
@@ -70,21 +77,21 @@ dams 8.9 vs 9.9-10.2 million m³), 600 trees for dams (2,000 did no better), and
   6-12 hours ahead, and two out of three to three out of four of its warnings come true.
 
 #### What rain added (same split, same settings; kept because validation MAE fell at every horizon)
-On validation, +24 h recall fell (16.2 → 15.2 %) while precision rose (64.7 → 66.5 %); the test year is shown below.
+On validation, +24 h recall fell (16.2 → 15.3 %) while precision rose (66.1 → 67.4 %); the test year is shown below.
 | Horizon | MAE without → with rain (test, m) | Rises caught without → with rain (test) | Precision without → with rain (test) |
 |---|---|---|---|
-| +6 h | 0.0760 → 0.0754 | 23.5 % → 24.9 % (409 → 434 of 1,741) | 66.8 % → 67.1 % |
-| +12 h | 0.0933 → 0.0930 | 31.3 % → 35.5 % (798 → 905 of 2,549) | 75.1 % → 76.7 % |
-| +24 h | 0.1251 → 0.1246 | 15.1 % → 15.4 % | 64.7 % → 65.7 % |
+| +6 h | 0.0773 → 0.0772 | 25.9 % → 26.8 % (459 → 476 of 1,774) | 67.7 % → 67.8 % |
+| +12 h | 0.0948 → 0.0943 | 31.2 % → 33.6 % (814 → 878 of 2,612) | 75.7 % → 76.5 % |
+| +24 h | 0.1273 → 0.1267 | 14.5 % → 14.2 % (435 → 425 of 3,001) | 65.5 % → 66.3 % |
 
-A small gain overall; the clearest one is 107 more rises over the bank caught 12 hours ahead, with fewer false
+A small gain overall; the clearest one is 64 more rises over the bank caught 12 hours ahead, with fewer false
 warnings. Most of the information is already in the river itself and its upstream stations; +24 h would need
 **forecast** rain, which is not in this model.
 - **Trend is worse than no change:** carrying the last 6 hours' rate forward raised the validation error at every
-  damping (6 h: 0.125 → 0.174 m at full trend; 24 h: 0.174 → 0.522 m), so its best setting is "no trend". Rivers turn
-  too often for a straight line.
-- **Per station** (+6 h): the model beat "no change" at 263 of 279 stations in the validation year; 257 of those
-  263 still beat it in the test year (+12 h: 252 of 261; +24 h: 236 of 246). That list
+  damping (first cleaning: 6 h: 0.125 → 0.174 m at full trend; 24 h: 0.174 → 0.522 m), so its best setting is
+  "no trend", again after the fix. Rivers turn too often for a straight line.
+- **Per station** (+6 h): the model beat "no change" at 270 of 288 stations in the validation year; 263 of those
+  270 still beat it in the test year (+12 h: 258 of 268; +24 h: 246 of 255). That list
   (`stations_better_on_valid` in the metrics) is where a forecast could be shown.
 
 ### Dams: inflow of the next 7 days (million m³), 35 dams
@@ -100,7 +107,7 @@ average (−4.1 million m³ a week); a big week is still underestimated.
 ## Limits
 - One year of test data per model. The test year includes the 2026 floods, but more seasons would make the
   numbers firmer.
-- Catching 15-36 % of rises over the bank is better than the baselines' 0 %, but most rises still come without
+- Catching 14-34 % of rises over the bank is better than the baselines' 0 %, but most rises still come without
   a warning. With past rain only, the model cannot see a storm that has not yet fallen.
 - Rain in training is ERA5 (reanalysis). Live, the last few days would come from Open-Meteo's forecast model
   instead, which is not the same data; check the gap before trusting live forecasts.
@@ -118,6 +125,5 @@ average (−4.1 million m³ a week); a big week is still underestimated.
 ## Files
 - `scripts/download_water_history.py`, `scripts/train_water_model.py`, `make water-model`
 - `06_hazard_risk_models/risk_models/water/` (`download.py`, `dataset.py`, `model.py`), tests in `tests/test_water.py`
-- Not in git: `data/raw/water_history/` (91 MB with rain), `data/processed/water_river_table.parquet` (a cache),
-  `data/processed/models/water_model.joblib` (10 MB)
+- Not in git: `data/raw/water_history/` (91 MB with rain), `data/processed/models/water_model.joblib` (10 MB)
 - Metrics: `06_hazard_risk_models/reports/water_model_metrics.json`

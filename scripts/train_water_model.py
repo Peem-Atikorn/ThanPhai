@@ -53,8 +53,6 @@ if __name__ == "__main__":
         started = time.time()
         rain = None if args.no_rain else station_rain(raw)
         table = river_table(raw, rain)
-        cache = args.data_dir / "processed" / "water_river_table.parquet"
-        table.to_parquet(cache, index=False)
         end = table["time"].max()
         test_start = (end - pd.DateOffset(years=1)).normalize()
         valid_start = (test_start - pd.DateOffset(years=1)).normalize()
