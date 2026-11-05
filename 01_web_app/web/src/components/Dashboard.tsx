@@ -764,6 +764,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         else { setSearchActive(false); setResults(null); setSearchStatus("idle"); }
         if (item.kind === "dam") { setView("dams"); chooseDam(item.dam); }
         else { setView("rivers"); chooseRiver(item.river); }
+        onAreaChosen?.();  // closes the header search dialog, as picking an area does
     }
     function openChaoPhrayaDam() {
         if (chaoPhrayaDam) openWater({ kind: "station", river: chaoPhrayaDam, key: CHAO_PHRAYA_DAM_ID, title: "", detail: "" });
