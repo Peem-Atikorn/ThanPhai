@@ -55,7 +55,7 @@ function nodes(node, result = []) {
 function content(node) { if (Array.isArray(node)) return node.map(content).join(''); if (typeof node === 'string' || typeof node === 'number') return String(node); return node && typeof node === 'object' ? content(node.props?.children) : ''; }
 const tick = () => new Promise(resolve => setImmediate(resolve));
 global.requestAnimationFrame = fn => fn();
-global.window = { matchMedia: () => ({ matches: true }) };
+global.window = { matchMedia: () => ({ matches: true }), setInterval: () => 0, clearInterval() {} };
 global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ focus() {}, scrollIntoView() {} }) };
 
 (async () => {
@@ -422,7 +422,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       assert.equal(englishPlayback.props['aria-label'], "Play the past hour of radar images and the next hour's forecast", 'The playback label is read in English');
       load('@/lib/i18n').setLanguage('th');
 
-      const stepProbe = instance(RadarPlayback).render({ frames: [{ time: 0 }, { time: 600 }], index: 0, onChange() {}, onPlaybackChange() {} });
+      const { radarImageLoaded, radarImageFailed } = load('@/components/RadarPlayback');
+      const stepProbe = instance(RadarPlayback).render({ frames: [{ time: 0 }, { time: 600 }], index: 0, onChange() {} });
       assert.equal(nodes(stepProbe).find(n => n.type === 'input').props.step, 'any', 'The timeline can be dragged continuously');
       let animationId = 0, clock = 0;
       const animations = new Map();
@@ -430,10 +431,24 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       window.cancelAnimationFrame = id => animations.delete(id);
       document.addEventListener = () => {};
       document.removeEventListener = () => {};
-      const advance = ms => { clock += ms; const pending = [...animations.values()]; animations.clear(); pending.forEach(callback => callback(clock)); };
+      // One fake clock for animation frames, performance.now() and the preload interval.
+      const intervals = new Map();
+      let intervalId = 0;
+      window.setInterval = (fn, ms) => { intervals.set(++intervalId, { fn, ms, next: clock + ms }); return intervalId; };
+      window.clearInterval = id => intervals.delete(id);
+      const savedPerformanceNow = performance.now;
+      performance.now = () => clock;
+      const advance = ms => {
+        const end = clock + ms;
+        for (const timer of [...intervals.values()]) while (timer.next <= end) { clock = timer.next; timer.next += timer.ms; timer.fn(); }
+        clock = end;
+        const pending = [...animations.values()]; animations.clear(); pending.forEach(callback => callback(clock));
+      };
+      // The map has these images already, so this playback never waits.
+      radarFrames.forEach(f => f.tiles && radarImageLoaded(f.tiles));
       let selectedFrame = 0, mapUpdates = 0;
       const playbackApp = instance(RadarPlayback, undefined, true);
-      const playbackProps = () => ({ frames: radarFrames, index: selectedFrame, onChange: index => { selectedFrame = index; mapUpdates++; }, onPlaybackChange() {} });
+      const playbackProps = () => ({ frames: radarFrames, index: selectedFrame, onChange: index => { selectedFrame = index; mapUpdates++; } });
       let movingTree = playbackApp.render(playbackProps());
       nodes(movingTree).find(n => n.type === 'button').props.onClick();
       playbackApp.render(playbackProps());
@@ -455,19 +470,19 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
         { kind: 'observed', time: 300 },
         { kind: 'observed', time: 100 },
       ];
-      let currentSelection = 2, currentPlaying = false;
+      let currentSelection = 2;
       const currentApp = instance(RadarPlayback, undefined, true);
-      const currentProps = () => ({ frames: currentFrames, index: currentSelection, onChange: i => { currentSelection = i; }, onPlaybackChange: value => { currentPlaying = value; } });
+      const currentProps = () => ({ frames: currentFrames, index: currentSelection, onChange: i => { currentSelection = i; } });
       let currentTree = currentApp.render(currentProps());
       nodes(currentTree).find(n => n.type === 'button').props.onClick();
       currentTree = currentApp.render(currentProps());
-      assert.equal(currentPlaying, true);
+      assert.equal(animations.size, 1, 'Play starts the animation');
       const currentButton = nodes(currentTree).find(n => n.type === 'button' && n.props.className === 'radar-current-button');
       assert(currentButton, 'Radar has a current-time button');
       currentButton.props.onClick();
       currentApp.render(currentProps());
       assert.equal(currentSelection, 1, 'Current time selects the newest observed timestamp, excluding forecasts');
-      assert.equal(currentPlaying, false, 'Returning to current time stops playback');
+      assert.equal(animations.size, 0, 'Returning to current time stops playback');
 
       const speedApp = instance(RadarPlayback, undefined, true);
       let speedTree = speedApp.render(currentProps());
@@ -493,29 +508,56 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
       nodes(speedTree).find(n => n.type === 'button').props.onClick(); speedTree = speedApp.render(currentProps());
       assert.equal(animations.size, 0);
 
-      // RainViewer quota: at 5x an image the browser has not loaded yet waits 12 s after the last new one;
-      // an image already shown (here the first, on the second pass) changes at full speed.
+      // RainViewer quota: one new image per 12 s, fetched ahead by the map's hidden layer even while paused.
+      // Playback waits until the map reports the image loaded (not merely requested), and a failed or stuck
+      // fetch is tried again on a later turn.
       const quotaFrames = [{ kind: 'observed', time: 0, tiles: 'a' }, { kind: 'observed', time: 600, tiles: 'b' }, { kind: 'observed', time: 1200, tiles: 'c' }];
       let quotaSelection = 0;
+      const preloads = [];
       const quotaApp = instance(RadarPlayback, undefined, true);
-      const quotaProps = () => ({ frames: quotaFrames, index: quotaSelection, onChange: i => { quotaSelection = i; } });
+      const quotaProps = () => ({ frames: quotaFrames, index: quotaSelection, onChange: i => { quotaSelection = i; }, onPreload: tiles => preloads.push(tiles) });
+      const quotaStart = clock;
       let quotaTree = quotaApp.render(quotaProps());
+      const runUntil = ms => { while (clock - quotaStart < ms) { advance(100); quotaTree = quotaApp.render(quotaProps()); } };
+      const loadingNote = () => nodes(quotaTree).find(n => n.type === 'p' && String(n.props.className).startsWith('radar-loading'));
+      radarImageLoaded('a');  // the shown image
+      runUntil(11900);
+      assert.deepEqual(preloads, [], 'The next image waits 12 s after the shown one was fetched');
+      runUntil(12100);
+      assert.deepEqual(preloads, ['b'], 'The next image is fetched ahead while playback is paused');
       const quotaSpeed = () => nodes(quotaTree).find(n => n.type === 'button' && n.props['aria-label'] === 'เพิ่มความเร็ว');
       quotaSpeed().props.onClick(); quotaTree = quotaApp.render(quotaProps());
       quotaSpeed().props.onClick(); quotaTree = quotaApp.render(quotaProps());
       nodes(quotaTree).find(n => n.type === 'button').props.onClick(); quotaTree = quotaApp.render(quotaProps());
-      const quotaStart = clock;
-      const runUntil = ms => { while (clock - quotaStart < ms) { advance(100); quotaTree = quotaApp.render(quotaProps()); } };
       advance(0);
-      runUntil(11900);
-      assert.equal(quotaSelection, 0, 'A not-yet-loaded image waits for the 12 s spacing even at 5x');
-      runUntil(12100);
-      assert.equal(quotaSelection, 1, 'It is shown once 12 s have passed');
+      runUntil(17000);
+      assert.equal(quotaSelection, 0, 'Requested is not loaded: playback holds even at 5x');
+      assert(loadingNote()?.props.className.includes('is-waiting'), 'The bar says it is waiting for an image');
+      assert.deepEqual(preloads, ['b'], 'Nothing else is fetched while an image is still loading');
+      radarImageFailed('b');  // the map reported a tile error (Dashboard also clears the preload layer)
+      runUntil(23900);
+      assert.deepEqual(preloads, ['b'], 'A retry still waits its 12 s turn');
       runUntil(24100);
+      assert.deepEqual(preloads, ['b', 'b'], 'A failed image is fetched again');
+      assert.equal(quotaSelection, 0);
+      radarImageLoaded('b');
+      runUntil(24400);
+      assert.equal(quotaSelection, 1, 'Playback continues once the map reports the image');
+      runUntil(36100);
+      assert.deepEqual(preloads, ['b', 'b', 'c']);
+      runUntil(66000);
+      assert.equal(quotaSelection, 1, 'An image that never arrives keeps playback waiting until it times out');
+      runUntil(68100);
+      assert.deepEqual(preloads.slice(3), [null, 'c'], 'A stuck fetch is cleared and tried again');
+      radarImageLoaded('c');
+      runUntil(68400);
       assert.equal(quotaSelection, 2);
-      runUntil(26600);
-      assert.equal(quotaSelection, 0, 'An image already shown comes back at full speed (2.4 s a frame at 5x)');
+      assert(!loadingNote(), 'The loading note goes once every image is loaded');
+      const back = clock;
+      runUntil(back - quotaStart + 2500);
+      assert.equal(quotaSelection, 0, 'A loaded image comes back at full speed (2.4 s a frame at 5x)');
       nodes(quotaTree).find(n => n.type === 'button').props.onClick(); quotaApp.render(quotaProps());
+      performance.now = savedPerformanceNow;
 
       const markerTree = i => instance(RadarPlayback).render({ ...currentProps(), index: i });
       const markerAt = i => nodes(markerTree(i)).find(n => n.props.className === 'radar-slider-time');

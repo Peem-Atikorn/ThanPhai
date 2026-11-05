@@ -8,15 +8,39 @@ import { getLocale, t as tr } from "@/lib/i18n";
 // At 1x the timeline moves one frame (10 min of radar) every 12 s; 3x and 5x only move the clock faster.
 // RainViewer allows 100 tiles/min/IP, so the browser fetches a new image at most once every 12 s (five a minute).
 // From the moment the radar is shown, the map's hidden preload layer fetches the images not yet loaded, one per
-// 12 s, starting after the shown one, whether or not playback is running; playback waits only on a frame that
-// has not been fetched yet, and says so. Fetched images come from the browser cache (RainViewer sends
+// 12 s, starting after the shown one, whether or not playback is running; playback waits only on a frame whose
+// image the map has not reported loaded yet, and says so. A failed or stuck fetch is tried again on a later turn;
+// after MAX_TRIES playback stops waiting for it. Loaded images come from the browser cache (RainViewer sends
 // max-age=172800), and forecast frames reuse the latest real image, so after one pass 3x and 5x run freely.
 const PLAYBACK_INTERVAL_MS = 12_000;
 const NEW_IMAGE_INTERVAL_MS = 12_000;
 const PRELOAD_CHECK_MS = 1_000;
+const LOAD_TIMEOUT_MS = 30_000;
+const MAX_TRIES = 3;
 // Per page, not per mount: switching views and back must not wait again for images the browser already has.
-const fetchedTiles = new Set<string>();
+// `loadedTiles` holds what the map reported drawn; `pendingTiles` what it is fetching, and since when.
+const loadedTiles = new Set<string>();
+const pendingTiles = new Map<string, number>();
+const failedTries = new Map<string, number>();
 let lastNewImage = -Infinity;
+const startFetch = (tiles: string) => {
+  pendingTiles.set(tiles, performance.now());
+  lastNewImage = performance.now();
+};
+/** The map has drawn every visible tile of this radar template. */
+export function radarImageLoaded(tiles: string) {
+  pendingTiles.delete(tiles);
+  loadedTiles.add(tiles);
+}
+/** A tile of this template failed (or took too long): fetch it again later, or stop waiting after MAX_TRIES. */
+export function radarImageFailed(tiles: string) {
+  // Each failing tile reports; count one try per fetch.
+  if (loadedTiles.has(tiles) || !pendingTiles.has(tiles)) return;
+  pendingTiles.delete(tiles);
+  const tries = (failedTries.get(tiles) ?? 0) + 1;
+  failedTries.set(tiles, tries);
+  if (tries >= MAX_TRIES) loadedTiles.add(tiles);
+}
 const PLAYBACK_SPEEDS = [1, 3, 5];
 // The slider and its time label move in small steps; re-rendering on every animation frame (~60/s) adds nothing.
 const SLIDER_UPDATE_MS = 100;
@@ -29,8 +53,8 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
   explanationSource: "qwen" | "template";
   explanationPending?: boolean;
   onChange: (index: number) => void;
-  /** Tile URL template for the map's hidden preload layer (the next image not yet fetched). */
-  onPreload?: (tiles: string) => void;
+  /** Tile URL template for the map's hidden preload layer (the next image not yet loaded). */
+  onPreload?: (tiles: string | null) => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(0);
@@ -39,7 +63,7 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
   const cursor = useRef(index);
   const selected = useRef(index);
   const playback = useRef({ frames, onChange, onPreload });
-  // Playback is holding on a frame whose image has not been fetched yet.
+  // Playback is holding on a frame whose image has not loaded yet.
   const [waiting, setWaiting] = useState(false);
   const waitingRef = useRef(false);
   const frame = frames[index];
@@ -49,21 +73,24 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
   }, [frames, onChange, onPreload]);
   useEffect(() => {
     // An image shown by picking it on the slider is a new fetch too, and counts against the same budget.
-    if (frame?.tiles && !fetchedTiles.has(frame.tiles)) {
-      fetchedTiles.add(frame.tiles);
-      lastNewImage = performance.now();
-    }
+    if (frame?.tiles && !loadedTiles.has(frame.tiles) && !pendingTiles.has(frame.tiles)) startFetch(frame.tiles);
   }, [frame?.tiles]);
   useEffect(() => {
     // Fetch the next image not yet loaded, going forward from the shown frame, when the budget allows.
+    // One fetch at a time: giving the preload layer new tiles would cancel the image it is still loading.
     const preload = () => {
       const { frames, onPreload } = playback.current;
-      if (!onPreload || performance.now() - lastNewImage < NEW_IMAGE_INTERVAL_MS) return;
+      if (!onPreload) return;
+      const now = performance.now();
+      let stuck = false;
+      for (const [tiles, since] of pendingTiles) if (now - since > LOAD_TIMEOUT_MS) { radarImageFailed(tiles); stuck = true; }
+      // Clear the preload layer first, so trying the same image again makes the map fetch it anew.
+      if (stuck) { onPreload(null); return; }
+      if (pendingTiles.size > 0 || now - lastNewImage < NEW_IMAGE_INTERVAL_MS) return;
       for (let step = 1; step < frames.length; step++) {
         const tiles = frames[(selected.current + step) % frames.length]?.tiles;
-        if (tiles && !fetchedTiles.has(tiles)) {
-          fetchedTiles.add(tiles);
-          lastNewImage = performance.now();
+        if (tiles && !loadedTiles.has(tiles)) {
+          startFetch(tiles);
           onPreload(tiles);
           return;
         }
@@ -96,9 +123,9 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
       const nextIndex = Math.floor(cursor.current);
       let changed = nextIndex !== selected.current;
       const tiles = frames[nextIndex]?.tiles;
-      const hold = changed && !!tiles && !fetchedTiles.has(tiles);
+      const hold = changed && !!tiles && !loadedTiles.has(tiles);
       if (hold) {
-        // Not fetched yet: hold at the end of the current frame until the preload layer has fetched it.
+        // Not loaded yet: hold at the end of the current frame until the map reports the preloaded image.
         cursor.current = before;
         changed = false;
       }
@@ -144,9 +171,9 @@ export default function RadarPlayback({ frames, index, explanation, explanationS
     setPosition(next);
     onChange(selected.current);
   };
-  // Distinct images in the timeline (forecast frames reuse the latest real one) and how many are fetched.
+  // Distinct images in the timeline (forecast frames reuse the latest real one) and how many have loaded.
   const images = [...new Set(frames.map(f => f.tiles).filter((t): t is string => !!t))];
-  const imagesFetched = images.filter(t => fetchedTiles.has(t)).length;
+  const imagesFetched = images.filter(t => loadedTiles.has(t)).length;
   const latestObservedIndex = frames.reduce((latest, frame, i) =>
     frame.kind !== "forecast" && (latest < 0 || frame.time > frames[latest].time) ? i : latest, -1);
 
