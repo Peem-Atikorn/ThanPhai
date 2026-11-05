@@ -1152,9 +1152,11 @@ class HazardService:
             import joblib
 
             model = joblib.load(path)
+            # A model saved before the live forecast existed has none of these: it is not used (retrain it).
             if not getattr(model, "river_live", None) or not getattr(model, "live_stations", None):
                 log.warning("water model %s has no live river forecast; retrain it", path)
                 return None
+            model.live_stations = {h: set(ids) for h, ids in model.live_stations.items()}
             log.info("water model %s loaded (live forecast at %d stations)", model.version,
                      len(set().union(*model.live_stations.values())))
             return model
@@ -1175,7 +1177,7 @@ class HazardService:
         model = self.water_model
         if model is None:
             return {**base, "reason": "no_model"}
-        if not any(station_id in set(ids) for ids in model.live_stations.values()):
+        if not any(station_id in ids for ids in model.live_stations.values()):
             return {**base, "reason": "not_chosen"}
         bank = river.get("bank_msl")
         if bank is None:
@@ -1199,12 +1201,14 @@ class HazardService:
         skill = (model.metrics or {}).get("rivers_live", {})
         points = []
         for h, change in changes.items():
-            test = skill.get(f"{h}h", {}).get("test", {}).get("model", {})
+            test = skill.get(f"{h}h", {}).get("test_chosen", {})
             points.append({
+                # The hourly mean the model forecasts, labelled by the start of its hour (the page shows a clock time).
                 "hours": h, "time": (start + pd.Timedelta(hours=h)).strftime("%Y-%m-%d %H:%M"),
                 "level_msl": round(level + change, 2), "change_m": round(change, 2),
                 "above_bank_m": round(level + change - bank, 2),
-                # How this forecast did on the test year at all chosen stations, so the page can say how far to trust it.
+                # How this forecast did in the test year at the stations it is shown for, so the page can say how far
+                # to trust it.
                 "test_mae_m": round(test["mae_m"], 3) if test.get("mae_m") is not None else None,
             })
         return {**base, "available": True, "from_time": start.strftime("%Y-%m-%d %H:%M"), "level_msl": round(level, 2),

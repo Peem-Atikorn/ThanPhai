@@ -99,9 +99,11 @@ def clean_level(rows: list, bank: float | None = None) -> pd.Series:
     df["level"] = pd.to_numeric(df["level"], errors="coerce")
     df = df.dropna(subset=["time", "level"]).drop_duplicates("time").set_index("time").sort_index()
     level = df["level"][df["level"].abs() < SENTINEL_M]
-    # A single reading far from both neighbours is a spike, not water.
+    # A single reading far from both neighbours is a spike, not water. The newest reading has no neighbour after it
+    # yet: it is kept only if it is close to the one before (live, a real jump is used once the next reading confirms
+    # it; until then the forecast starts from the reading before).
     prev, nxt = level.shift(1), level.shift(-1)
-    spike = ((level - prev).abs() > MAX_JUMP_M) & ((level - nxt).abs() > MAX_JUMP_M)
+    spike = ((level - prev).abs() > MAX_JUMP_M) & ((level - nxt).abs() > MAX_JUMP_M).where(nxt.notna(), True)
     level = level[~spike]
     # A lasting step of several metres between two readings is a new datum or a moved sensor, not water: keep only
     # the readings after the last step, which share today's datum and bank. It counts only when the week after it
@@ -127,19 +129,17 @@ def clean_level(rows: list, bank: float | None = None) -> pd.Series:
         break
     hourly = level.resample("1h").mean()
     # Runs of bad readings survive the checks above (Ct.4 sat 20 m low for 12 hours on 2023-04-04): hours more than
-    # MAX_RUN_M from the median of the two days around them. A run is kept when it is above that median and the level
-    # entered and left it without a jump of more than MAX_STEP_M in an hour: that is a flash flood (a river can rise
-    # 5-8 m in a few hours), while bad runs in this data start or end with a jump of 5 m or more (272 of 283). The
-    # fall after a long flood is not cut: the centred median falls with it. Only a short dip sits far below it.
-    median = hourly.rolling(49, center=True, min_periods=12).median()
+    # MAX_RUN_M from the median of the 49 hours up to them. A run is dropped when the level jumped into it by more than
+    # MAX_STEP_M in an hour; a river that got there smoothly is water (a flash flood rising 5-8 m in a few hours, or
+    # the fall after a long flood, which sits below a median still full of flood hours). Only the past is used, so
+    # an hour is cleaned the same way in training and live, where the hours after it are not known yet.
+    median = hourly.rolling(49, min_periods=12).median()
     far = (hourly - median).abs() > MAX_RUN_M
     if far.any():
         jump_in = (hourly - hourly.ffill().shift(1)).abs()
-        jump_out = (hourly - hourly.bfill().shift(-1)).abs()
         run = (far != far.shift()).cumsum()[far]
-        smooth = pd.concat([jump_in[far].groupby(run).first(), jump_out[far].groupby(run).last()], axis=1).max(axis=1)
-        rising = (hourly - median)[far].groupby(run).first() > 0
-        kept = smooth.index[(smooth.fillna(0) <= MAX_STEP_M) & rising]
+        entered = jump_in[far].groupby(run).first()
+        kept = entered.index[entered.fillna(0) <= MAX_STEP_M]
         hourly = hourly.where(~far | run.reindex(hourly.index).isin(kept))
     # Fill gaps of up to 3 hours only; longer gaps stay missing and their rows are not used. (interpolate(limit=3)
     # alone would also fill the first 3 hours of every longer gap, e.g. at stations that report once a day.)

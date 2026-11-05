@@ -30,18 +30,14 @@ class WaterModels:
     # and rain are not fetched live), and per horizon the stations where it beat "no change" in the validation year.
     river_live: dict[int, HistGradientBoostingRegressor] = field(default_factory=dict)
     river_live_features: list[str] = field(default_factory=list)
-    live_stations: dict[int, list[str]] = field(default_factory=dict)
+    live_stations: dict[int, set[str]] = field(default_factory=dict)
 
 
 def forecast_change(models: WaterModels, station_id: str, row: pd.Series) -> dict[int, float]:
     """Predicted level change (m) per horizon for one live feature row, only at horizons this station is chosen for."""
-    live = getattr(models, "river_live", None) or {}
-    features = getattr(models, "river_live_features", None) or []
-    stations = getattr(models, "live_stations", None) or {}
-    if not live or not features:
-        return {}
-    x = pd.DataFrame([row[features].astype(float).to_numpy()], columns=features)
-    return {h: float(model.predict(x)[0]) for h, model in sorted(live.items()) if station_id in set(stations.get(h, ()))}
+    x = pd.DataFrame([row[models.river_live_features].astype(float).to_numpy()], columns=models.river_live_features)
+    return {h: float(model.predict(x)[0]) for h, model in sorted(models.river_live.items())
+            if station_id in models.live_stations.get(h, ())}
 
 
 def _estimator(loss: str = "squared_error", learning_rate: float = 0.06, max_iter: int = 2000) -> HistGradientBoostingRegressor:
@@ -98,7 +94,7 @@ def train_rivers(table: pd.DataFrame, valid_start: pd.Timestamp, test_start: pd.
         models[h] = model
         v = valid.dropna(subset=[f"y{h}"])
         damping[h] = min(TREND_DAMPING, key=lambda a: np.abs(trend_forecast(v, h, a) - v[f"y{h}"]).mean())
-        result, per_station = {}, {}
+        result, per_station, errors = {}, {}, {}
         for name, part in (("valid", v), ("test", test.dropna(subset=[f"y{h}"]))):
             pred = model.predict(part[features])
             result[name] = {
@@ -106,13 +102,19 @@ def train_rivers(table: pd.DataFrame, valid_start: pd.Timestamp, test_start: pd.
                 "no_change": river_scores(part, h, np.zeros(len(part))),
                 "trend": river_scores(part, h, trend_forecast(part, h, damping[h])),
             }
-            err = pd.DataFrame({"station": part["station_id"].to_numpy(), "model": np.abs(pred - part[f"y{h}"].to_numpy()),
-                                "no_change": np.abs(part[f"y{h}"].to_numpy())})
-            per_station[name] = err.groupby("station")[["model", "no_change"]].mean()
+            errors[name] = pd.DataFrame({"station": part["station_id"].to_numpy(),
+                                         "model": np.abs(pred - part[f"y{h}"].to_numpy()),
+                                         "no_change": np.abs(part[f"y{h}"].to_numpy())})
+            per_station[name] = errors[name].groupby("station")[["model", "no_change"]].mean()
         # A forecast is only worth showing at a station where it beat "no change" in the validation year;
         # the test year then checks that this choice holds.
         good = per_station["valid"].index[per_station["valid"]["model"] < per_station["valid"]["no_change"]]
         tested = per_station["test"]
+        # The test-year error where a forecast would be shown: the stations chosen on the validation year only.
+        chosen = errors["test"][errors["test"]["station"].isin(good)]
+        result["test_chosen"] = {"mae_m": float(chosen["model"].mean()) if len(chosen) else None,
+                                 "no_change_mae_m": float(chosen["no_change"].mean()) if len(chosen) else None,
+                                 "rows": int(len(chosen))}
         result["stations_better_on_valid"] = sorted(map(str, good))
         result["stations"] = {
             "valid": int(len(per_station["valid"])),

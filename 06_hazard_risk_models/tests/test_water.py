@@ -109,15 +109,40 @@ def test_river_chunks_are_calendar_quarters_whatever_the_start_day():
 
 
 def test_the_fall_after_a_day_long_flood_is_kept(tmp_path):
-    # Up 7.5 m, 30 hours there, then down 1.5 m an hour: the centred 2-day median falls with the water, so no hour
-    # of the fall is cut as a bad run.
+    # Up 7.5 m, 30 hours there, then down 1.5 m an hour: after the fall the level sits far below the median of the
+    # last 2 days (still full of flood hours), but it got there smoothly, so it is water.
     flood = [5.0 + 1.5 * k for k in range(1, 6)] + [12.5] * 30 + [12.5 - 1.5 * k for k in range(1, 6)]
     _station(tmp_path, "2", [5.0] * 72 + flood + [5.0] * 72)
     assert station_series(tmp_path / "rivers" / "2").isna().sum() == 0
-    # A dip of the same size with no high water before it is still a bad run.
-    dip = [5.0 - 2.0 * k for k in range(1, 5)] + [-3.0] * 4 + [-3.0 + 2.0 * k for k in range(1, 5)]
-    _station(tmp_path, "1", [5.0] * 72 + dip + [5.0] * 72)
+    # The same drop in one hour is a bad run.
+    _station(tmp_path, "1", [5.0] * 72 + [-3.0] * 6 + [5.0] * 72)
     assert station_series(tmp_path / "rivers" / "1").min() > -3.0
+
+
+def test_cleaning_an_hour_never_uses_later_readings(raw):
+    # Live, the hours after the latest reading are not known: cleaning the history up to any hour must give the same
+    # value for that hour as cleaning the whole history (a flood rising 6 m and a bad 20 m run included).
+    from risk_models.water.dataset import clean_level
+
+    start = datetime(2024, 1, 1)
+    levels = [5.0] * 72 + [5.0 + 1.5 * k for k in range(1, 5)] + [11.0] * 30 + [11.0 - 2.0 * k for k in range(1, 4)]
+    levels += [5.0] * 40 + [25.0] * 6 + [5.0] * 30
+    rows = [[(start + timedelta(hours=i)).strftime("%Y-%m-%d %H:%M"), v, None] for i, v in enumerate(levels)]
+    whole = clean_level(rows)
+    for n in range(80, len(rows), 7):
+        part = clean_level(rows[:n])
+        assert part.iloc[-1] == pytest.approx(whole.loc[part.index[-1]]) or (np.isnan(part.iloc[-1]) and np.isnan(whole.loc[part.index[-1]])), n
+
+
+def test_an_unconfirmed_jump_in_the_newest_reading_is_not_used(tmp_path):
+    from risk_models.water.dataset import clean_level
+
+    start = datetime(2024, 1, 1)
+    rows = [[(start + timedelta(minutes=10 * i)).strftime("%Y-%m-%d %H:%M"), 5.0, None] for i in range(6 * 72)]
+    rows.append([(start + timedelta(minutes=10 * len(rows))).strftime("%Y-%m-%d %H:%M"), 8.0, None])
+    assert clean_level(rows).iloc[-1] == pytest.approx(5.0)  # a 3 m glitch in the latest reading is left out
+    rows.append([(start + timedelta(minutes=10 * len(rows))).strftime("%Y-%m-%d %H:%M"), 8.1, None])
+    assert clean_level(rows).iloc[-1] > 7.0  # confirmed by the next reading: it is water
 
 
 def test_a_step_out_of_the_bank_range_is_a_datum_change_even_if_the_flow_follows(tmp_path):

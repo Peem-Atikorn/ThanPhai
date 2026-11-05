@@ -23,9 +23,9 @@ station page as a labelled model forecast (see "Live forecast"); the dam model i
 ### Cleaning (each found in this data)
 | Problem | Example | Fix |
 |---|---|---|
-| Single spike | one reading 4 m off that comes straight back | dropped when > 1.5 m from both neighbours |
+| Single spike | one reading 4 m off that comes straight back | dropped when > 1.5 m from both neighbours; the newest reading, which has no neighbour after it yet, is dropped when > 1.5 m from the one before |
 | Datum change | stations that move 20-30 m within an hour and stay there; อ.นครชัยศรี went from −9.1 to 0.7 m after 15 hours off | only the readings after the last lasting step (> 3 m, the week after vs the week before, in time, not in readings), unless the flow at least doubled with a rise or halved with a fall and both weeks are within the bank range: then it is water (K.37 บ้านวังเย็น, 456 → 1,460 m³/s in September 2026). Flow is often computed from the level, so it alone is not enough: บ้านท่าบุญมี "rose" 15 → 79 m beside an 18 m bank with flow 1.4 → 71 m³/s |
-| Run of bad readings | Ct.4 sat 20 m low for 12 hours on 2023-04-04 | dropped when > 5 m from the median of the 49 hours around it, unless it is above that median and was entered and left without a jump of more than 3 m in an hour (a flash flood); 272 of the 283 such runs in this data start or end with a jump of 5 m or more |
+| Run of bad readings | Ct.4 sat 20 m low for 12 hours on 2023-04-04 | dropped when > 5 m from the median of the 49 hours up to it and the level jumped into it by more than 3 m in an hour; a run reached smoothly is water (a flash flood, or the fall after a long flood). Only past hours are used, so training cleans an hour exactly as the live forecast can |
 | Gaps | stations that report once a day or only by day | filled only when 3 hours or shorter; every lag and target is a whole number of hours, so none reaches across a gap |
 | "No reading" marker | MKSND02 reports `9999.9` | values ≥ 999 dropped |
 | Implausible bank | X.258: bank 18.4 m, water at ~51 m | readings outside bank −40 m … bank +15 m dropped |
@@ -76,32 +76,32 @@ damping.
 ### Rivers: error of the level h hours ahead (MAE, m) and rises over the bank caught
 | Horizon | Model | No change | Model, near the bank* | No change, near the bank* | Rises over the bank | Caught (recall) | Warnings that came true (precision) |
 |---|---|---|---|---|---|---|---|
-| +6 h | **0.080** | 0.111 | **0.112** | 0.151 | 1,733 | 24.2 % | 65.8 % |
-| +12 h | **0.094** | 0.154 | **0.106** | 0.211 | 2,535 | 40.7 % | 76.6 % |
-| +24 h | **0.121** | 0.140 | **0.153** | 0.208 | 2,853 | 15.3 % | 67.0 % |
+| +6 h | **0.079** | 0.111 | **0.111** | 0.151 | 1,733 | 23.4 % | 67.9 % |
+| +12 h | **0.094** | 0.154 | **0.106** | 0.211 | 2,535 | 39.6 % | 77.5 % |
+| +24 h | **0.121** | 0.140 | **0.152** | 0.208 | 2,851 | 15.3 % | 69.1 % |
 
 \* within 1 m below the bank or above it — the hours that matter for a warning.
 
 - Error is **28 % lower** than "no change" at +6 h, **39 %** at +12 h and **13 %** at +24 h; near the bank,
-  **26 %**, **49 %** and **27 %**.
+  **26 %**, **50 %** and **27 %**.
 - "No change" and "trend" never warn of a rise over the bank. The model catches a quarter to two fifths of them
   6-12 hours ahead, and two out of three to three out of four of its warnings come true.
 
 #### What rain added (same split, same settings; kept because validation MAE fell at every horizon)
-On validation, +24 h recall fell (17.1 → 16.2 %) while precision rose (65.1 → 65.7 %); the test year is shown below.
+On validation, +24 h recall fell (16.8 → 15.7 %) while precision rose (65.5 → 66.7 %); the test year is shown below.
 | Horizon | MAE without → with rain (test, m) | Rises caught without → with rain (test) | Precision without → with rain (test) |
 |---|---|---|---|
-| +6 h | 0.0807 → 0.0798 | 24.7 % → 24.2 % (428 → 420 of 1,733) | 66.0 % → 65.8 % |
-| +12 h | 0.0953 → 0.0939 | 37.0 % → 40.7 % (938 → 1,033 of 2,535) | 76.3 % → 76.6 % |
-| +24 h | 0.1222 → 0.1211 | 15.7 % → 15.3 % (448 → 436 of 2,853) | 66.2 % → 67.0 % |
+| +6 h | 0.0798 → 0.0794 | 23.1 % → 23.4 % (400 → 406 of 1,733) | 66.6 % → 67.9 % |
+| +12 h | 0.0947 → 0.0936 | 37.4 % → 39.6 % (948 → 1,004 of 2,535) | 75.7 % → 77.5 % |
+| +24 h | 0.1221 → 0.1211 | 15.7 % → 15.3 % (449 → 436 of 2,851) | 68.0 % → 69.1 % |
 
-A small gain overall; the clearest one is 95 more rises over the bank caught 12 hours ahead. Most of the information is already in the river itself and its upstream stations; +24 h would need
+A small gain overall; the clearest one is 56 more rises over the bank caught 12 hours ahead. Most of the information is already in the river itself and its upstream stations; +24 h would need
 **forecast** rain, which is not in this model.
 - **Trend is worse than no change:** carrying the last 6 hours' rate forward raised the validation error at every
   damping (first cleaning: 6 h: 0.125 → 0.174 m at full trend; 24 h: 0.174 → 0.522 m), so its best setting is
   "no trend", again after the fix. Rivers turn too often for a straight line.
-- **Per station** (+6 h): the model beat "no change" at 273 of 290 stations in the validation year; 266 of those
-  273 still beat it in the test year (+12 h: 260 of 267; +24 h: 251 of 261). That list
+- **Per station** (+6 h): the model beat "no change" at 275 of 290 stations in the validation year; 267 of those
+  275 still beat it in the test year (+12 h: 260 of 267; +24 h: 252 of 263). That list
   (`stations_better_on_valid` in the metrics) is where a forecast could be shown.
 
 ### Dams: inflow of the next 7 days (million m³), 35 dams
@@ -122,15 +122,24 @@ of ERA5), so the app uses a second model trained the same way on the station's o
 
 | Test year | Error, all features | Error, own readings only | Rises over the bank caught, all → own | Warnings that came true, all → own |
 |---|---|---|---|---|
-| +6 h | 8.0 cm | 8.0 cm (28 % lower than no change) | 24.2 → 23.7 % | 65.8 → 67.9 % |
-| +12 h | 9.4 cm | 9.6 cm (38 % lower) | 40.7 → 36.1 % | 76.6 → 76.0 % |
-| +24 h | 12.1 cm | 12.3 cm (12 % lower) | 15.3 → 13.2 % | 67.0 → 64.6 % |
+| +6 h | 7.9 cm | 8.0 cm (28 % lower than no change) | 23.4 → 23.0 % | 67.9 → 67.5 % |
+| +12 h | 9.4 cm | 9.6 cm (38 % lower) | 39.6 → 35.9 % | 77.5 → 76.1 % |
+| +24 h | 12.1 cm | 12.3 cm (12 % lower) | 15.3 → 13.8 % | 69.1 → 65.4 % |
 
 The error hardly changes; a few rises over the bank 12-24 hours ahead are missed that upstream stations would have
 shown. A horizon is shown only at a station where this model beat "no change" in the validation year (274, 268 and
-259 stations at +6, +12 and +24 h; 286 with at least one), and only when the latest reading is at most 3 hours old.
-Readings are cleaned with the same function as in training (`clean_level`), but live it sees only the past: training
-could judge a run of bad readings with the day after it as well.
+259 stations at +6, +12 and +24 h; 286 with at least one), and only when the latest usable hour is at most 3 hours
+old. At those stations the test-year error is 8.1, 9.7 and 12.3 cm (28, 39 and 13 % below "no change"); that is the
+figure the page shows (`test_chosen`).
+
+Readings are cleaned with the same function as in training (`clean_level`), and every step of it except the datum
+check looks only at earlier readings, so an hour is cleaned live exactly as it was in training (a test checks this).
+The one difference is the newest reading: a jump of more than 1.5 m is used only once the next reading confirms it.
+The datum check compares the week before and after a step; live, a datum change in the last few days can therefore
+still pass, which the bank-range check then mostly catches.
+
+Each forecast is the mean level of an hour, counted from the start of the latest hour, so the page names it by clock
+time ("ราว 18 น."), not "in 6 hours", and the dashed line starts at the last reading of the level line.
 
 The page draws the forecast as a dashed amber line after the level, lists each hour's level and distance to the bank,
 says it is a model and not an alert level, and gives the test-year error. It never changes a river status or level.
@@ -138,7 +147,7 @@ says it is a model and not an alert level, and gives the test-year error. It nev
 ## Limits
 - One year of test data per model. The test year includes the 2026 floods, but more seasons would make the
   numbers firmer.
-- Catching 15-41 % of rises over the bank is better than the baselines' 0 %, but most rises still come without
+- Catching 15-40 % of rises over the bank is better than the baselines' 0 %, but most rises still come without
   a warning. With past rain only, the model cannot see a storm that has not yet fallen.
 - Rain in training is ERA5 (reanalysis). Live, the last few days would come from Open-Meteo's forecast model
   instead, which is not the same data; check the gap before trusting live forecasts.
@@ -149,7 +158,7 @@ says it is a model and not an alert level, and gives the test-year error. It nev
 1. **Forecast rain** for +24 h (e.g. Open-Meteo's historical forecast API, so training sees what was forecast
    at the time, not what fell).
 2. **Upstream stations live:** keep a rolling 3-day buffer of every station from the hourly snapshot the app already
-   fetches, so the live model can use the basin signal again (the full model catches 41 % instead of 36 % at +12 h).
+   fetches, so the live model can use the basin signal again (the full model catches 40 % instead of 36 % at +12 h).
 3. **Dams:** show the 7-day inflow forecast on the dam page.
 4. Retrain yearly with `make water-model`.
 

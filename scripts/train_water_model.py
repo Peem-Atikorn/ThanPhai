@@ -69,7 +69,7 @@ if __name__ == "__main__":
         # The model the app serves: the same split and settings, on what one station's own readings give live.
         started = time.time()
         live_models, _, lm = train_rivers(table, valid_start, test_start, features=LIVE_RIVER_FEATURES)
-        live_stations = {int(k[:-1]): v["stations_better_on_valid"] for k, v in lm.items() if k.endswith("h")}
+        live_stations = {int(k[:-1]): set(v["stations_better_on_valid"]) for k, v in lm.items() if k.endswith("h")}
         lm["seconds"] = round(time.time() - started)
         metrics["rivers_live"] = lm
         print(json.dumps({k: v["test"]["model"] for k, v in lm.items() if k.endswith("h")}, indent=1), flush=True)

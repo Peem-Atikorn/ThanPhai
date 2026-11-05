@@ -259,7 +259,8 @@ def test_river_forecast_is_display_only_and_only_where_the_model_was_chosen(clie
             return x["d1h"].to_numpy() * self.h
 
     svc.water_model = WaterModels(river={}, river_features=[], trend_damping={}, dam=None, dam_features=[], dam_scale={},
-                                  version="test", metrics={"rivers_live": {"6h": {"test": {"model": {"mae_m": 0.08}}}}},
+                                  version="test", metrics={"rivers_live": {"6h": {"test": {"model": {"mae_m": 0.2}},
+                                                                            "test_chosen": {"mae_m": 0.08}}}},
                                   river_live={6: Rise(6), 24: Rise(24)}, river_live_features=list(LIVE_RIVER_FEATURES),
                                   live_stations={6: ["2744"], 24: []})
     f = c.get("/v1/rivers/2744/forecast").json()

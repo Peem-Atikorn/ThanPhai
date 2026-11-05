@@ -48,11 +48,13 @@ function shortTime(t: string) {
     const [, m, day] = d.split("-");
     return { x: new Date(t.replace(" ", "T") + ":00+07:00").getTime(), label: tr("") + tr(+day) + tr("/") + tr(+m) + tr(" ") + tr(hm?.slice(0, 2)) + tr("น.") };
 }
-// The forecast line continues the level from the hour it starts at; dashed and amber so it never reads as a reading.
-export function forecastSeries(forecast: RiverForecast | null): [number, number][] {
+// The forecast line continues from the last point of the level line (or, without one, from the hour the model started
+// at); dashed and amber so it never reads as a reading.
+export function forecastSeries(forecast: RiverForecast | null, last?: [number, number]): [number, number][] {
     if (!forecast?.available || !forecast.from_time || forecast.level_msl == null || !forecast.points?.length)
         return [];
-    return [[shortTime(forecast.from_time).x, forecast.level_msl], ...forecast.points.map((p) => [shortTime(p.time).x, p.level_msl] as [number, number])];
+    const start: [number, number] = last ?? [shortTime(forecast.from_time).x, forecast.level_msl];
+    return [start, ...forecast.points.map((p) => [shortTime(p.time).x, p.level_msl] as [number, number])];
 }
 function StationCharts({ graph, forecast }: {
     graph: StationGraph;
@@ -67,7 +69,7 @@ function StationCharts({ graph, forecast }: {
         number,
         number
     ]);
-    const ahead = forecastSeries(forecast);
+    const ahead = forecastSeries(forecast, level.at(-1));
     // One tick per day, at midnight (the forecast can reach into the next day).
     const days = Array.from(new Set([...graph.points.map((p) => p.time), ...(forecast?.points ?? []).map((p) => p.time)].map((t) => t.slice(0, 10))));
     const ticks = days.map((d) => shortTime(d + " 00:00")).map((t) => ({ x: t.x, label: t.label.replace(" 00น.", "") }));
@@ -91,7 +93,8 @@ export function ForecastNote({ forecast }: {
       <h4>{tr("ค่าคาดการณ์จากแบบจำลอง (ไม่ใช่ระดับเตือนภัย)")}</h4>
       <ul>
         {forecast.points.map((p) => (<li key={p.hours}>
-          <span>{tr("อีก ")}{p.hours}{tr(" ชม.")} <small>({tr(shortTime(p.time).label)})</small></span>
+          {/* A clock time, not "in N hours": the model counts from the start of the latest hour, not from now. */}
+          <span>{tr("ราว ")}{tr(shortTime(p.time).label)}</span>
           <strong>{p.level_msl.toFixed(2)}<small>{tr(" ม.รทก.")}</small></strong>
           <small>{tr(Math.abs(p.change_m) < 0.01 ? "ทรงตัว" : p.change_m > 0 ? "ขึ้น " : "ลด ")}{Math.abs(p.change_m) < 0.01 ? "" : <>{cm(p.change_m)}{tr(" ซม.")}</>}{tr(" · ")}{tr(p.above_bank_m > 0 ? "สูงกว่าตลิ่ง " : "ต่ำกว่าตลิ่ง ")}{Math.abs(p.above_bank_m).toFixed(2)}{tr(" ม.")}</small>
         </li>))}

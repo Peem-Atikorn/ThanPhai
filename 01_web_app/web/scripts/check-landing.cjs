@@ -113,6 +113,8 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert(note.includes('ไม่ใช่ระดับเตือนภัย') && note.includes('14.35') && note.includes('ขึ้น 35') && note.includes('ต่ำกว่าตลิ่ง 1.65') && note.includes('สูงกว่าตลิ่ง 0.20') && note.includes('8–12 ซม.'),
     'River forecast says it is a model, not a warning level, with each level, change, bank distance and test error');
   assert.equal(forecastSeries(riverForecast).length, 3, 'The dashed line starts at the latest reading and runs through each forecast hour');
+  assert.deepEqual(forecastSeries(riverForecast, [1, 13.9])[0], [1, 13.9], 'The dashed line continues from the last point of the level line');
+  assert(note.includes('ราว ') && note.includes('18น.') && !note.includes('อีก 6'), 'Forecast hours are clock times, not "in N hours" counted from the start of the hour');
   assert(content(ForecastNote({ forecast: { station_id: '1', available: false, reason: 'not_chosen' } })).includes('ไม่แม่นกว่า'), 'A station the model was not chosen for says why there is no forecast');
   assert.equal(ForecastNote({ forecast: { station_id: '1', available: false, reason: 'no_model' } }), null, 'No model: nothing is shown');
   assert.equal(forecastSeries(null).length, 0, 'No forecast: no dashed line');
