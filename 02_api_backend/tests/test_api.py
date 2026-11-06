@@ -532,3 +532,33 @@ def test_ask_rate_limit_window_expires(monkeypatch):
     with pytest.raises(main.HTTPException):
         main.check_ask_limit("9.9.9.9", now=130.0)
     main.check_ask_limit("9.9.9.9", now=161.0)
+
+
+def test_shelters_filter_by_area_and_find_the_nearest(client, monkeypatch):
+    c, svc, _ = client
+    rows = [{"name": "โรงเรียนวัดเสนา", "responsible": "อบต.เสนา", "tambon": "เสนา", "amphoe_code": "TH1406", "capacity": 300,
+             "lat": 14.32, "lon": 100.4, "approximate": False},
+            {"name": "วัดบางนมโค", "responsible": "", "tambon": "บางนมโค", "amphoe_code": "TH1406", "capacity": 80,
+             "lat": 14.28, "lon": 100.43, "approximate": True},
+            {"name": "วัดปากนคร", "responsible": "", "tambon": "ปากนคร", "amphoe_code": "TH9303", "capacity": 100,
+             "lat": 7.43, "lon": 100.01, "approximate": True}]
+    monkeypatch.setattr(svc, "shelter_data", {"source": "ปภ.", "source_url": "https://data.go.th/x", "updated": "2024-08-09",
+                                              "shelters": rows})
+    every = c.get("/v1/shelters").json()
+    assert len(every["shelters"]) == 3 and every["updated"] == "2024-08-09"
+    in_district = [s["name"] for s in c.get("/v1/shelters", params={"area": "TH1406"}).json()["shelters"]]
+    assert in_district == ["โรงเรียนวัดเสนา", "วัดบางนมโค"]
+    assert len(c.get("/v1/shelters", params={"area": "TH14"}).json()["shelters"]) == 2  # the province
+    tambon = next(a.code for a in svc.gazetteer.areas if a.level == "tambon" and a.parent_code == "TH1406")
+    assert len(c.get("/v1/shelters", params={"area": tambon}).json()["shelters"]) == 2  # its district's
+    assert c.get("/v1/shelters", params={"area": "x"}).status_code == 422
+    nearest = c.get("/v1/shelters/nearest", params={"lat": 14.3, "lon": 100.42, "limit": 2}).json()["shelters"]
+    assert [s["name"] for s in nearest] == ["วัดบางนมโค", "โรงเรียนวัดเสนา"] and nearest[0]["distance_km"] < 3
+    assert c.get("/v1/shelters/nearest", params={"lat": 35, "lon": 100}).status_code == 422  # outside Thailand
+
+
+def test_shelters_without_the_built_file_say_so(client, monkeypatch):
+    c, svc, _ = client
+    monkeypatch.setattr(svc, "shelter_data", None)
+    assert c.get("/v1/shelters").status_code == 503
+    assert c.get("/v1/shelters/nearest", params={"lat": 14.3, "lon": 100.4}).status_code == 503

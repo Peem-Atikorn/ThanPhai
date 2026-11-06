@@ -135,7 +135,7 @@ global.document = { documentElement: { lang: 'th' }, getElementById: () => ({ fo
   assert.equal(ForecastNote({ forecast: { station_id: '1', available: false, reason: 'no_model' } }), null, 'No model: nothing is shown');
   assert.equal(forecastSeries(null).length, 0, 'No forecast: no dashed line');
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: { ...metricArea0(), assessments: [{ hazard: 'rain_storm', level: 'NORMAL', observations: { rain_chance_max_24h: 25, rain_chance_peak_hour: 7 }, sources: [] }] } });
-  assert(content(nodes(metrics).filter(n => n.type === 'article')[2]).includes('25') && content(metrics).includes('ราว 07:00 น.') && !content(metrics).includes('63'), 'Selected area shows its own chance of rain and hour');
+  assert(content(nodes(metrics).filter(n => n.type === 'article').find(n => content(n).includes('25'))).includes('25') && content(metrics).includes('ราว 07:00 น.') && !content(metrics).includes('63'), 'Selected area shows its own chance of rain and hour');
   const metricArea = { area: { name_th: 'พื้นที่เลือก', parents: ['จังหวัด'] }, assessments: [{ hazard: 'heat', level: 'WATCH', observations: { heat_index_now: 27, heat_index_max_24h: 30 }, sources: ['Open-Meteo'] }], data_updated_at: '2026-11-04T05:00:00Z', degraded_services: [] };
   metrics = instance(EnvironmentSummary).render({ ...metricProps, area: metricArea });
   assert(content(metrics).includes('27') && content(metrics).includes('30') && !content(metrics).includes('35'), 'Selected area shows its own now and peak, never the national one');

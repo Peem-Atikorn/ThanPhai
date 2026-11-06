@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export type IconName = "shield" | "map" | "search" | "pin" | "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone" | "landslide" | "arrow" | "refresh" | "clock" | "info" | "close" | "chat" | "phone" | "dam" | "river" | "radar";
+export type IconName = "shield" | "map" | "search" | "pin" | "flood" | "rain_storm" | "fire" | "drought" | "air_quality" | "heat" | "earthquake" | "marine" | "tropical_cyclone" | "landslide" | "arrow" | "refresh" | "clock" | "info" | "close" | "chat" | "phone" | "dam" | "river" | "radar" | "shelter";
 const paths: Record<IconName, React.ReactNode> = {
   shield: <><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z" /><path d="m8 12 3 3 5-6" /></>,
   map: <><path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15M15 6v15" /></>,
@@ -32,6 +32,7 @@ const paths: Record<IconName, React.ReactNode> = {
   dam: <><path d="M3 9h7v12H3" /><path d="M10 5h3l3 16h-6" /><path d="M16 15c1.5-1 3 1 5 0M16 19c1.5-1 3 1 5 0" /></>,
   river: <><path d="M3 7c3-2 6 2 9 0s6-2 9 0" /><path d="M3 12c3-2 6 2 9 0s6-2 9 0" /><path d="M3 17c3-2 6 2 9 0s6-2 9 0" /></>,
   radar: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><path d="M12 12l6-6" /><circle cx="12" cy="12" r="1" /></>,
+  shelter: <><path d="M3 11 12 4l9 7" /><path d="M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></>,
   phone: <path d="m8 3 2 5-3 2a14 14 0 0 0 7 7l2-3 5 2v3a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2h3Z" />,
 };
 export default function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconName }) {

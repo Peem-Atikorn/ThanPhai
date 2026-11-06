@@ -4,6 +4,7 @@ The deterministic path below works without any LLM. An LLM can later replace `un
 questions and `compose` for wording, but it must keep the same evidence and alert levels.
 """
 
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 import re
@@ -49,6 +50,19 @@ REWRITE_INTENTS = {"risk", "explain", "overview", "ranking", "dam", "dam_history
 VERBATIM_PREFIXES = ("⚠", "ประกาศของกรมอุตุนิยมวิทยาครอบคลุม", "ระดับเตือนภัยตัดสินด้วยกฎ", "หากอยู่ในอันตราย", "ที่มา:")
 # Start of a TMD warning line ("⚠ ประกาศกรมอุตุนิยมวิทยา: <title>") once spacing is removed.
 WARNING_TITLE = "ประกาศกรมอุตุนิยมวิทยา:"
+# Shown with every shelter answer: DDPM's list is a plan, not a notice that a shelter is open now.
+SHELTER_CHECK = "⚠ ก่อนเดินทาง โปรดสอบถาม อปท. ในพื้นที่ หรือโทรสายด่วน ปภ. 1784 ว่าศูนย์เปิดรับอยู่"
+SHELTER_LIST = 6  # shelters named in one answer; the map shows them all
+# The agent has no GPS: a route starts from the visitor's position in the shelter layer ("หาศูนย์ใกล้ฉัน" → "เส้นทาง").
+SHELTER_ROUTE_HINT = 'ดูเส้นทางที่เลี่ยงน้ำท่วมจากดาวเทียม: กด "หาศูนย์ใกล้ฉัน" แล้วกด "เส้นทาง" ที่ศูนย์ที่ต้องการ'
+MONTH_TH = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
+
+
+def _date_th(value: str) -> str:
+    day = date.fromisoformat(value[:10])
+    return f"{day.day} {MONTH_TH[day.month - 1]} {day.year + 543}"
+
+
 EMERGENCY_TH = "หากอยู่ในอันตราย โทร 1784 (ปภ.) · 1669 (เจ็บป่วยฉุกเฉิน) · 199 (ดับเพลิง) ทันที"
 PREPARE_TH = {
     "flood": ["ยกของมีค่าและปลั๊กไฟขึ้นที่สูง", "เตรียมยา น้ำดื่ม อาหารแห้ง ไฟฉาย และเอกสารสำคัญใส่ถุงกันน้ำ", "ติดตามประกาศของ ปภ. และเตรียมเส้นทางอพยพ"],
@@ -104,6 +118,8 @@ class HazardTools(Protocol):
     def get_media(self) -> dict: ...
     def get_dams(self) -> list[dict]: ...
     def get_dam_history(self, dam_id: str, series: str = "storage") -> dict | None: ...
+    def get_shelters(self, area_code: str | None = None) -> list[dict]: ...  # optional: DDPM shelter list
+    def shelter_source(self) -> dict | None: ...
 
 
 @dataclass
@@ -421,6 +437,10 @@ class HazardAgent:
             return AgentAnswer(text, "clarify", None, [h.value for h in u.hazards])
         if u.intent == "sources":
             return self._sources()
+        if u.intent == "shelter":
+            if context is not None and not u.areas and not u.regions:
+                u.areas = [context]
+            return self._shelters(u)
         if u.intent == "dam":
             return self._dams(question, u)
         if u.intent == "river":
@@ -817,6 +837,64 @@ class HazardAgent:
             lines.append(f"• {label}: {status}")
             evidence.append({"source": source, "ok": ok, "checked_at": state.get("checked_at")})
         return AgentAnswer("\n".join(lines), "sources", None, [], evidence=evidence, tool_calls=calls)
+
+    def _shelters(self, u: Understanding) -> AgentAnswer:
+        """Shelters straight from DDPM's list. Never rewritten by the LLM, and never a place the list does not name."""
+        get, get_source = getattr(self.tools, "get_shelters", None), getattr(self.tools, "shelter_source", None)
+        source = get_source() if get_source else None
+        calls = ["shelter_source()"]
+        if not get or source is None:
+            return AgentAnswer(f"ทันภัยยังไม่มีรายชื่อศูนย์พักพิง\n{SHELTER_CHECK}", "shelter", None, [], tool_calls=calls)
+        hazards = [h.value for h in u.hazards]
+        source_line = f"ที่มา: {source['source']}" + (f" · ปรับปรุงล่าสุด {_date_th(source['updated'])}" if source.get("updated") else "")
+        if not u.area:
+            calls.append("get_shelters()")
+            total = len(get())
+            text = (f"รายชื่อศูนย์พักพิงชั่วคราวของ ปภ. มี {total:,} แห่งทั่วประเทศ (ยังไม่มีกรุงเทพฯ) "
+                    "บอกชื่ออำเภอหรือจังหวัดมาได้เลย เช่น \"ศูนย์พักพิงอำเภอเสนา\" "
+                    "หรือกดปุ่ม \"หาศูนย์ใกล้ฉัน\" ในชั้นศูนย์พักพิงบนแผนที่\n"
+                    f"{SHELTER_ROUTE_HINT}\n{SHELTER_CHECK}\n{source_line}")
+            return AgentAnswer(text, "shelter", None, hazards, sources=[source["source"]], tool_calls=calls,
+                               notes=[*u.notes, "area required"])
+        area = u.area
+        label = _area_label(area, self.gazetteer)
+        area_info = {"code": area.code, "level": area.level, "label": label, "lat": area.lat, "lon": area.lon}
+        if area.code.startswith("TH10"):
+            text = ("รายชื่อศูนย์พักพิงของ ปภ. ยังไม่มีกรุงเทพฯ กรุงเทพมหานครประกาศศูนย์พักพิงของแต่ละเขตเอง "
+                    "ติดตามได้จากสำนักงานเขต หรือโทรสายด่วน กทม. 1555\n"
+                    f"{SHELTER_CHECK}")
+            return AgentAnswer(text, "shelter", area_info, hazards, tool_calls=calls)
+        calls.append(f"get_shelters({area.code!r})")
+        shelters = get(area.code)
+        # A sub-district gets its district's list (the same as its risk level); say which district that is.
+        scope = area
+        if area.level == "tambon" and area.parent_code in self.gazetteer.by_code:
+            scope = self.gazetteer.by_code[area.parent_code]
+        scope_label = _area_label(scope, self.gazetteer)
+        if not shelters:
+            text = f"รายชื่อของ ปภ. ไม่มีศูนย์พักพิงใน{scope_label}\n{SHELTER_CHECK}\n{source_line}"
+            return AgentAnswer(text, "shelter", area_info, hazards, sources=[source["source"]], tool_calls=calls)
+        capacity = sum(s.get("capacity") or 0 for s in shelters)
+        lines = [f"ศูนย์พักพิงชั่วคราวใน{scope_label} {len(shelters):,} แห่ง"
+                 + (f" รองรับรวม {capacity:,} คน" if capacity else "")]
+        if area.level == "tambon":
+            lines[0] = f"{label} อยู่ใน{scope_label} " + lines[0]
+        if scope.level == "province":
+            by_district = Counter(s["amphoe_code"] for s in shelters)
+            names = [f"{self.gazetteer.by_code[c].name_th} {n}" for c, n in by_district.most_common(5) if c in self.gazetteer.by_code]
+            lines.append("อำเภอที่มีศูนย์มากที่สุด: " + " · ".join(names))
+            lines.append("ศูนย์ที่รองรับคนได้มากที่สุด:")
+        biggest = sorted(shelters, key=lambda s: -(s.get("capacity") or 0))[:SHELTER_LIST]
+        for s in biggest:
+            where = " ".join(p for p in (s.get("tambon") and f"ต.{s['tambon']}",
+                                         scope.level == "province" and s.get("amphoe") and f"อ.{s['amphoe']}") if p)
+            lines.append(f"• {s['name']}" + (f" ({where})" if where else "")
+                         + (f" รองรับ {s['capacity']:,} คน" if s.get("capacity") else "")
+                         + (" · ตำแหน่งโดยประมาณ" if s.get("approximate") else ""))
+        if len(shelters) > len(biggest):
+            lines.append(f"และอีก {len(shelters) - len(biggest):,} แห่ง ดูครบทุกแห่งได้บนแผนที่ (เปิดชั้น \"ศูนย์พักพิง\")")
+        lines += [SHELTER_ROUTE_HINT, SHELTER_CHECK, source_line]
+        return AgentAnswer("\n".join(lines), "shelter", area_info, hazards, biggest, [source["source"]], calls)
 
     def _dams(self, question: str, u: Understanding) -> AgentAnswer:
         """Dam storage, straight from the data (no LLM rewrite, so every number is exactly as reported)."""
