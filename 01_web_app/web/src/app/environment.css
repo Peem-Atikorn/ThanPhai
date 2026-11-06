@@ -1,5 +1,10 @@
 /* PM2.5, heat and chance of rain side by side in the map header. */
-.environment-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 420px; min-width: 0; gap: 6px; }
+/* Columns follow the cards shown: a card without data is left out, the others share the width. */
+.environment-summary { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); flex: 0 0 420px; min-width: 0; gap: 6px; }
+.environment-summary:empty { display: none; }
+.environment-shimmer { display: inline-block; width: 52px; height: 14px; border-radius: 4px; vertical-align: middle; background: linear-gradient(90deg, var(--line) 25%, rgb(255 255 255 / 22%) 50%, var(--line) 75%); background-size: 200% 100%; animation: environment-shimmer 1.4s linear infinite; }
+@keyframes environment-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .environment-shimmer { animation: none; } }
 .environment-summary article { min-width: 0; height: 44px; display: grid; grid-template-columns: 18px minmax(0, 1fr); grid-template-rows: 1fr 1fr; align-items: center; column-gap: 5px; padding: 4px 7px; color: var(--foreground); background: var(--cc-panel, var(--surface)); border: 1px solid var(--line); border-radius: 8px; }
 .environment-icon { grid-column: 1; grid-row: 1 / -1; display: grid; place-items: center; color: var(--cc-accent, var(--brand)); }
 .environment-icon svg { width: 16px; height: 16px; }
@@ -15,6 +20,7 @@
 @media (max-width: 600px) {
   .environment-summary { flex-basis: 300px; gap: 4px; }
   .environment-summary article { grid-template-columns: minmax(0, 1fr); padding-inline: 5px; }
+  .environment-shimmer { width: 36px; }
   .environment-icon { display: none; }
   .environment-summary :is(h3,.environment-status) { grid-column: 1; }
   .landscape-shell .journey-dashboard .map-heading .environment-value { grid-column: 1; }

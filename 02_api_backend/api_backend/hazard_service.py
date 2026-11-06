@@ -17,6 +17,8 @@ import time
 import numpy as np
 
 import geopandas as gpd
+from shapely.geometry import Point, mapping, shape as shapely_shape
+from shapely.ops import unary_union
 import httpx
 
 from decision_engine import DecisionEngine, DecisionInput
@@ -24,7 +26,8 @@ from external_data.adapters import (Air4ThaiPm25, FirmsHotspots, GdacsCyclones, 
                                     OpenMeteoWaveField, ThaiWaterRain24h, ThaiWaterStorms, ThaiWaterWaterLevel, ThaiWaterWaterQuality,
                                     TmdEarthquakes, TmdNwpDailyForecast, TmdWarnings, UsgsEarthquakes, merge_quakes, sea_grid)
 from external_data.adapters.base import REGION_BBOX, in_thailand_bbox
-from external_data.adapters.gistda import GistdaFloodCells
+from external_data.adapters.gistda import GistdaFloodCells, fetch_flood_cells
+from external_data.adapters.openrouteservice import ATTRIBUTION as ROUTE_ATTRIBUTION, RouteError, fetch_route
 from external_data.adapters.thaiwater_dams import ThaiWaterDams
 from external_data.adapters.thaiwater_graphs import DAM_SERIES, fetch_dam_year, fetch_dam_year_sync, fetch_station_graph
 from external_data.adapters.thaiwater_media import parse_media
@@ -37,6 +40,14 @@ from thanphai_shared import AlertLevel, HazardType, SourceRecord
 
 BANGKOK = timezone(timedelta(hours=7), "Asia/Bangkok")
 RETRY_AFTER_FAILURE = timedelta(minutes=10)
+# Shelter routes: GISTDA water in a box around both ends, routed around when openrouteservice accepts the area.
+ROUTE_MAX_KM = 50           # straight line; farther than this, call 1784 rather than drive across a flood
+ROUTE_FLOOD_PAD_DEG = 0.02  # ~2 km around the two ends
+ROUTE_FLOOD_MAX_CELLS = 4000
+ROUTE_FLOOD_TTL_S = 1800
+ROUTE_END_CLEAR_DEG = 0.003  # ~300 m kept open around the start and the shelter
+ROUTE_SIMPLIFY_DEG = 0.0005  # ~50 m: fewer points for openrouteservice
+ROUTE_CROSSING_MIN_KM = 0.05
 # Vegetation-based drought: NDVI must be this far below the month's normal to count, and districts whose
 # greenest month never reaches URBAN_NDVI_MAX are mostly built-up, where NDVI says nothing about drought.
 MIN_NDVI_DEFICIT = 0.05
@@ -213,6 +224,9 @@ class HazardService:
         self._last_pm25: list[dict] | None = None
         # Past landslides per district, from scripts/build_landslide_districts.py; optional.
         self.landslide_traces = self._load_landslide_traces()
+        # DDPM's temporary shelters, from scripts/build_shelters.py; optional (a fixed list, read once).
+        self.shelter_data = self._load_shelters()
+        self._flood_shapes: dict[tuple, tuple[float, dict]] = {}  # GISTDA water per route box, for ROUTE_FLOOD_TTL_S
         self._geometry = self._load_map_geometry()
 
     def _load_map_geometry(self) -> dict[str, dict]:
@@ -832,7 +846,7 @@ class HazardService:
 
     def get_quake_gaps(self) -> list[dict]:
         """Spans in which TMD events may be missing from the kept history (the agent marks such counts partial)."""
-        return [{"start": s.isoformat(), "end": e.isoformat()} for s, e in self._tmd_gaps]
+        return [{"start": s.isoformat(), "end": e.isoformat()} for s, e in getattr(self, "_tmd_gaps", ())]
 
     def _load_landslide_traces(self) -> dict[str, int] | None:
         path = self.data_dir / "landslide_districts.json"
@@ -840,6 +854,109 @@ class HazardService:
             log.info("no %s; landslide checks are off", path)
             return None
         return json.loads(path.read_text(encoding="utf-8"))["districts"]
+
+    def _load_shelters(self) -> dict | None:
+        path = self.data_dir / "shelters.json"
+        if not path.exists():
+            log.info("no %s; the shelter layer is off", path)
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def shelter_source(self) -> dict | None:
+        """Who publishes the shelter list and when DDPM last updated it; None without the built file."""
+        if self.shelter_data is None:
+            return None
+        return {k: self.shelter_data[k] for k in ("source", "source_url", "updated")}
+
+    def get_shelters(self, area_code: str | None = None) -> list[dict]:
+        """Shelters in a province or district; a sub-district gets its district's, like its risk level."""
+        shelters = (self.shelter_data or {}).get("shelters", [])
+        if not area_code:
+            return shelters
+        area = self.gazetteer.by_code.get(area_code)
+        prefix = area.parent_code if area is not None and area.level == "tambon" else area_code
+        return [s for s in shelters if s["amphoe_code"].startswith(prefix)]
+
+    def nearest_shelters(self, lat: float, lon: float, limit: int = 5) -> list[dict]:
+        """The closest shelters by straight-line distance (km), nearest first."""
+        def km(s: dict) -> float:
+            p1, p2 = math.radians(lat), math.radians(s["lat"])
+            a = (math.sin((p2 - p1) / 2) ** 2
+                 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(s["lon"] - lon) / 2) ** 2)
+            return 6371 * 2 * math.asin(math.sqrt(a))
+        ranked = sorted(((km(s), s) for s in self.get_shelters()), key=lambda pair: pair[0])[:limit]
+        return [{**s, "distance_km": round(d, 1)} for d, s in ranked]
+
+    def find_shelter(self, lat: float, lon: float) -> dict | None:
+        """The listed shelter at this point (routes go only to DDPM shelters, so the API is not a free router)."""
+        return next((s for s in self.get_shelters() if abs(s["lat"] - lat) < 1e-4 and abs(s["lon"] - lon) < 1e-4), None)
+
+    async def _flood_near(self, client: httpx.AsyncClient, bbox: tuple[float, float, float, float]):
+        """GISTDA's flood water (7 days) in a box, merged into shapes; cached ~30 min per box. None without a key."""
+        if not os.getenv("GISTDA_API_KEY"):
+            return None
+        key = tuple(round(v, 2) for v in bbox)
+        cached = self._flood_shapes.get(key)
+        if cached and time.monotonic() - cached[0] < ROUTE_FLOOD_TTL_S:
+            return cached[1]
+        cells, total = await fetch_flood_cells(client, key, max_cells=ROUTE_FLOOD_MAX_CELLS)
+        shape = unary_union([shapely_shape(g) for g in cells]).buffer(0) if cells else None
+        result = {"shape": shape, "cells": len(cells), "partial": total > len(cells)}
+        if len(self._flood_shapes) > 200:
+            self._flood_shapes.clear()
+        self._flood_shapes[key] = (time.monotonic(), result)
+        return result
+
+    async def route_to_shelter(self, start: tuple[float, float], shelter: dict, profile: str = "driving-car") -> dict:
+        """A road route to a listed shelter that keeps out of GISTDA's flood water when it can.
+
+        `flood.status`: "clear" (no flood water seen on the way), "avoided" (routed around it), "crosses" (the route
+        still passes flood water: no way around, or openrouteservice refused the area), "unchecked" (no GISTDA data).
+        Satellite water is days old and says nothing about closed roads, so no answer calls a route safe.
+        """
+        end = (shelter["lat"], shelter["lon"])
+        pad = ROUTE_FLOOD_PAD_DEG
+        bbox = (min(start[1], end[1]) - pad, min(start[0], end[0]) - pad, max(start[1], end[1]) + pad, max(start[0], end[0]) + pad)
+        async with httpx.AsyncClient(headers={"User-Agent": "ThanPhai/0.1 (student project)"}) as client:
+            flood = None
+            try:
+                flood = await self._flood_near(client, bbox)
+            except (httpx.HTTPError, PermissionError, ValueError) as error:
+                log.warning("flood cells for a route failed: %s", type(error).__name__)
+            avoid = None
+            if flood and flood["shape"] is not None:
+                # Leave the two ends out of the area, or no route could start or finish there.
+                ends = unary_union([Point(start[1], start[0]).buffer(ROUTE_END_CLEAR_DEG), Point(end[1], end[0]).buffer(ROUTE_END_CLEAR_DEG)])
+                area = flood["shape"].difference(ends).simplify(ROUTE_SIMPLIFY_DEG)
+                if not area.is_empty:
+                    avoid = mapping(area if area.geom_type in ("Polygon", "MultiPolygon") else area.buffer(0))
+            refused = None
+            try:
+                route = await fetch_route(client, start, end, profile, avoid)
+            except RouteError as error:
+                if avoid is None or error.status not in (400, 413, 500):
+                    raise
+                refused = error.code  # e.g. the area is too large or complex for ORS: route without it, then warn
+                route = await fetch_route(client, start, end, profile, None)
+        line = shapely_shape(route["geometry"])
+        crossing_km = 0.0
+        if flood and flood["shape"] is not None:
+            crossing = line.intersection(flood["shape"])
+            crossing_km = round(crossing.length * 111.0 * math.cos(math.radians(start[0])), 2)
+        if not flood:
+            status = "unchecked"
+        elif crossing_km > ROUTE_CROSSING_MIN_KM:
+            status = "crosses"
+        elif avoid and refused is None:
+            status = "avoided" if flood["cells"] else "clear"
+        else:
+            status = "clear"
+        return {**route, "profile": profile, "shelter": shelter, "attribution": ROUTE_ATTRIBUTION,
+                "flood": {"status": status, "crossing_km": crossing_km, "cells": flood["cells"] if flood else 0,
+                          "partial": bool(flood and flood["partial"]), "avoid_refused": refused is not None,
+                          # The water the route was checked against, to draw under it (the district overlay is coarser).
+                          "area": mapping(flood["shape"].simplify(ROUTE_SIMPLIFY_DEG)) if flood and flood["shape"] is not None else None,
+                          "window": "7days", "source": "GISTDA (ดาวเทียม Sentinel-1)"}}
 
     def _landslide_observations(self, code: str, rain_24h: float | None, forecasts: dict) -> dict:
         """Rain inputs for landslide rules, only in districts with enough past landslides (else no level)."""

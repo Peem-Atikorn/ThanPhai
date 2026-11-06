@@ -32,6 +32,10 @@ HAZARD_WORDS = {
                                   "tropical storm"),
     HazardType.LANDSLIDE: ("ดินถล่ม", "ดินสไลด์", "โคลนถล่ม", "ภูเขาถล่ม", "landslide", "mudslide"),
 }
+# Where to go: answered from DDPM's shelter list. Before the off-topic words ("ที่พักพิง" contains "ที่พัก") and
+# before prepare ("อพยพไปที่ไหน" asks for a place, "ต้องอพยพอย่างไร" for guidance).
+SHELTER_WORDS = ("ศูนย์พักพิง", "ศูนย์อพยพ", "จุดอพยพ", "ที่พักพิง", "ศูนย์หลบภัย", "อพยพไปที่ไหน", "อพยพไปไหน",
+                 "หนีน้ำไปที่ไหน", "หนีน้ำไปไหน", "shelter", "evacuation centre", "evacuation center")
 DAM_WORDS = ("เขื่อน", "อ่างเก็บน้ำ", "ปริมาณน้ำในอ่าง", "dam", "reservoir")
 DAM_HISTORY_WORDS = ("เทียบ", "เปรียบเทียบ", "เมื่อวาน", "สัปดาห์ก่อน", "อาทิตย์ก่อน", "history", "เทียบกับ")
 # A river is named "แม่น้ำน่าน" / "ลำน้ำน่าน"; the name after these is the river's, not a place's.
@@ -68,7 +72,7 @@ TIME_WORDS = {
 
 @dataclass
 class Understanding:
-    intent: str  # risk | explain | prepare | emergency | dam | river | greeting | sources | out_of_scope
+    intent: str  # risk | explain | prepare | emergency | dam | river | shelter | greeting | sources | out_of_scope
     hazards: list[HazardType]
     areas: list[Area]
     window_start: datetime
@@ -155,6 +159,8 @@ def understand(text: str, gazetteer: Gazetteer, now: datetime) -> Understanding:
         return Understanding("emergency", detect_hazards(text), areas, start, end, language)
     if GREETING.fullmatch(lowered.strip()):
         return Understanding("greeting", [], [], start, end, language)
+    if any(w in lowered for w in SHELTER_WORDS):
+        return Understanding("shelter", detect_hazards(text), areas, start, end, language, regions=regions)
     if any(w in lowered for w in DAM_WORDS):
         # A real tambon is named "เขื่อน" (TH440310, Maha Sarakham); in a dam question the word is not a place.
         places = [a for a in areas if a.name_th not in DAM_WORDS]

@@ -4,7 +4,7 @@ import { t as tr, getLocale } from "@/lib/i18n";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, OfficialWarning, RadarFrame, RadarNowcast, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS } from "@/lib/api";
+import { AirStation, api, AreaBoundary, AreaHazards, AskAnswer, Dam, damBadge, damColor, describeObservation, groupOf, GROUPS, HAZARDS, itemTh, levelInfo, LEVELS, MapItem, MapLayerId, MapView, OfficialWarning, RadarFrame, RadarNowcast, WaterQualityStation, mcmPerDayToM3s, PM25_BANDS, pm25Band, River, riverColor, RIVER_STATUS, Shelter, SHELTER_COLOR, ShelterRoute } from "@/lib/api";
 import WaterQualityPanel, { qualityKey, qualityColor } from "@/components/WaterQualityPanel";
 import Icon from "@/components/Icon";
 import FloatingMascot from "@/components/FloatingMascot";
@@ -15,6 +15,7 @@ import EventsPanel from "@/components/EventsPanel";
 import EnvironmentSummary, { ENVIRONMENT_METRICS, type EnvironmentState, type Metric as EnvironmentMetric } from "@/components/EnvironmentSummary";
 import StormsPanel from "@/components/StormsPanel";
 import AreaWarnings from "@/components/AreaWarnings";
+import { NearestShelters, ShelterCard } from "@/components/ShelterCard";
 import RiskAlerts from "@/components/RiskAlerts";
 import RiskSnapshot, { type RiskFilter } from "@/components/RiskSnapshot";
 import RadarPlayback, { radarImageFailed, radarImageLoaded } from "@/components/RadarPlayback";
@@ -22,6 +23,13 @@ import AnswerText from "@/components/AnswerText";
 import { riskAreasAtLevel } from "@/lib/risk-overview";
 import { OverlayControls, OverlayLegends, useOverviewLayers } from "@/components/OverviewLayers";
 import { RiverDetail, RiverRow, riverTime, RiverSort, sortRivers } from "@/components/RiverPanel";
+// Right after a backend restart the first requests can fail for a few seconds; try again quietly
+// (after 3 s, then 6 s) before the map shows a load error.
+function withRetry<T>(load: () => Promise<T>, tries = 3, wait = 3000): Promise<T> {
+    return load().catch((error) => tries > 1
+        ? new Promise<void>((resolve) => setTimeout(resolve, wait)).then(() => withRetry(load, tries - 1, wait * 2))
+        : Promise.reject(error));
+}
 const HazardMap = dynamic(() => import("@/components/HazardMap"), {
     ssr: false,
     loading: () => <RainCloudSkeleton inline/>,
@@ -161,6 +169,22 @@ const stationFeatures = (stations: AirStation[]): GeoJSON.FeatureCollection => (
         properties: { pm25: s.pm25, title: tr("") + tr(s.name_th ?? "สถานี") + tr(": PM2.5 ") + tr(s.pm25.toFixed(1)) + tr(" มคก./ลบ.ม. (") + tr(pm25Band(s.pm25).th) + tr(")") },
     })),
 });
+// Hazards whose area card lists shelters; a WARNING or CRITICAL in one of them puts the list forward.
+const SHELTER_HAZARDS = new Set<string>(["overview", "flood", "rain_storm", "landslide", "tropical_cyclone"]);
+const shelterFeatures = (shelters: Shelter[]): GeoJSON.FeatureCollection => ({
+    type: "FeatureCollection",
+    features: shelters.map((s) => {
+        const services = [s.electricity && tr("ไฟฟ้า"), s.water && tr("ประปา"), s.toilets && tr("ห้องน้ำ ") + s.toilets + tr(" ห้อง")].filter(Boolean);
+        const detail = [
+            s.responsible && s.responsible !== s.name ? tr("ดูแลโดย ") + s.responsible : "",
+            [/^\d+$/.test(s.village) ? tr("ม.") + s.village : s.village, s.tambon && tr("ต.") + s.tambon, s.amphoe && tr("อ.") + s.amphoe, s.province && tr("จ.") + s.province].filter(Boolean).join(" "),
+            s.capacity ? tr("รองรับ ") + number.format(s.capacity) + tr(" คน") : "",
+            services.length ? tr("มี ") + services.join(" · ") : "",
+            s.approximate ? tr("ตำแหน่งบนแผนที่เป็นค่าโดยประมาณ") : "",
+        ].filter(Boolean).join("\n");
+        return { type: "Feature", geometry: { type: "Point", coordinates: [s.lon, s.lat] }, properties: { title: s.name, detail, approximate: s.approximate } };
+    }),
+});
 // Map look, remembered per browser. Storage can be blocked (private windows): then the flag still works for this
 // page through `memory`, it is just not remembered. The server render uses the same default.
 const memory = new Map<string, boolean>();
@@ -248,7 +272,7 @@ function DamDetail({ dam, onClose }: {
       <p className="source-note">{tr("ปริมาณต่อวินาทีเป็นค่าเฉลี่ยจากยอดทั้งวัน ไม่ใช่อัตราระบาย ณ ขณะนี้")}</p>
     </div>);
 }
-export default function Dashboard({ activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, summaryTarget, locationTarget, onOpenSearch, onAreaChosen, onReady, onDataTime, riskLevel, onRiskLevelChange }: {
+export default function Dashboard({ activeHazard, onHazardChange, activeView, onViewChange, hideToolbar = false, searchInHeader = false, searchTarget, summaryTarget, headlineTarget, locationTarget, onOpenSearch, onAreaChosen, onReady, onDataTime, riskLevel, onRiskLevelChange }: {
     activeHazard?: MapLayerId;
     onHazardChange?: (value: MapLayerId) => void;
     activeView?: View;
@@ -257,6 +281,8 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     searchInHeader?: boolean;
     searchTarget?: HTMLElement | null;
     summaryTarget?: HTMLElement | null;
+    /** Where the one-line national summary goes (the page header). */
+    headlineTarget?: HTMLElement | null;
     locationTarget?: HTMLElement | null;
     onOpenSearch?: () => void;
     onAreaChosen?: () => void;
@@ -388,7 +414,13 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     const displayedLayer = useMemo(() => selectedRiskLevel && overviewData ? { ...overviewData, features: overviewData.features.filter(f => f.properties?.level === selectedRiskLevel) } : layer, [selectedRiskLevel, overviewData, layer]);
     const overlays = useOverviewLayers(overview, revision);
     const [pmOn, setPmOn] = useState(false);
-    const overviewLegend = overview && !selectedRiskLevel && (pmOn || Object.values(overlays.enabled).some(Boolean));
+    // DDPM shelters: a fixed list of ~10,000, fetched the first time the layer is turned on.
+    const [shelterOn, setShelterOn] = useState(false);
+    const [shelters, setShelters] = useState<{ list: Shelter[]; updated: string; status: "idle" | "loading" | "ok" | "error" }>({ list: [], updated: "", status: "idle" });
+    const [shelterRoute, setShelterRoute] = useState<ShelterRoute | null>(null);
+    const routeLine = useMemo(() => shelterRoute ? { line: shelterRoute.geometry, crosses: shelterRoute.flood.status === "crosses", water: shelterRoute.flood.area } : null, [shelterRoute]);
+    const shelterLayer = useMemo(() => shelters.list.length ? shelterFeatures(shelters.list) : null, [shelters.list]);
+    const overviewLegend = overview && !selectedRiskLevel && (pmOn || shelterOn || Object.values(overlays.enabled).some(Boolean));
     const [airStatus, setAirStatus] = useState<"loading" | "ok" | "error">("loading");
     const stationLayer = useMemo(() => (hazard === "air_quality" || (overview && pmOn)) && airStations ? stationFeatures(airStations) : null, [hazard, overview, pmOn, airStations]);
     const [radarOn, setRadarOn] = useState(false);
@@ -496,6 +528,26 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             setAirStatus("error"); });
         return () => { cancelled = true; };
     }, [hazard, overview, revision]);
+    // Loaded when the layer is first turned on; after a failure, turning it on again retries.
+    const toggleShelters = () => {
+        const on = !shelterOn;
+        setShelterOn(on);
+        if (!on)
+            setShelterRoute(null);
+        if (!on || shelters.status === "ok" || shelters.status === "loading")
+            return;
+        setShelters((old) => ({ ...old, status: "loading" }));
+        api.shelters()
+            .then((d) => setShelters({ list: d.shelters, updated: d.updated, status: "ok" }))
+            .catch(() => setShelters((old) => ({ ...old, status: "error" })));
+    };
+    // From the area card: the overview map with the shelter layer on, still at the open area.
+    const showSheltersOnMap = () => {
+        if (!overview)
+            openItem("overview");
+        if (!shelterOn)
+            toggleShelters();
+    };
     useEffect(() => {
         if (!radarView)
             return;
@@ -524,7 +576,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         let cancelled = false;
         for (const metric of ENVIRONMENT_METRICS) {
             const key = metric + ":" + revision;
-            api.layer(metric)
+            withRetry(() => api.layer(metric))
                 .then(data => !cancelled && setEnvironmentLayers(old => ({ ...old, [metric]: { key, data, error: false } })))
                 .catch(() => !cancelled && setEnvironmentLayers(old => ({ ...old, [metric]: { key, data: null, error: true } })));
         }
@@ -534,7 +586,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         // These layers also feed the persistent summary cards; switching tabs reuses that request.
         if (isEnvironment(hazard)) return;
         let cancelled = false;
-        api.layer(hazard)
+        withRetry(() => api.layer(hazard))
             .then((data) => !cancelled && setLayerState({ key: layerKey, data, error: false }))
             .catch(() => !cancelled && setLayerState({ key: layerKey, data: null, error: true }));
         return () => { cancelled = true; };
@@ -903,11 +955,24 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         }
         questionInput.current?.focus();
     }
+    // From a shelter answer: the overview with the shelter layer on and its legend open at "หาศูนย์ใกล้ฉัน".
+    // The visitor presses that button themself, so the browser asks for the location on their own tap.
+    function openNearestShelters() {
+        showSheltersOnMap();
+        window.setTimeout(() => {
+            const legend = document.querySelector<HTMLDetailsElement>("details.map-supplement");
+            if (legend) legend.open = true;
+            const find = document.querySelector<HTMLButtonElement>(".nearest-shelters .secondary-button");
+            find?.scrollIntoView({ block: "center", behavior: "smooth" });
+            find?.focus({ preventScroll: true });
+        }, 300);
+    }
     function answerView(a: AskAnswer) {
         // The answer text already ends with its "ที่มา:" line; only add the list when it does not.
         const showSources = a.sources.length > 0 && !a.text.includes("ที่มา:");
         return <div className={"answer-text " + (a.intent === "error" ? "data-notice" : "")}><AnswerText text={a.text}/>
             {showSources && <p className="source-note">{tr("ที่มา: ")}{tr(a.sources.join(", "))}</p>}
+            {a.intent === "shelter" && <button type="button" className="secondary-button" onClick={openNearestShelters}><Icon name="shelter"/>{tr("หาศูนย์ใกล้ฉันและดูเส้นทาง")}</button>}
             {a.llm_used && <p className="source-note">{tr("เรียบเรียงโดย AI")}{a.llm_model ? ` (${a.llm_model})` : ""}{" · "}{tr(a.intent === "greeting" || a.intent === "out_of_scope" ? "คำตอบทั่วไป ไม่ใช่ข้อมูลภัย" : "ตัวเลขและระดับเตือนภัยมาจากข้อมูลและกฎของระบบ ไม่ได้ให้ AI ตัดสิน")}</p>}
         </div>;
     }
@@ -932,7 +997,33 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             number
         ][];
     }, [hazard, layer]);
-    const waterBlock = searchActive && !!waterResults.length && <WaterResults items={waterResults} onOpen={openWater}/>;
+    // One line for the page header: how many districts are at WARNING or CRITICAL over all hazards, which hazards
+    // cause most of them and where. Counted from the same overview layer as the level chips (rules.yaml levels only).
+    const headline = useMemo(() => {
+        if (!summaryLayer)
+            return null;
+        const risky = summaryLayer.features.filter(f => f.properties?.level === "CRITICAL" || f.properties?.level === "WARNING");
+        const ranked = (key: "worst_hazard" | "province_th") => {
+            const n = new Map<string, number>();
+            for (const f of risky) {
+                const value = f.properties?.[key];
+                if (typeof value === "string" && value)
+                    n.set(value, (n.get(value) ?? 0) + 1);
+            }
+            return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([value]) => value);
+        };
+        return { total: risky.length, critical: risky.filter(f => f.properties?.level === "CRITICAL").length,
+                 hazards: ranked("worst_hazard").slice(0, 2) as MapLayerId[], provinces: ranked("province_th").slice(0, 3) };
+    }, [summaryLayer]);
+    const headlineView = headline
+        ? <button type="button" className={"national-headline" + (headline.critical ? " is-critical" : headline.total ? " is-warning" : " is-calm")} disabled={!headline.total} title={headline.total ? tr(number.format(headline.total) + " อำเภอต้องระวัง · ส่วนใหญ่จาก" + headline.hazards.map(h => itemTh(h)).join(" และ ") + " · " + headline.provinces.map(p => "จ." + p).join(" ")) : undefined} onClick={() => showRiskLevel(headline.critical ? "CRITICAL" : "WARNING")}>
+            <span className="headline-dot" aria-hidden="true"/>
+            {headline.total
+                ? <span><strong>{tr(number.format(headline.total))}{tr(" อำเภอต้องระวัง")}</strong>{headline.critical > 0 && <b>{tr(" · วิกฤต ")}{tr(number.format(headline.critical))}</b>}<small>{tr(" · ส่วนใหญ่จาก")}{tr(headline.hazards.map(h => itemTh(h)).join(tr(" และ ")))}{headline.provinces.length > 0 && <>{tr(" · ")}{tr(headline.provinces.map(p => tr("จ.") + tr(p)).join(" "))}</>}</small></span>
+                : <span><strong>{tr("ไม่มีอำเภอในระดับเตือนภัยหรือวิกฤต")}</strong><small>{tr(" · ข้อมูลล่าสุดทั่วประเทศ")}</small></span>}
+          </button>
+        : <p className="national-headline is-loading">{tr("กำลังรวมสถานการณ์ทั่วประเทศ…")}</p>;
+    const waterBlock = searchActive &&!!waterResults.length && <WaterResults items={waterResults} onOpen={openWater}/>;
     const searchPanel = (<section className="search-panel">
             <h2>{tr("พื้นที่ที่คุณอยากรู้")}</h2><p className="section-description" id="area-search-description">{tr("พิมพ์ชื่อจังหวัด อำเภอ หรือตำบลที่คุณสนใจ เพื่อดูความเสี่ยงและสถานการณ์ภัยในพื้นที่")}</p>
             <form onSubmit={onSearch} className="search-form" role="search">
@@ -981,6 +1072,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
         {tr(overview && <aside className="layer-toolbar" aria-label={tr("ชั้นข้อมูลบนแผนที่")}>
           <div className="layer-toolbar-buttons" role="group" aria-label={tr("เปิดปิดชั้นข้อมูลภาพรวม")}>
             <button type="button" data-layer="pm25" aria-pressed={pmOn} onClick={() => setPmOn(on => !on)}><Icon name="air_quality"/><span>{tr("ฝุ่น PM2.5")}<small>{tr(!pmOn ? "ปิด" : airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ" : "เปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
+            <button type="button" data-layer="shelters" aria-pressed={shelterOn} onClick={toggleShelters}><Icon name="shelter"/><span>{tr("ศูนย์พักพิง")}<small>{tr(!shelterOn ? "ปิด" : shelters.status === "loading" ? "กำลังโหลด…" : shelters.status === "error" ? "โหลดไม่สำเร็จ" : "เปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>
             {radarAvailable && <button type="button" data-layer="radar" aria-pressed={radarOn} onClick={() => setRadarOn(on => !on)}><Icon name="radar"/><span>{tr("เรดาร์ฝน")}<small>{tr(radarOn ? "เปิด" : "ปิด")}</small></span><span className="layer-toggle" aria-hidden="true"/></button>}
             <OverlayControls data={overlays.data} enabled={overlays.enabled} onToggle={overlays.toggle}/>
           </div>
@@ -995,6 +1087,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
     return (<>
       {tr(searchInHeader && searchTarget && createPortal(searchPanel, searchTarget))}
       {tr(locationTarget && createPortal(<>{areaHistory.length > 0 && <button type="button" className="clear-location-button back-location-button" aria-label={tr("ย้อนกลับพื้นที่ก่อนหน้า")} title={tr("ย้อนกลับพื้นที่ก่อนหน้า")} onClick={backArea}><Icon name="arrow"/></button>}<button className={"journey-search-icon" + (place ? " has-location" : "")} type="button" aria-label={tr(place ? tr("เปลี่ยนพื้นที่ ") + tr(prefix(place.level)) + tr("") + tr(place.name_th) + tr("") : undefined)} title={tr(place ? [place.name_th, ...place.parents].join(" · ") : undefined)} onClick={onOpenSearch}><Icon name={place ? "pin" : "search"}/><span>{tr(place ? `${prefix(place.level)}${place.name_th}${place.parents.length ? ` · ${place.parents.at(-1)}` : ""}` : "พื้นที่ที่คุณอยากรู้")}</span></button>{tr(place && <button type="button" className="clear-location-button" aria-label={tr("ล้างพื้นที่ที่ค้นหา")} title={tr("ล้างพื้นที่ที่ค้นหา")} onClick={() => { clearArea(); requestAnimationFrame(() => locationTarget.querySelector("button")?.focus({ preventScroll: true })); }}><Icon name="close"/></button>)}</>, locationTarget))}
+      {headlineTarget && createPortal(headlineView, headlineTarget)}
       {tr(summaryTarget ? createPortal(<RiskSnapshot total={summaryLayer ? summaryLayer.features.length : null} counts={summaryCounts} scope="ภาพรวมทุกภัย" activeLevel={selectedRiskLevel} overviewActive={overview} onSelect={showRiskLevel}/>, summaryTarget) : !searchInHeader && <RiskSnapshot total={summaryLayer ? summaryLayer.features.length : null} counts={summaryCounts} scope="ภาพรวมทุกภัย" activeLevel={selectedRiskLevel} overviewActive={overview} onSelect={showRiskLevel}/>)}
       <div className="dashboard-grid">
         {tr(!searchInHeader && <a className="mobile-search-link" href="#area-search"><Icon name="search"/>{tr("ค้นหาจังหวัด อำเภอ หรือตำบล")}<Icon name="arrow"/></a>)}
@@ -1013,7 +1106,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
             </div>
           </div>
           </div><div className="map-canvas">
-            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamPoint : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarPreload !== radarFrame?.tiles ? radarPreload : null} onRadarImage={radarImage} radarDimmed={radarFrame?.kind === "forecast"} radarShift={radarFrame?.shift ?? null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
+            <HazardMap data={displayedLayer} selected={selected} onSelect={selectFromMap} focus={focus} outline={outline} mode={selectedRiskLevel ? "risk" : view === "hazard" ? "hazard" : "points"} points={selectedRiskLevel ? riskPoints : view === "water-quality" ? qualityPoints : view === "dams" ? damPoints : view === "rivers" ? riverPoints : null} selectedPoint={selectedRiskLevel ? selected : view === "water-quality" ? selectedQuality : view === "dams" ? selectedDam : selectedRiver} onSelectPoint={selectedRiskLevel ? chooseRiskArea : view === "water-quality" ? selectQualityFromMap : view === "dams" ? selectDamPoint : selectRiverFromMap} label={tr(selectedRiskLevel ? tr("แผนที่พื้นที่ระดับ") + tr(levelInfo(selectedRiskLevel).th) + tr("") : view === "water-quality" ? "แผนที่สถานีวัดคุณภาพน้ำ" : view === "dams" ? "แผนที่เขื่อนขนาดใหญ่" : view === "rivers" ? "แผนที่สถานีวัดน้ำในแม่น้ำ" : undefined)} stations={view === "hazard" && !selectedRiskLevel ? stationLayer : null} shelters={overview && !selectedRiskLevel && shelterOn ? shelterLayer : null} route={overview && !selectedRiskLevel && shelterOn ? routeLine : null} radar={showRadar && !selectedRiskLevel ? radarFrame?.tiles ?? null : null} radarNext={showRadar && !selectedRiskLevel && radarPreload !== radarFrame?.tiles ? radarPreload : null} onRadarImage={radarImage} radarDimmed={radarFrame?.kind === "forecast"} radarShift={radarFrame?.shift ?? null} radarForecast={showRadar && !selectedRiskLevel ? radarForecast : null} overlays={overview && !selectedRiskLevel ? { flood: overlays.enabled.flood ? overlays.data.flood : null, cyclones: overlays.enabled.cyclones ? overlays.data.cyclones : null, waves: overlays.enabled.waves ? overlays.data.waves : null } : undefined} dark={darkMap} riskOnly={view === "hazard" && riskOnly}/>
             <div className="map-options" role="group" aria-label={tr("ตัวเลือกแผนที่")}>
               <button type="button" className="map-reset" onClick={clearArea}><Icon name="map"/>{tr("ภาพรวมประเทศ")}</button>
               <button type="button" aria-pressed={darkMap} className={darkMap ? "is-active" : ""} onClick={() => setDarkMap(!darkMap)}>{tr("แผนที่กลางคืน")}</button>
@@ -1036,6 +1129,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
           {tr(overviewLegend && <div className="overview-overlay-summary">
             <OverlayLegends data={overlays.data} enabled={overlays.enabled}/>
             {tr(pmOn && <section><h4>{tr("ฝุ่น PM2.5 · เฉลี่ย 24 ชม.")}</h4><ul className="overlay-levels">{tr(PM25_BANDS.map(b => <li key={b.th}><span className="legend-dot" style={{ background: b.color }}/>{tr(b.th)}</li>))}</ul><p>{tr(airStatus === "loading" ? "กำลังโหลด…" : airStatus === "error" ? "โหลดไม่สำเร็จ · แสดงข้อมูลเดิมถ้ามี" : !airStations?.length ? "ยังไม่มีข้อมูลสถานี" : tr("") + tr(airStations.length) + tr(" สถานี · แต่ละสถานีอาจรายงานคนละเวลา"))}</p><small>{tr("Air4Thai (กรมควบคุมมลพิษ) · เวลาล่าสุด ")}{tr(formatTime(airStations?.map(s => s.time).sort().at(-1)))}{tr(" (เวลาไทย)")}</small></section>)}
+            {tr(shelterOn && <section><h4>{tr("ศูนย์พักพิงชั่วคราว")}</h4><ul className="overlay-levels"><li><span className="legend-dot" style={{ background: SHELTER_COLOR, borderRadius: "50%" }}/>{tr("ตำแหน่งศูนย์")}</li><li><span className="legend-dot" style={{ background: "#ffffff", border: `2px solid ${SHELTER_COLOR}`, borderRadius: "50%" }}/>{tr("ตำแหน่งโดยประมาณ")}</li></ul><p>{tr(shelters.status === "loading" ? "กำลังโหลด…" : shelters.status === "error" ? "โหลดไม่สำเร็จ" : tr("") + tr(number.format(shelters.list.length)) + tr(" แห่ง · ยังไม่มีข้อมูลกรุงเทพฯ · กดจุดเพื่อดูความจุ"))}</p><p>{tr("ตัวเลขในวง = จำนวนศูนย์ในบริเวณนั้น กดวงเพื่อซูมเข้า")}</p><NearestShelters onRoute={setShelterRoute}/><p>{tr("ก่อนเดินทาง โปรดสอบถาม อปท. ในพื้นที่ หรือโทรสายด่วน ปภ. 1784 ว่าศูนย์เปิดอยู่")}</p><small>{tr("กรมป้องกันและบรรเทาสาธารณภัย (data.go.th) · ปรับปรุงล่าสุด ")}{tr(shelters.updated ? new Date(shelters.updated).toLocaleDateString(getLocale(), { day: "numeric", month: "short", year: "numeric" }) : "—")}</small></section>)}
           </div>)}
           {tr(view === "water-quality" ? <div className="map-summary"><div className="legend-heading"><h3>{tr("สถานีวัดคุณภาพน้ำ")}</h3><span>{tr(visibleQuality.length)}{tr(" สถานี")}</span></div><p className="source-note"><span style={{ color: "#e07b16" }}>●</span>{tr(" มีค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#2f7fb5" }}>●</span>{tr(" ไม่พบค่าเกินเกณฑ์ที่ตรวจ \u00B7 ")}<span style={{ color: "#8a97a3" }}>●</span>{tr(" ไม่มีค่าความเค็มและออกซิเจน")}</p><div className="data-timestamp"><Icon name="clock"/><span>{tr("ข้อมูล ณ ")}{tr(formatTime(quality.updated))}{tr(" (เวลาไทย)")}</span></div></div> : view === "rivers" ? <div className="map-summary">
             <div className="legend-heading"><h3>{tr("สถานะน้ำเทียบตลิ่ง")}{tr(riverProvince && tr(" \u00B7 จ.") + tr(riverProvince.name) + tr(""))}</h3><span>{tr(rivers.list.length ? number.format(visibleRivers.length) + " สถานี" : "รอข้อมูล")}</span></div>
@@ -1078,6 +1172,7 @@ export default function Dashboard({ activeHazard, onHazardChange, activeView, on
               {tr(assessments.length === 0 && <p className="section-description">{tr("ยังไม่มีผลประเมินสำหรับพื้นที่นี้")}</p>)}
               {tr((hazard === "overview" || hazard === "rain_storm") && area.forecast.length > 0 && <div className="forecast-section"><h3>{tr("พยากรณ์ฝนรายวัน")}</h3><ul className="forecast-grid">{tr(area.forecast.map((day) => <li key={day.date}><span>{tr(new Date(day.date).toLocaleDateString(getLocale(), { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Bangkok" }))}</span><Icon name="rain_storm"/><strong>{tr(day.rain_mm?.toFixed(1) ?? "—")}<small>{tr(" มม.")}</small></strong><span className={"risk-badge level-" + (day.level ?? "NONE")}>{tr(levelInfo(day.level).th)}</span>{tr(day.cond_th && <small>{tr(day.cond_th)}</small>)}</li>))}</ul><p className="source-note">{tr("กรมอุตุนิยมวิทยา (WRF) \u00B7 ")}{tr(formatTime(area.forecast_updated_at))}</p><button type="button" className="text-button" onClick={showWeatherImages}>{tr("ดูเรดาร์ฝนและแผนที่คาดการณ์ฝน")}<Icon name="arrow"/></button></div>)}
               {tr((hazard === "overview" || hazard === "flood") && areaRivers && <button type="button" className={"river-callout " + (areaRivers.over ? "" : "is-calm")} onClick={openProvinceRivers}><Icon name="river"/><span><strong>{tr(areaRivers.over ? tr("สถานีวัดน้ำในจังหวัดนี้ล้นตลิ่ง ") + tr(areaRivers.over) + tr(" แห่ง") : tr("สถานีวัดน้ำในจังหวัดนี้ ") + tr(areaRivers.count) + tr(" แห่ง"))}</strong><small>{tr("ดูระดับน้ำและน้ำไหลผ่านรายชั่วโมงเฉพาะจังหวัดนี้")}</small></span><Icon name="arrow"/></button>)}
+              {tr(SHELTER_HAZARDS.has(hazard) && <ShelterCard area={area.area} urgent={assessments.some((a) => SHELTER_HAZARDS.has(a.hazard) && (a.level === "WARNING" || a.level === "CRITICAL"))} onShowMap={showSheltersOnMap}/>)}
               {tr(hazard === "overview" && !!area.degraded_services.length && <p className="data-notice">{tr("ข้อมูลบางแหล่งไม่พร้อมใช้งาน: ")}{tr(area.degraded_services.join(", "))}</p>)}
               <p className="source-note">{tr("อัปเดต ")}{tr(formatTime(area.data_updated_at))}{tr(" (เวลาไทย)")}</p>
             </> : <div className="area-intro"><h2>{tr(areaIntroductions()[hazard].title)}</h2><p className="section-description">{tr(areaIntroductions()[hazard].description)}</p>{tr(!searchInHeader && <button type="button" className="text-button" onClick={() => searchInput.current?.focus()}>{tr("ค้นหาพื้นที่")}<Icon name="arrow"/></button>)}</div>)}
