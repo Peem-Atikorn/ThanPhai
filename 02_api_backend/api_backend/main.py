@@ -2,6 +2,7 @@ import asyncio
 import gzip
 import json
 import logging
+import math
 import os
 import time
 import uuid
@@ -16,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 
-from api_backend.hazard_service import HazardService
+from api_backend.hazard_service import ROUTE_MAX_KM, HazardService
+from external_data.adapters.openrouteservice import RouteError
 from external_data.adapters.rainviewer import RADAR_FRAME_LIMIT, fetch_radar_maps, recent_radar_frames
 from geo_integration.gazetteer import LEVEL_RANK, normalize, split_prefix
 from decision_engine.explainer import create_explainer_from_env
@@ -392,6 +394,70 @@ async def warnings() -> dict:
     return {"warnings": svc.get_official_warnings(), **meta(svc)}
 
 
+class RouteRequest(BaseModel):
+    """The visitor's position comes in the body, never the URL, and is not logged or kept."""
+    lat: float = Field(..., ge=5.5, le=20.5)
+    lon: float = Field(..., ge=97.3, le=105.7)
+    to_lat: float = Field(..., ge=5.5, le=20.5)
+    to_lon: float = Field(..., ge=97.3, le=105.7)
+    profile: Literal["driving-car", "foot-walking"] = "driving-car"
+
+
+ROUTE_LIMIT_PER_MINUTE = int(os.getenv("ROUTE_LIMIT_PER_MINUTE", "6"))
+_route_times: dict[str, list[float]] = {}
+
+
+@app.post("/v1/shelters/route")
+async def shelter_route(body: RouteRequest, request: Request) -> dict:
+    """A road route to a DDPM shelter, around GISTDA's satellite flood water when possible (see `flood.status`)."""
+    shelter_source()
+    check_rate(_route_times, ROUTE_LIMIT_PER_MINUTE, client_ip(request), "ขอเส้นทางถี่เกินไป กรุณารอสักครู่")
+    shelter = service.find_shelter(body.to_lat, body.to_lon)
+    if shelter is None:
+        raise HTTPException(404, "routes go only to shelters in DDPM's list")
+    km = 6371 * 2 * math.asin(math.sqrt(math.sin(math.radians(body.to_lat - body.lat) / 2) ** 2 + math.cos(math.radians(body.lat))
+                                         * math.cos(math.radians(body.to_lat)) * math.sin(math.radians(body.to_lon - body.lon) / 2) ** 2))
+    if km > ROUTE_MAX_KM:
+        raise HTTPException(422, f"the shelter is {km:.0f} km away; routes are given within {ROUTE_MAX_KM} km")
+    if not os.getenv("ORS_API_KEY"):
+        raise HTTPException(503, "routing is not configured")
+    try:
+        return await service.route_to_shelter((body.lat, body.lon), shelter, body.profile)
+    except RouteError as error:
+        logging.getLogger("api").warning("shelter route failed: %s (code %s)", error, error.code)
+        raise HTTPException(502 if error.status != 404 else 404, "no route from openrouteservice") from None
+
+
+def shelter_source() -> dict:
+    """The shelter list's source; the list is fixed, so it needs no refresh (no fresh_service)."""
+    if service is None:
+        raise HTTPException(503, "starting")
+    source = service.shelter_source()
+    if source is None:
+        raise HTTPException(503, "shelter list not built (run scripts/build_shelters.py)")
+    return source
+
+
+@app.get("/v1/shelters")
+async def shelters(response: Response, area: str | None = Query(None, pattern=r"^TH\d{2,6}$")) -> dict:
+    """Temporary disaster shelters (DDPM list; no Bangkok). Official places only: the app never suggests one itself.
+
+    `area`: a province or district code; a sub-district code gives its district's shelters.
+    `approximate` marks a point shared by several shelters (often a sub-district's centre, not the building).
+    """
+    source = shelter_source()
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return {"shelters": service.get_shelters(area), **source}
+
+
+@app.get("/v1/shelters/nearest")
+async def nearest_shelters(lat: float = Query(..., ge=5.5, le=20.5), lon: float = Query(..., ge=97.3, le=105.7),
+                           limit: int = Query(5, ge=1, le=20)) -> dict:
+    """The closest shelters to a point in Thailand, by straight-line distance (`distance_km`), nearest first."""
+    source = shelter_source()
+    return {"shelters": service.nearest_shelters(lat, lon, limit), **source}
+
+
 @app.get("/v1/sources")
 async def sources() -> dict:
     svc = await fresh_service()
@@ -416,19 +482,24 @@ def client_ip(request: Request) -> str:
     return forwarded.strip() or (request.client.host if request.client else "unknown")
 
 
-def check_ask_limit(ip: str, now: float | None = None) -> None:
-    if ASK_LIMIT_PER_MINUTE <= 0:
+def check_rate(times: dict[str, list[float]], limit: int, ip: str, message: str, now: float | None = None) -> None:
+    """At most `limit` requests a minute per visitor (0: no limit)."""
+    if limit <= 0:
         return
     now = time.monotonic() if now is None else now
-    recent = [t for t in _ask_times.get(ip, []) if now - t < 60]
-    if len(recent) >= ASK_LIMIT_PER_MINUTE:
-        _ask_times[ip] = recent
-        raise HTTPException(429, "ถามถี่เกินไป กรุณารอสักครู่แล้วถามใหม่ครับ", headers={"Retry-After": "60"})
+    recent = [t for t in times.get(ip, []) if now - t < 60]
+    if len(recent) >= limit:
+        times[ip] = recent
+        raise HTTPException(429, message, headers={"Retry-After": "60"})
     recent.append(now)
-    _ask_times[ip] = recent
-    if len(_ask_times) > 10_000:  # drop visitors with nothing in the last minute
-        for key in [k for k, v in _ask_times.items() if not v or now - v[-1] >= 60]:
-            del _ask_times[key]
+    times[ip] = recent
+    if len(times) > 10_000:  # drop visitors with nothing in the last minute
+        for key in [k for k, v in times.items() if not v or now - v[-1] >= 60]:
+            del times[key]
+
+
+def check_ask_limit(ip: str, now: float | None = None) -> None:
+    check_rate(_ask_times, ASK_LIMIT_PER_MINUTE, ip, "ถามถี่เกินไป กรุณารอสักครู่แล้วถามใหม่ครับ", now)
 
 
 @app.post("/v1/ask")

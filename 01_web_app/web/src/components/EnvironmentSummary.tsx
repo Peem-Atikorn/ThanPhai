@@ -69,11 +69,13 @@ export default function EnvironmentSummary({ layers, area, loadingArea, areaErro
             const place = available && !area ? [maximum?.name, maximum?.province].filter(Boolean).join(" · ") : "";
             const period = metric === "heat" ? "ค่าคาดการณ์ชั่วโมงนี้" : metric === "rain_storm" ? ["สูงสุดใน 24 ชม.", peakHour].filter(Boolean).join(" ") : model ? "24 ชม. ข้างหน้า" : "เฉลี่ย 24 ชม.";
             const peakDetail = !loading && !error && typeof peak === "number" && Number.isFinite(peak) ? tr(" · สูงสุดใน 24 ชม. ข้างหน้า ") + peak.toLocaleString(getLocale(), { maximumFractionDigits: 1 }) + "°C" : "";
+            // A card with nothing to show is left out rather than shown as "—", which read as a broken page.
+            if (!loading && !error && !available) return null;
             const details = [scope, place, period, peakDetail, source, updatedTime(area ? area.data_updated_at : state?.data?.meta.data_updated_at), pending ? "ข้อมูลยังไม่ครบ" : degraded ? "ข้อมูลบางแหล่งไม่พร้อมใช้งาน" : ""].filter(Boolean).map(text => tr(text)).join(" · ");
-            return <article key={metric} title={details}>
+            return <article key={metric} title={details} aria-busy={loading || undefined}>
                 <span className="environment-icon" aria-hidden="true"><Icon name={metric}/></span>
                 <h3>{tr(titles[metric])}</h3>
-                <p className="environment-value">{metric === "heat" && available && <span className="sr-only">{tr("ตอนนี้ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: metric === "rain_storm" ? 0 : 1 }) : "—"}</strong>{available && <span>{tr(units[metric])}</span>}{available && peakHour && <span className="environment-hour">{tr(peakHour)}</span>}</p>
+                <p className="environment-value">{metric === "heat" && available && <span className="sr-only">{tr("ตอนนี้ร้อนเหมือน ")}</span>}<strong>{available ? value.toLocaleString(getLocale(), { maximumFractionDigits: metric === "rain_storm" ? 0 : 1 }) : <span className="environment-shimmer" aria-hidden="true"/>}</strong>{available && <span>{tr(units[metric])}</span>}{available && peakHour && <span className="environment-hour">{tr(peakHour)}</span>}</p>
                 <small className="environment-status">{tr(available ? (model || metric === "rain_storm" ? "แบบจำลอง · " : "") + period : status)}</small>
                 {/* The rain card's level is the rain/storm level, set by the amount of rain, not by the chance shown. */}
                 <span className="sr-only"><span className={"risk-badge level-" + (level ?? "NONE")}>{metric === "rain_storm" && available && tr("ระดับภัยฝนและพายุ (จากปริมาณฝน): ")}{tr(status)}</span> · {details}</span>

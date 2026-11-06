@@ -469,3 +469,33 @@ h2 { font-size: 17px; font-weight: 650; }
 .quality-detail .area-title p { color: var(--muted); font-size: 12px; }
 .quality-metrics strong { white-space: nowrap; }
 .quality-stations { max-height: 420px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+
+/* Shelter popup on the map (DDPM list). */
+.shelter-popup { display: grid; gap: 3px; font-size: 13px; line-height: 1.4; padding-right: 12px; }
+.shelter-popup strong { font-size: 14px; }
+.shelter-popup p { margin: 0; }
+.shelter-popup small { margin-top: 4px; color: #5b6673; }
+
+/* Shelter card on the area panel, and the "nearest to me" list in the shelter legend (DDPM list). */
+.shelter-card { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 6px; }
+.shelter-card.is-urgent { border-color: #0f766e; box-shadow: inset 3px 0 0 #0f766e; }
+.shelter-card h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+.shelter-card p { margin: 0; font-size: 13px; }
+.shelter-card small, .nearest-shelters small { color: var(--muted); font-size: 11px; }
+.shelter-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.shelter-list li { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: 13px; }
+.shelter-list li > span { min-width: 0; }
+.shelter-list strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.shelter-list small { display: block; color: var(--muted); font-size: 11px; }
+.shelter-list a { flex-shrink: 0; font-size: 12px; font-weight: 600; color: inherit; text-decoration: underline; }
+.nearest-shelters { display: grid; gap: 6px; margin-top: 6px; }
+.nearest-shelters .secondary-button { justify-self: start; display: inline-flex; align-items: center; gap: 6px; }
+/* Route to a shelter: buttons on each nearest shelter, the travel mode, and the route summary. */
+.shelter-actions { display: flex; flex-shrink: 0; align-items: center; gap: 10px; }
+.shelter-actions .text-button { font-size: 12px; padding: 0; }
+.route-profile { display: inline-flex; gap: 4px; justify-self: start; }
+.route-profile button { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; }
+.route-profile button[aria-pressed="true"] { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+.route-summary { display: grid; gap: 3px; padding: 8px 10px; border-left: 3px solid #2563eb; border-radius: 6px; font-size: 13px; }
+.route-summary.is-warning { border-left-color: #dc2626; }
+.route-summary p { margin: 0; }

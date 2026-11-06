@@ -96,3 +96,35 @@ class GistdaFloodCells(Adapter):
             )
             for code, n in raw["counts"].items()
         ]
+
+
+async def fetch_flood_cells(client: httpx.AsyncClient, bbox: tuple[float, float, float, float], window: str = "7days",
+                            max_cells: int = 3000, page: int = 1000, api_key: str | None = None) -> tuple[list[dict], int]:
+    """Flood cells inside bbox (min lon, min lat, max lon, max lat): their geometries only, and how many GISTDA has.
+
+    Used to route around water, so a box a few kilometres wide; at most `max_cells` are downloaded (fewer than the
+    total means the list is partial). Only geometries leave this function: the links carry the key.
+    """
+    if window not in WINDOWS:
+        raise ValueError(f"window must be one of {WINDOWS}")
+    key = api_key if api_key is not None else os.getenv("GISTDA_API_KEY", "")
+    if not key:
+        raise ValueError("GISTDA_API_KEY is not set")
+    geometries: list[dict] = []
+    total = 0
+    while len(geometries) < max_cells:
+        response = await client.get(
+            f"{BASE}/flood/{window}",
+            params={"bbox": ",".join(f"{v:.5f}" for v in bbox), "limit": min(page, max_cells - len(geometries)),
+                    "offset": len(geometries)},
+            headers={"API-Key": key}, timeout=60.0)
+        if response.status_code in (401, 403, 407):
+            raise PermissionError(f"GISTDA key rejected ({response.status_code})")
+        response.raise_for_status()
+        data = response.json()
+        total = int(data.get("numberMatched") or 0)
+        batch = [f["geometry"] for f in data.get("features") or [] if f.get("geometry")]
+        geometries += batch
+        if not batch or len(geometries) >= total:
+            break
+    return geometries, total

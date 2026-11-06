@@ -1,7 +1,7 @@
 PY ?= .venv/Scripts/python
 MODULES = 02_api_backend 03_hazard_ai_agent 04_external_data_services 05_geo_data_integration 06_hazard_risk_models 07_knowledge_decision_llm 08_alert_feedback_monitoring
 
-.PHONY: setup data test test-live snapshot ndvi fire-model water-model landslide api web up down logs
+.PHONY: setup data test test-live snapshot ndvi fire-model water-model landslide shelters api web up down logs
 
 setup:
 	python -m venv .venv
@@ -30,6 +30,10 @@ ndvi:
 # Rarely (DMR updates the inventory every ~5 years): past landslides per district
 landslide:
 	$(PY) scripts/build_landslide_districts.py
+
+# When DDPM publishes a newer list on data.go.th: temporary disaster shelters for the map
+shelters:
+	$(PY) scripts/build_shelters.py
 
 # Yearly: retrain the fire model on FIRMS history (needs FIRMS_MAP_KEY)
 fire-model:

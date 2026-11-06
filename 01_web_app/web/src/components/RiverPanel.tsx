@@ -86,6 +86,10 @@ export function ForecastNote({ forecast }: {
 }) {
     if (forecast && !forecast.available && forecast.reason === "not_chosen")
         return <p className="source-note">{tr("สถานีนี้ไม่มีค่าคาดการณ์: ในปีที่ใช้ตรวจ แบบจำลองไม่แม่นกว่าการถือว่าระดับน้ำคงเดิม")}</p>;
+    // The model only runs on a reading at most 3 h old; RID stations upload in batches, so overnight the latest
+    // reading can be older and the forecast disappears until the next batch.
+    if (forecast && !forecast.available && forecast.reason === "no_recent_readings")
+        return <p className="source-note">{tr("ยังไม่มีค่าคาดการณ์ตอนนี้: ข้อมูลล่าสุดของสถานีนี้เก่ากว่า 3 ชั่วโมง (หน่วยงานเจ้าของสถานีส่งข้อมูลเป็นรอบ) ค่าคาดการณ์จะกลับมาเมื่อมีข้อมูลรอบใหม่")}</p>;
     if (!forecast?.available || !forecast.points?.length)
         return null;
     const errors = forecast.points.map((p) => p.test_mae_m).filter((e): e is number => e != null);
@@ -139,10 +143,13 @@ export function RiverDetail({ river, onClose }: {
         <button className="icon-button" aria-label={tr("ปิดรายละเอียดสถานี")} onClick={onClose}><Icon name="close"/></button>
       </div>
       <div className="dam-storage">
-        <div>
-          <strong>{tr(river.discharge_m3s != null ? number.format(Math.round(river.discharge_m3s)) : "—")}</strong>
-          <span className="flow-unit">{tr("ลบ.ม./วินาที")}</span>
-        </div>
+        {/* Some stations (e.g. T.13) have no flow gauge in ThaiWater; a bare "—" beside the unit read as a missing value. */}
+        {tr(river.discharge_m3s != null
+            ? <div>
+                <strong>{tr(number.format(Math.round(river.discharge_m3s)))}</strong>
+                <span className="flow-unit">{tr("ลบ.ม./วินาที")}</span>
+              </div>
+            : <p className="data-notice">{tr("สถานีนี้ไม่รายงานปริมาณน้ำไหลผ่าน (ลบ.ม./วินาที) ใน ThaiWater จึงแสดงเฉพาะระดับน้ำ")}</p>)}
         {tr(river.capacity_percent != null && <>
           <span className="dam-bar" aria-hidden><span style={{ width: Math.min(river.capacity_percent, 150) / 1.5 + "%", background: riverColor(river) }}/></span>
           <p>{tr("ใช้ความจุลำน้ำ ")}{tr(river.capacity_percent)}{tr("% (ลำน้ำรับได้ราว ")}{tr(number.format(Math.round(river.qmax_m3s!)))}{tr(" ลบ.ม./วินาที ก่อนล้นตลิ่ง)")}</p>

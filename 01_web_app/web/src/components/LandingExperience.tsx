@@ -14,6 +14,7 @@ export default function LandingExperience() {
     const [hazard, setHazardState] = useState<MapLayerId>("overview");
     const [view, setViewState] = useState<MapView>("hazard");
     const [summaryTarget, setSummaryTarget] = useState<HTMLDivElement | null>(null);
+    const [headlineTarget, setHeadlineTarget] = useState<HTMLDivElement | null>(null);
     const [ready, setReady] = useState(false);
     const finishLoading = useCallback(() => setReady(true), []);
     const [dataTime, setDataTime] = useState<string | null>(null);
@@ -99,7 +100,7 @@ export default function LandingExperience() {
           <Link className="journey-brand" href="/" prefetch={false} onClick={(event) => { event.preventDefault(); window.location.assign("/"); }} aria-label={tr("ทันภัย หน้าแรก")}><span className="journey-brand-mark"><Icon name="shield" width={30} height={30}/></span><span>{tr("ทันภัย")}</span></Link>
           <div className="journey-header-message">
             <h1 id="hero-title">{tr("รู้ภัยก่อน ")}<span>{tr("ปลอดภัยกว่า")}</span></h1>
-            <p>{tr("ติดตามสถานการณ์ เข้าใจความเสี่ยง เตรียมพร้อมในพื้นที่ของคุณ")}</p>
+            <div className="journey-headline" ref={setHeadlineTarget}/>
           </div>
           <div className="header-snapshot" ref={setSummaryTarget}/>
           <div className="journey-header-actions"><div className="header-location-controls" ref={setLocationTarget}/>{tr(!locationTarget && <button className="journey-search-icon" type="button" onClick={focusAreaSearch}><Icon name="search"/><span>{tr("พื้นที่ที่คุณอยากรู้")}</span></button>)}</div>
@@ -117,7 +118,7 @@ export default function LandingExperience() {
             </div>))}
           </nav>
           <main className="main-content journey-dashboard journey-hero-dashboard" id="risk-map" tabIndex={-1}>
-            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} summaryTarget={summaryTarget} locationTarget={locationTarget} onOpenSearch={focusAreaSearch} onAreaChosen={finishAreaSearch} onReady={finishLoading} onDataTime={setDataTime} riskLevel={riskLevel} onRiskLevelChange={openRiskLevel}/>
+            <Dashboard activeHazard={hazard} onHazardChange={setHazard} activeView={view} onViewChange={setView} hideToolbar searchInHeader searchTarget={searchTarget} summaryTarget={summaryTarget} headlineTarget={headlineTarget} locationTarget={locationTarget} onOpenSearch={focusAreaSearch} onAreaChosen={finishAreaSearch} onReady={finishLoading} onDataTime={setDataTime} riskLevel={riskLevel} onRiskLevelChange={openRiskLevel}/>
           </main><span className="journey-photo-note">{tr("ภาพประกอบบรรยากาศ \u00B7 ไม่ใช่ภาพสถานการณ์ปัจจุบัน")}</span>
         </div>
       </section>

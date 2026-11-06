@@ -5,7 +5,7 @@ import type { ExpressionSpecification, StyleSpecification } from "@maplibre/mapl
 import { type GeoJSONSource, type ImageSource, Map as MapLibreMap, type MapLayerMouseEvent, NavigationControl, Popup, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef } from "react";
-import { type AreaBoundary, LEVELS, PM25_BANDS } from "@/lib/api";
+import { type AreaBoundary, LEVELS, PM25_BANDS, SHELTER_COLOR } from "@/lib/api";
 // Copied to public/ by scripts/copy-maplibre-worker.mjs (npm postinstall).
 setWorkerUrl("/maplibre-gl-worker.mjs");
 interface Props {
@@ -29,6 +29,11 @@ interface Props {
     /** PM2.5 stations drawn over the districts, each with `pm25` and `title` properties. Nearby stations merge into
      * one circle that shows the highest value among them, so the worst air never disappears when zoomed out. */
     stations?: GeoJSON.FeatureCollection | null;
+    /** DDPM shelters, each with `title`, `detail` (lines split by "\n") and `approximate` properties; nearby ones
+     * merge into a circle with their count. */
+    shelters?: GeoJSON.FeatureCollection | null;
+    /** A route to a shelter: drawn over everything and fitted into view; red when it crosses flood water. */
+    route?: { line: GeoJSON.LineString; crosses: boolean; water?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null } | null;
     /** Dark basemap (inverted OSM), where the risk colours stand out more. */
     dark?: boolean;
     /** Hide districts that are NORMAL or have no data, so only the ones at WATCH or above are coloured. */
@@ -51,6 +56,17 @@ interface Props {
     };
 }
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+function routeFeatures(route: Props["route"]): GeoJSON.FeatureCollection {
+    const points = route?.line.coordinates;
+    if (!route || !points?.length)
+        return EMPTY;
+    const end = (position: GeoJSON.Position, name: string): GeoJSON.Feature => ({ type: "Feature", geometry: { type: "Point", coordinates: position }, properties: { end: name } });
+    return { type: "FeatureCollection", features: [
+        ...(route.water ? [{ type: "Feature" as const, geometry: route.water, properties: {} }] : []),
+        { type: "Feature", geometry: route.line, properties: { crosses: route.crosses } },
+        end(points[0], "start"), end(points[points.length - 1], "shelter"),
+    ] };
+}
 const AREA_LAYERS = ["fill", "line", "selected"];
 const POINT_LAYERS = ["points", "point-selected"];
 // OSM raster tiles need no key. Follow the OSM tile usage policy; switch to GISTDA Sphere or a
@@ -84,6 +100,17 @@ const fillColor: ExpressionSpecification = [
     "WATCH", color("WATCH"),
     "NORMAL", color("NORMAL"),
     color("NONE"),
+];
+// Most districts sit at WATCH on an ordinary day; a solid WATCH fill turned the whole country one colour and hid the
+// few districts at WARNING/CRITICAL. WATCH and below stay as a faint tint, warnings stay strong.
+const fillOpacity: ExpressionSpecification = [
+    "match",
+    ["coalesce", ["get", "level"], "NONE"],
+    "CRITICAL", 0.8,
+    "WARNING", 0.7,
+    "WATCH", 0.2,
+    "NORMAL", 0.12,
+    0.05,
 ];
 // PM2.5 colour and label colour from the PCD bands, for single stations ("pm25") and merged ones ("max").
 function bandStep(value: ExpressionSpecification, key: "color" | "text"): ExpressionSpecification {
@@ -260,7 +287,7 @@ function applyMode(m: MapLibreMap, mode: "hazard" | "points" | "risk") {
     for (const id of POINT_LAYERS)
         m.setLayoutProperty(id, "visibility", mode !== "hazard" ? "visible" : "none");
 }
-export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, radar = null, radarNext = null, onRadarImage, radarDimmed = false, radarShift = null, radarForecast = null, dark = false, riskOnly = false, overlays }: Props) {
+export default function HazardMap({ data, selected, onSelect, focus, mode = "hazard", points = null, selectedPoint = null, onSelectPoint, label, outline = null, stations = null, shelters = null, route = null, radar = null, radarNext = null, onRadarImage, radarDimmed = false, radarShift = null, radarForecast = null, dark = false, riskOnly = false, overlays }: Props) {
     const container = useRef<HTMLDivElement>(null);
     const map = useRef<MapLibreMap | null>(null);
     const ready = useRef(false);
@@ -268,10 +295,10 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
     const shownShift = useRef<string | null>(null);
     const radarSources = useRef<RadarSources>({ activeId: "radar", activeTiles: null, preloadId: "radar-preload", preloadTiles: null });
     // Latest props, so the map "load" handler can apply whatever arrived before the style was ready.
-    const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays });
+    const latest = useRef({ data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, shelters, route, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays });
     useEffect(() => {
-        latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays };
-    }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays]);
+        latest.current = { data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, shelters, route, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays };
+    }, [data, selected, onSelect, mode, points, selectedPoint, onSelectPoint, outline, stations, shelters, route, radar, radarNext, radarDimmed, radarShift, radarForecast, dark, riskOnly, overlays]);
     const radarImage = useRef(onRadarImage);
     useEffect(() => { radarImage.current = onRadarImage; }, [onRadarImage]);
     useEffect(() => {
@@ -304,8 +331,8 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
         });
         m.on("load", () => {
             m.addSource("areas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-            m.addLayer({ id: "fill", type: "fill", source: "areas", paint: { "fill-color": fillColor, "fill-opacity": 0.55 } });
-            m.addLayer({ id: "line", type: "line", source: "areas", paint: { "line-color": "#ffffff", "line-width": 0.4 } });
+            m.addLayer({ id: "fill", type: "fill", source: "areas", paint: { "fill-color": fillColor, "fill-opacity": fillOpacity } });
+            m.addLayer({ id: "line", type: "line", source: "areas", paint: { "line-color": "#ffffff", "line-width": 0.4, "line-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.25, 8, 0.6] } });
             m.addLayer({
                 id: "selected",
                 type: "line",
@@ -329,6 +356,8 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
             m.on("click", "fill", (e: MapLayerMouseEvent) => {
                 if (latest.current.mode === "risk" && m.queryRenderedFeatures(e.point, { layers: ["points"] }).length)
                     return;
+                if (m.queryRenderedFeatures(e.point, { layers: ["shelter-dots"] }).length)
+                    return;  // the shelter's own click handles it
                 const code = e.features?.[0]?.properties?.code;
                 if (code)
                     latest.current.onSelect(code);
@@ -358,6 +387,64 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
             });
             m.on("mouseenter", "points", () => (m.getCanvas().style.cursor = "pointer"));
             m.on("mouseleave", "points", () => (m.getCanvas().style.cursor = ""));
+            // DDPM shelters: ~10,000 points, so nearby ones merge into a counted circle until zoom 12.
+            m.addSource("shelters", { type: "geojson", data: EMPTY, cluster: true, clusterRadius: 40, clusterMaxZoom: 12 });
+            m.addLayer({
+                id: "shelter-dots", type: "circle", source: "shelters",
+                paint: {
+                    "circle-color": ["case", ["has", "point_count"], SHELTER_COLOR, ["get", "approximate"], "#ffffff", SHELTER_COLOR],
+                    "circle-radius": ["case", ["has", "point_count"], ["interpolate", ["linear"], ["get", "point_count"], 2, 12, 100, 17, 1000, 23], 6],
+                    "circle-stroke-color": ["case", ["has", "point_count"], "#ffffff", ["get", "approximate"], SHELTER_COLOR, "#ffffff"],
+                    "circle-stroke-width": ["case", ["has", "point_count"], 2.5, 2],
+                    "circle-opacity": 0.92,
+                },
+            });
+            m.addLayer({
+                id: "shelter-counts", type: "symbol", source: "shelters", filter: ["has", "point_count"],
+                layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Noto Sans Medium"], "text-size": 12, "text-allow-overlap": true },
+                paint: { "text-color": "#ffffff" },
+            });
+            const shelterPopup = new Popup({ closeButton: true, offset: 10, maxWidth: "280px" });
+            m.on("click", "shelter-dots", async (e: MapLayerMouseEvent) => {
+                const f = e.features?.[0];
+                if (f?.geometry.type !== "Point")
+                    return;
+                const at = f.geometry.coordinates as [number, number];
+                const props = f.properties ?? {};
+                if (props.cluster_id != null) {
+                    const zoom = await (m.getSource("shelters") as GeoJSONSource).getClusterExpansionZoom(props.cluster_id);
+                    m.easeTo({ center: at, zoom, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 600 });
+                    return;
+                }
+                // Text nodes only: the names come from an outside file.
+                const body = document.createElement("div");
+                body.className = "shelter-popup";
+                const title = document.createElement("strong");
+                title.textContent = String(props.title ?? "");
+                body.append(title);
+                for (const line of String(props.detail ?? "").split("\n").filter(Boolean)) {
+                    const p = document.createElement("p");
+                    p.textContent = line;
+                    body.append(p);
+                }
+                const note = document.createElement("small");
+                note.textContent = tr("ข้อมูลจาก ปภ. อาจไม่เป็นปัจจุบัน โปรดสอบถาม อปท. ในพื้นที่ หรือโทร 1784 ก่อนเดินทาง");
+                body.append(note);
+                shelterPopup.setLngLat(at).setDOMContent(body).addTo(m);
+            });
+            m.on("mouseenter", "shelter-dots", () => (m.getCanvas().style.cursor = "pointer"));
+            m.on("mouseleave", "shelter-dots", () => (m.getCanvas().style.cursor = ""));
+            // Route to a shelter, with both ends marked: on top of the shelters and stations.
+            m.addSource("shelter-route", { type: "geojson", data: EMPTY });
+            // The satellite water the route was checked against (finer than the district flood overlay).
+            m.addLayer({ id: "shelter-route-water", type: "fill", source: "shelter-route", filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
+                paint: { "fill-color": "#38bdf8", "fill-opacity": 0.55, "fill-outline-color": "#0284c7" } });
+            m.addLayer({ id: "shelter-route-casing", type: "line", source: "shelter-route", filter: ["==", ["geometry-type"], "LineString"],
+                layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.9 } });
+            m.addLayer({ id: "shelter-route-line", type: "line", source: "shelter-route", filter: ["==", ["geometry-type"], "LineString"],
+                layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["case", ["get", "crosses"], "#dc2626", "#2563eb"], "line-width": 4.5 } });
+            m.addLayer({ id: "shelter-route-ends", type: "circle", source: "shelter-route", filter: ["==", ["geometry-type"], "Point"],
+                paint: { "circle-radius": 7, "circle-color": ["case", ["==", ["get", "end"], "start"], "#2563eb", SHELTER_COLOR], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
             // PM2.5 stations. Stations close together merge into one circle showing their highest value (bigger circle =
             // more stations); zooming in splits them. Bangkok alone has ~70 stations.
             m.addSource("stations", { type: "geojson", data: EMPTY, cluster: true, clusterRadius: 34, clusterMaxZoom: 10,
@@ -400,8 +487,10 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
             m.on("mouseenter", "station-dots", () => (m.getCanvas().style.cursor = "pointer"));
             m.on("mouseleave", "station-dots", () => (m.getCanvas().style.cursor = ""));
             ready.current = true;
-            const { data: d, selected: s, points: pts, selectedPoint: sp, mode: md, outline: ol, stations: st, radar: rd, radarNext: rn, radarDimmed: dimmed, dark: dk, riskOnly: ro } = latest.current;
+            const { data: d, selected: s, points: pts, selectedPoint: sp, mode: md, outline: ol, stations: st, shelters: sh, radar: rd, radarNext: rn, radarDimmed: dimmed, dark: dk, riskOnly: ro } = latest.current;
             (m.getSource("stations") as GeoJSONSource).setData(st ?? EMPTY);
+            (m.getSource("shelters") as GeoJSONSource).setData(sh ?? EMPTY);
+            (m.getSource("shelter-route") as GeoJSONSource).setData(routeFeatures(latest.current.route));
             applyRadar(m, rd, rn, radarSources.current, dimmed);
             applyLook(m, dk, ro);
             (m.getSource("outline") as GeoJSONSource).setData(ol ?? EMPTY);
@@ -441,6 +530,27 @@ export default function HazardMap({ data, selected, onSelect, focus, mode = "haz
         if (ready.current && map.current)
             (map.current.getSource("stations") as GeoJSONSource).setData(stations ?? EMPTY);
     }, [stations]);
+    useEffect(() => {
+        if (ready.current && map.current)
+            (map.current.getSource("shelters") as GeoJSONSource).setData(shelters ?? EMPTY);
+    }, [shelters]);
+    useEffect(() => {
+        const m = map.current;
+        if (!ready.current || !m)
+            return;
+        (m.getSource("shelter-route") as GeoJSONSource).setData(routeFeatures(route));
+        const points = route?.line.coordinates;
+        if (!points?.length)
+            return;
+        const lons = points.map(p => p[0]), lats = points.map(p => p[1]);
+        // After the next layout: the route summary appears with the route and resizes the map, and a resize
+        // during a camera move left the map where it was. No animation, for the same reason.
+        const frame = requestAnimationFrame(() => {
+            m.resize();
+            m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 50, maxZoom: 15, duration: 0 });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [route]);
     useEffect(() => {
         const m = map.current;
         if (!ready.current || !m) return;

@@ -77,6 +77,39 @@ export interface AirStation {
   time: string;
 }
 
+export interface ShelterList<T = Shelter> { shelters: T[]; source: string; source_url: string; updated: string }
+export const SHELTER_COLOR = "#0f766e";
+export type RouteProfile = "driving-car" | "foot-walking";
+/** A road route to a shelter. flood.status: "clear" | "avoided" | "crosses" | "unchecked" (no GISTDA data). */
+export interface ShelterRoute {
+  geometry: GeoJSON.LineString;
+  distance_m: number;
+  duration_s: number;
+  profile: RouteProfile;
+  shelter: Shelter;
+  attribution: string;
+  flood: { status: "clear" | "avoided" | "crosses" | "unchecked"; crossing_km: number; cells: number; partial: boolean; avoid_refused: boolean; window: string; source: string; area: GeoJSON.Polygon | GeoJSON.MultiPolygon | null };
+}
+/** A temporary disaster shelter from DDPM's list (no Bangkok). `approximate`: the point is shared by several
+ * shelters, often a sub-district's centre rather than the building. */
+export interface Shelter {
+  name: string;
+  /** The local authority (or school) that runs it; may be empty. */
+  responsible: string;
+  village: string;
+  tambon: string;
+  amphoe: string;
+  province: string;
+  amphoe_code: string;
+  capacity: number | null;
+  electricity: boolean | null;
+  water: boolean | null;
+  toilets: number | null;
+  lat: number;
+  lon: number;
+  approximate: boolean;
+}
+
 export const LEVELS: { id: Exclude<Level, null> | "NONE"; th: string; color: string }[] = [
   { id: "CRITICAL", th: "วิกฤต", color: "#d7263d" },
   { id: "WARNING", th: "เตือนภัย", color: "#f77f00" },
@@ -349,6 +382,9 @@ export const api = {
   riverForecast: (id: string) => get<RiverForecast>(`/v1/rivers/${encodeURIComponent(id)}/forecast`),
   media: () => get<Media>(`/v1/media`),
   airStations: () => get<{ stations: AirStation[] }>(`/v1/air/stations`),
+  /** area: a province or district code (a sub-district gets its district's); none for the whole list. */
+  shelters: (area?: string) => get<ShelterList>(`/v1/shelters${area ? `?area=${encodeURIComponent(area)}` : ""}`),
+  nearestShelters: (lat: number, lon: number) => get<ShelterList<Shelter & { distance_km: number }>>(`/v1/shelters/nearest?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&limit=5`),
   /** Seven recent RainViewer frames. `enabled` is false when the team-only backend switch is off. */
   radar: async (): Promise<{ enabled: boolean; frames: RadarFrame[] }> => {
     const res = await fetch("/api/v1/radar", { cache: "no-store" });
@@ -370,6 +406,16 @@ export const api = {
   search: (q: string) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }[]>(`/v1/areas/search?q=${encodeURIComponent(q)}`),
   locate: (lat: number, lon: number) => get<{ code: string; level: string; name_th: string; parents: string[]; lat: number; lon: number }>(`/v1/areas/locate?lat=${lat}&lon=${lon}`),
   /** areaCode: the area open on the page; the backend uses it only when the question names no place. */
+  /** The visitor's position goes in the body (never the URL); the backend does not keep it. */
+  shelterRoute: async (from: { lat: number; lon: number }, shelter: Shelter, profile: RouteProfile): Promise<ShelterRoute> => {
+    const res = await fetch("/api/v1/shelters/route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: from.lat, lon: from.lon, to_lat: shelter.lat, to_lon: shelter.lon, profile }),
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    return res.json();
+  },
   ask: async (question: string, areaCode: string | null = null): Promise<AskAnswer> => {
     const res = await fetch("/api/v1/ask", {
       method: "POST",
