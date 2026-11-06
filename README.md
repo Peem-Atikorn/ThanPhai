@@ -19,7 +19,8 @@ ten hazards in each of Thailand's 928 districts (amphoe), with live data only:
 | Landslide | ดินถล่ม | Rain in districts with past landslides (DMR inventory) |
 
 Beyond the hazard levels, the web app shows large dams (storage, inflow, release, history), hourly river flow and bank
-levels with a river-level forecast, water-quality stations, ThaiWater radar and forecast images, and RainViewer radar
+levels with a river-level forecast, temporary disaster shelters (DDPM) with nearest-shelter search and safe route planning
+avoiding satellite flood polygons (openrouteservice), water-quality stations, ThaiWater radar and forecast images, and RainViewer radar
 with past-hour playback and a 1-hour nowcast. A Thai/English assistant answers questions from the same data.
 
 How the levels and answers are made:
@@ -43,7 +44,7 @@ ThanPhai/
 ├── 01_web_app/web/                 # Next.js + MapLibre: dashboard, map, radar playback, dams, rivers, assistant chat
 ├── 02_api_backend/api_backend/     # FastAPI: fetch, cache (stale-while-revalidate), ask rate limit; runs 03/05/07 in-process
 ├── 03_hazard_ai_agent/hazard_agent/  # Question understanding (Thai/English), data tools, answers
-├── 04_external_data_services/external_data/  # Adapters: TMD, ThaiWater, GISTDA, FIRMS, Air4Thai, Open-Meteo, GDACS, RainViewer
+├── 04_external_data_services/external_data/  # Adapters: TMD, ThaiWater, GISTDA, FIRMS, Air4Thai, Open-Meteo, GDACS, RainViewer, OpenRouteService
 ├── 05_geo_data_integration/geo_integration/  # Gazetteer, point -> district mapping, features, regions
 ├── 06_hazard_risk_models/risk_models/        # Drought (SPI, NDVI/VCI), fire, water level and dam inflow, radar nowcast
 ├── 07_knowledge_decision_llm/
@@ -96,7 +97,7 @@ Every assessment must include its hazard, area, time window, alert level, confid
 | # | Module | Main work | Owner | Branch |
 |---|---|---|---|---|
 | 01 | `01_web_app` | Next.js, map layers, radar playback, assistant chat | mahawongsupawit125-coder | `feature/supawit/01-web-app`<br>`feature/supawit/01-overview-pm25-heat`<br>`feature/supawit/01-storms-area-warnings`<br>`feature/supawit/01-radar-playback`<br>`feature/supawit/01-radar-nowcast`<br>`fix/supawit/01-compact-map-header`<br>`feature/supawit/all-dashboard-update` |
-| 02 | `02_api_backend` | FastAPI gateway, cache, rate limit | Peem-Atikorn | `feature/peem/02-map-overlays`<br>`feature/peem/02-radar-access`<br>`refactor/peem/02-radar-adapter` |
+| 02 | `02_api_backend` | FastAPI gateway, cache, rate limit | Peem-Atikorn | `feature/peem/02-map-overlays`<br>`feature/peem/02-radar-access`<br>`refactor/peem/02-radar-adapter`<br>`feature/peem/all-shelters-route` |
 | 03 | `03_hazard_ai_agent` | Question understanding, tool routing, answers | mahawongsupawit125-coder | `feature/supawit/03-answer-templates`<br>`feature/supawit/03-overview-ranking`<br>`feature/supawit/03-agent-data-tools`<br>`fix/supawit/03-ambiguous-district`<br>`fix/supawit/03-warning-scope` |
 | 04 | `04_external_data_services` | Data source adapters | Peem-Atikorn | `feature/peem/04-water-quality-storms`<br>`feature/titleww/04-radar-nowcast` |
 | 05 | `05_geo_data_integration` | Gazetteer, area mapping, features | Peem-Atikorn | `feature/peem/05-tmd-warning-provinces`<br>`feature/peem/05-tmd-warning-region-days`<br>`feature/supawit/05-area-names` |
@@ -130,7 +131,7 @@ make test-live   # calls the real provider APIs
 make snapshot    # live data -> every district, end to end
 ```
 
-Models and extra data (only when needed): `make ndvi` (monthly drought NDVI), `make fire-model` (yearly),
+Models and extra data (only when needed): `make shelters` (DDPM disaster shelters), `make ndvi` (monthly drought NDVI), `make fire-model` (yearly),
 `make water-model` (water level and dam inflow), `make landslide` (rarely).
 
 ```bash
@@ -163,6 +164,7 @@ Web: http://localhost:3000 · API: http://127.0.0.1:8002/docs. Both bind to loca
 
 * **Public site:** `docker compose --profile public up -d` starts a Cloudflare Tunnel to the web container
   (needs `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; no inbound port is opened). `ASK_LIMIT_PER_MINUTE` limits questions per visitor.
+* **Shelter routes:** set `ORS_API_KEY` in `.env` to enable driving/walking directions around flood zones; `ROUTE_LIMIT_PER_MINUTE` limits route requests per visitor.
 * **LLM:** run Ollama with the `thanphai-qwen` model on the host (`QWEN_ENDPOINT`), and set `GEMINI_API_KEY` for the fallback.
   With neither, every answer is the rule-based template.
 * After a restart of `api-backend`, satellite and forecast inputs take about a minute to load; the page waits for them.
